@@ -97,10 +97,6 @@ return [
             'retry_after' => 60,
         ],
 
-        'zeptomail' => [
-            'transport' => 'zeptomail',
-        ],
-
     ],
 
     /*

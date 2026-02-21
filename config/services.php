@@ -35,12 +35,4 @@ return [
         ],
     ],
 
-    'zeptomail' => [
-        'mail_key' => env('ZEPTOMAIL_MAIL_KEY'),
-        'endpoint' => env('ZEPTO_MAIL_ENDPOINT', 'https://api.zeptomail.com'),
-        'timeout' => env('ZEPTO_MAIL_TIMEOUT', 30),
-        'retries' => env('ZEPTO_MAIL_RETRIES', 2),
-        'retry_sleep_ms' => env('ZEPTO_MAIL_RETRY_MS', 200),
-    ],
-
 ];

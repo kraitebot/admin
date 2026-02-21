@@ -1,91 +1,11 @@
 @import 'tailwindcss';
-@import './vendor/hub-ui/hub-ui.css';
 
-/* Scan hub-ui package views for Tailwind classes */
-@source '../../packages/brunocfalcao/hub-ui/resources/views/**/*.blade.php';
-@source '../../packages/brunocfalcao/hub-ui/resources/js/**/*.js';
-
-/* Scan app views and JS */
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 @source '../**/*.blade.php';
 @source '../**/*.js';
 
 @theme {
-    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-mono: 'JetBrains Mono', ui-monospace, monospace;
-
-    /* Krait green palette */
-    --color-krait-50:  #f0fdf4;
-    --color-krait-100: #dcfce7;
-    --color-krait-200: #bbf7d0;
-    --color-krait-300: #86efac;
-    --color-krait-400: #4ade80;
-    --color-krait-500: #22c55e;
-    --color-krait-600: #16a34a;
-    --color-krait-700: #15803d;
-    --color-krait-800: #166534;
-    --color-krait-900: #14532d;
-}
-
-/* ── Kraite design-language utilities ── */
-
-.gradient-text {
-    background: linear-gradient(135deg, #22c55e, #4ade80, #16a34a);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-.glow-green {
-    box-shadow: 0 0 60px rgba(34, 197, 94, 0.15), 0 0 120px rgba(34, 197, 94, 0.05);
-}
-
-.glow-green-strong {
-    box-shadow: 0 0 30px rgba(34, 197, 94, 0.3), 0 0 60px rgba(34, 197, 94, 0.1);
-}
-
-.border-glow {
-    border: 1px solid rgba(34, 197, 94, 0.2);
-}
-
-.grid-bg {
-    background-image:
-        linear-gradient(rgba(34, 197, 94, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(34, 197, 94, 0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
-}
-
-.hero-gradient {
-    background: radial-gradient(ellipse at 50% 0%, rgba(34, 197, 94, 0.08) 0%, transparent 60%),
-                radial-gradient(ellipse at 80% 50%, rgba(34, 197, 94, 0.04) 0%, transparent 40%);
-}
-
-/* ── Kraite animations ── */
-
-@keyframes fade-up {
-    from { opacity: 0; transform: translateY(30px); }
-    to   { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-up            { animation: fade-up 0.8s ease-out forwards; }
-.animate-fade-up-delay-1    { animation: fade-up 0.8s ease-out 0.15s forwards; opacity: 0; }
-.animate-fade-up-delay-2    { animation: fade-up 0.8s ease-out 0.3s forwards;  opacity: 0; }
-.animate-fade-up-delay-3    { animation: fade-up 0.8s ease-out 0.45s forwards; opacity: 0; }
-
-@keyframes strike {
-    0%   { transform: translateX(-100%); opacity: 0; }
-    10%  { opacity: 0.7; }
-    50%  { opacity: 0.3; }
-    90%  { opacity: 0.7; }
-    100% { transform: translateX(200%); opacity: 0; }
-}
-
-.strike-line {
-    position: absolute;
-    height: 1px;
-    background: linear-gradient(90deg, transparent 0%, rgba(34, 197, 94, 0.5) 30%, rgba(34, 197, 94, 0.2) 70%, transparent 100%);
-    animation: strike ease-in-out infinite;
-    overflow: hidden;
 }
