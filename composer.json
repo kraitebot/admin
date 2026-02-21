@@ -3,14 +3,18 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": ["laravel", "framework"],
+    "keywords": [
+        "laravel",
+        "framework"
+    ],
     "license": "MIT",
     "require": {
         "php": "^8.2",
         "kraitebot/core": "@dev",
         "laravel/framework": "^12.0",
         "laravel/nova": "^5.7",
-        "laravel/tinker": "^2.10.1"
+        "laravel/tinker": "^2.10.1",
+        "kraite/command-runner": "@dev"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -86,30 +90,39 @@
     },
     "minimum-stability": "dev",
     "prefer-stable": true,
-    "repositories": [{
-        "name": "laravel-helpers",
-        "type": "path",
-        "url": "/home/waygou/packages/brunocfalcao/laravel-helpers",
-        "options": {
-            "symlink": true
+    "repositories": [
+        {
+            "name": "laravel-helpers",
+            "type": "path",
+            "url": "/home/waygou/packages/brunocfalcao/laravel-helpers",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "step-dispatcher",
+            "type": "path",
+            "url": "/home/waygou/packages/brunocfalcao/step-dispatcher",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "kraite-core-local",
+            "type": "path",
+            "url": "/home/waygou/packages/kraitebot/core",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
+            "name": "nova",
+            "type": "composer",
+            "url": "https://nova.laravel.com"
+        },
+        {
+            "type": "path",
+            "url": "./nova-components/CommandRunner"
         }
-    },{
-        "name": "step-dispatcher",
-        "type": "path",
-        "url": "/home/waygou/packages/brunocfalcao/step-dispatcher",
-        "options": {
-            "symlink": true
-        }
-    },{
-        "name": "kraite-core-local",
-        "type": "path",
-        "url": "/home/waygou/packages/kraitebot/core",
-        "options": {
-            "symlink": true
-        }
-    },{
-        "name": "nova",
-        "type": "composer",
-        "url": "https://nova.laravel.com"
-    }]
+    ]
 }

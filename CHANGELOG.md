@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.1.3 - 2026-02-21
+
+### Features
+
+- [NEW FEATURE] ApiSystem, ExchangeSymbol, and Symbol Nova resources
+- [NEW FEATURE] MorphTo field on ApiRequestLog and ModelLog replacing raw relatable type/id fields
+- [NEW FEATURE] 7 custom filters for ApiRequestLog: HttpMethod, HttpResponseCode, RelatableType, RelatableModel, Hostname, HasResponse, HasErrorMessage
+- [NEW FEATURE] ApiSystemFilter — dropdown of distinct API systems by name for filtering by api_system_id
+- [NEW FEATURE] "Requests with errors" lens on ApiRequestLog
+- [NEW FEATURE] API Errors by Exchange partition metric (last hour)
+- [NEW FEATURE] CommandRunner nova-component with DependentSelectFilter Vue component
+- [NEW FEATURE] BelongsTo API System field on ApiRequestLog index
+
+### Improvements
+
+- [IMPROVED] ApiRequestLog made read-only (no create, edit, delete, replicate)
+- [IMPROVED] Truncated Response and Error Message fields on index for quick scanning
+- [IMPROVED] Nova sidebar font size increased to 17px, filter popup height to 600px
+- [IMPROVED] Duration field moved to detail-only on ApiRequestLog
+
 ## 1.1.2 - 2026-02-21
 
 ### Features

@@ -1,16 +1,28 @@
 /* Increase datagrid font size globally */
 [dusk="resource-table"] td,
 [dusk="resource-table"] th,
+[dusk="resource-table"] td a,
+[dusk="resource-table"] td span,
 .resource-table td,
 .resource-table th,
+.resource-table td a,
+.resource-table td span,
 table[data-testid] td,
-table[data-testid] th {
+table[data-testid] th,
+table[data-testid] td a,
+table[data-testid] td span {
     font-size: 15px !important;
 }
 
+/* Taller filter dropdown */
+[dusk="filter-menu"] .scroll-wrap {
+    max-height: 600px !important;
+}
+
 /* Increase sidebar menu font size */
-nav[aria-label] a,
-nav[aria-label] button,
-nav[aria-label] h4 {
-    font-size: 15px !important;
+[dusk="sidebar-menu"] a,
+[dusk="sidebar-menu"] button,
+[dusk="sidebar-menu"] h4,
+[dusk="sidebar-menu"] span {
+    font-size: 17px !important;
 }

@@ -6,8 +6,11 @@ namespace App\Nova;
 
 use App\Nova\Fields\HumanDateTime;
 use App\Nova\Fields\ID;
+use App\Nova\Filters\RelatableModelFilter;
+use App\Nova\Filters\RelatableTypeFilter;
 use Kraite\Core\Models\ModelLog as ModelLogModel;
 use Laravel\Nova\Fields\Code;
+use Laravel\Nova\Fields\MorphTo;
 use Laravel\Nova\Fields\Text;
 use Laravel\Nova\Fields\Textarea;
 use Laravel\Nova\Http\Requests\NovaRequest;
@@ -71,27 +74,23 @@ class ModelLog extends Resource
                 ->alwaysShow(),
 
             Panel::make('Loggable Model', [
-                Text::make('Loggable Type', 'loggable_type')
-                    ->sortable()
-                    ->filterable()
-                    ->readonly(),
-
-                Text::make('Loggable ID', 'loggable_id')
-                    ->sortable()
-                    ->readonly(),
+                MorphTo::make('Loggable')
+                    ->types([
+                        ExchangeSymbol::class,
+                        Symbol::class,
+                    ])
+                    ->searchable()
+                    ->nullable(),
             ]),
 
             Panel::make('Related Model', [
-                Text::make('Relatable Type', 'relatable_type')
-                    ->sortable()
-                    ->filterable()
-                    ->nullable()
-                    ->readonly(),
-
-                Text::make('Relatable ID', 'relatable_id')
-                    ->sortable()
-                    ->nullable()
-                    ->readonly(),
+                MorphTo::make('Relatable')
+                    ->types([
+                        ApiSystem::class,
+                        ExchangeSymbol::class,
+                    ])
+                    ->searchable()
+                    ->nullable(),
             ]),
 
             Panel::make('Changed Values', [
@@ -139,7 +138,10 @@ class ModelLog extends Resource
      */
     public function filters(NovaRequest $request): array
     {
-        return [];
+        return [
+            new RelatableTypeFilter('model_logs'),
+            new RelatableModelFilter('model_logs'),
+        ];
     }
 
     /**

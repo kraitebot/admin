@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "f15f3eaa1bcefee3ea216c89407f1d29",
+    "content-hash": "ebd6380ab0f1ee9b44f65de2b5ef4ffa",
     "packages": [
         {
             "name": "angle/chrono",
@@ -1652,12 +1652,53 @@
             "time": "2026-02-13T11:53:06+00:00"
         },
         {
+            "name": "kraite/command-runner",
+            "version": "dev-master",
+            "dist": {
+                "type": "path",
+                "url": "./nova-components/CommandRunner",
+                "reference": "e2602ce8fd6d8464d225a930b4022e1138b7be31"
+            },
+            "require": {
+                "illuminate/support": "^10.0|^11.0|^12.0",
+                "php": "^8.1"
+            },
+            "require-dev": {
+                "laravel/nova": "^5.0",
+                "laravel/nova-devtool": "^1.7"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Kraite\\CommandRunner\\ToolServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Kraite\\CommandRunner\\": "src/"
+                }
+            },
+            "license": [
+                "MIT"
+            ],
+            "description": "A Laravel Nova tool.",
+            "keywords": [
+                "laravel",
+                "nova"
+            ],
+            "transport-options": {
+                "relative": true
+            }
+        },
+        {
             "name": "kraitebot/core",
             "version": "dev-master",
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "0f828552acd2567c2b3a40dbfae316814ca1ac33"
+                "reference": "5ce6e306d8d3e8e8db8ec32001152bb1b0b64f05"
             },
             "require": {
                 "angle/chrono": "^1.0",
@@ -11038,6 +11079,7 @@
     "aliases": [],
     "minimum-stability": "dev",
     "stability-flags": {
+        "kraite/command-runner": 20,
         "kraitebot/core": 20
     },
     "prefer-stable": true,

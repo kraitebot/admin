@@ -45,6 +45,10 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
                     MenuItem::resource(\App\Nova\ApiRequestLog::class),
                     MenuItem::resource(\App\Nova\Step::class),
                 ])->icon('document-text')->collapsable(),
+
+                MenuSection::make('Command Runner')
+                    ->path('/command-runner')
+                    ->icon('command-line'),
             ];
         });
     }
@@ -106,7 +110,9 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
      */
     public function tools(): array
     {
-        return [];
+        return [
+            new \Kraite\CommandRunner\CommandRunner,
+        ];
     }
 
     /**
