@@ -38,6 +38,13 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
                     MenuItem::resource(\App\Nova\Account::class),
                     MenuItem::resource(\App\Nova\User::class),
                 ])->icon('user-group')->collapsable(),
+
+                MenuSection::make('Logs', [
+                    MenuItem::resource(\App\Nova\AppLog::class),
+                    MenuItem::resource(\App\Nova\ModelLog::class),
+                    MenuItem::resource(\App\Nova\ApiRequestLog::class),
+                    MenuItem::resource(\App\Nova\Step::class),
+                ])->icon('document-text')->collapsable(),
             ];
         });
     }

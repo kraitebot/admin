@@ -79,6 +79,10 @@ Based on the model analysis, **propose** (don't auto-create) any of these if the
 
 Present these as a concise list. Bruno decides what to implement.
 
+### Step 5.1: Register in Nova Sidebar
+
+If this is a **new** resource (not an update), add it to the Nova sidebar menu in `app/Providers/NovaServiceProvider.php`. Read the `mainMenu` closure and add a `MenuItem::resource()` entry in the appropriate `MenuSection`. If no existing section fits, create a new one. Don't forget this step — resources not in the menu won't appear in the sidebar.
+
 ### Step 6: Validate
 
 1. Run `php artisan nova:check` (if available) or clear caches: `php artisan optimize:clear`.

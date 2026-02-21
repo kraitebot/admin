@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.2 - 2026-02-21
+
+### Features
+
+- [NEW FEATURE] AppLog, ModelLog, Step, and ApiRequestLog Nova resources with full field configuration
+- [NEW FEATURE] Nova sidebar "Logs" section with all log/step resources
+
 ## 1.1.1 - 2026-02-21
 
 ### Features
