@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1 - 2026-02-21
+
+### Features
+
+- [NEW FEATURE] Account, Order, and Position Nova resources
+- [NEW FEATURE] Nova metrics: NewUsers, ActivePositions, AccountsBalance, OrdersPerDay
+
+### Dependencies
+
+- [DEPENDENCIES] Sync kraitebot/core with centralized artisan commands
+
 ## 1.1.0 - 2026-02-21
 
 ### Features

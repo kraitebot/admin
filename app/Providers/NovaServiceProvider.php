@@ -2,9 +2,13 @@
 
 namespace App\Providers;
 
+use App\Nova\Dashboards\Main;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Kraite\Core\Models\User;
 use Laravel\Fortify\Features;
+use Laravel\Nova\Menu\MenuItem;
+use Laravel\Nova\Menu\MenuSection;
 use Laravel\Nova\Nova;
 use Laravel\Nova\NovaApplicationServiceProvider;
 
@@ -19,6 +23,23 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
 
         Nova::withoutThemeSwitcher();
         Nova::script('nova-custom', resource_path('js/nova.js'));
+        Nova::style('nova-custom', resource_path('css/nova.css'));
+
+        Nova::mainMenu(function (Request $request) {
+            return [
+                MenuSection::dashboard(Main::class)->icon('chart-bar'),
+
+                MenuSection::make('Trading', [
+                    MenuItem::resource(\App\Nova\Position::class),
+                    MenuItem::resource(\App\Nova\Order::class),
+                ])->icon('currency-dollar')->collapsable(),
+
+                MenuSection::make('Accounts', [
+                    MenuItem::resource(\App\Nova\Account::class),
+                    MenuItem::resource(\App\Nova\User::class),
+                ])->icon('user-group')->collapsable(),
+            ];
+        });
     }
 
     /**

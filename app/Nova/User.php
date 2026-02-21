@@ -11,6 +11,7 @@ use Laravel\Nova\Auth\PasswordValidationRules;
 use Laravel\Nova\Fields\Boolean;
 use Laravel\Nova\Fields\Code;
 use Laravel\Nova\Fields\Gravatar;
+use Laravel\Nova\Fields\HasMany;
 use Laravel\Nova\Fields\Password;
 use Laravel\Nova\Fields\Text;
 use Laravel\Nova\Http\Requests\NovaRequest;
@@ -96,7 +97,8 @@ class User extends Resource
 
                 Boolean::make('Can Trade', 'can_trade')
                     ->sortable()
-                    ->filterable(),
+                    ->filterable()
+                    ->onlyOnDetail(),
 
                 Boolean::make('Distinct Position Tokens', 'have_distinct_position_tokens_on_all_accounts')
                     ->help('Prevents opening active positions with the same token across different accounts')
@@ -120,6 +122,8 @@ class User extends Resource
                     ->onlyOnDetail()
                     ->nullable(),
             ]),
+
+            HasMany::make('Accounts'),
 
             Panel::make('Activity', [
                 HumanDateTime::make('Last Logged In', 'last_logged_in_at')

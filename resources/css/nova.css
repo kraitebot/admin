@@ -1,0 +1,16 @@
+/* Increase datagrid font size globally */
+[dusk="resource-table"] td,
+[dusk="resource-table"] th,
+.resource-table td,
+.resource-table th,
+table[data-testid] td,
+table[data-testid] th {
+    font-size: 15px !important;
+}
+
+/* Increase sidebar menu font size */
+nav[aria-label] a,
+nav[aria-label] button,
+nav[aria-label] h4 {
+    font-size: 15px !important;
+}
