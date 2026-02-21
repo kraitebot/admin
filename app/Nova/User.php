@@ -1,14 +1,20 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Nova;
 
-use Illuminate\Http\Request;
+use App\Nova\Fields\HumanDateTime;
+use App\Nova\Fields\ID;
+use Kraite\Core\Models\User as UserModel;
 use Laravel\Nova\Auth\PasswordValidationRules;
+use Laravel\Nova\Fields\Boolean;
+use Laravel\Nova\Fields\Code;
 use Laravel\Nova\Fields\Gravatar;
-use Laravel\Nova\Fields\ID;
 use Laravel\Nova\Fields\Password;
 use Laravel\Nova\Fields\Text;
 use Laravel\Nova\Http\Requests\NovaRequest;
+use Laravel\Nova\Panel;
 
 class User extends Resource
 {
@@ -17,9 +23,9 @@ class User extends Resource
     /**
      * The model the resource corresponds to.
      *
-     * @var class-string<\App\Models\User>
+     * @var class-string<UserModel>
      */
-    public static $model = \App\Models\User::class;
+    public static $model = UserModel::class;
 
     /**
      * The single value that should be used to represent the resource when being displayed.
@@ -31,16 +37,31 @@ class User extends Resource
     /**
      * The columns that should be searched.
      *
-     * @var array
+     * @var array<int, string>
      */
     public static $search = [
         'id', 'name', 'email',
     ];
 
     /**
+     * The relationships that should be eager loaded on index queries.
+     *
+     * @var array<int, string>
+     */
+    public static $with = ['subscription'];
+
+    /**
+     * Get the displayable subtitle of the resource.
+     */
+    public function subtitle(): ?string
+    {
+        return $this->email;
+    }
+
+    /**
      * Get the fields displayed by the resource.
      *
-     * @return array<int, \Laravel\Nova\Fields\Field|\Laravel\Nova\Panel|\Laravel\Nova\ResourceTool|\Illuminate\Http\Resources\MergeValue>
+     * @return array<int, \Laravel\Nova\Fields\Field|\Laravel\Nova\Panel>
      */
     public function fields(NovaRequest $request): array
     {
@@ -63,6 +84,61 @@ class User extends Resource
                 ->onlyOnForms()
                 ->creationRules($this->passwordRules())
                 ->updateRules($this->optionalPasswordRules()),
+
+            Panel::make('Status & Permissions', [
+                Boolean::make('Is Active', 'is_active')
+                    ->sortable()
+                    ->filterable(),
+
+                Boolean::make('Is Admin', 'is_admin')
+                    ->sortable()
+                    ->filterable(),
+
+                Boolean::make('Can Trade', 'can_trade')
+                    ->sortable()
+                    ->filterable(),
+
+                Boolean::make('Distinct Position Tokens', 'have_distinct_position_tokens_on_all_accounts')
+                    ->help('Prevents opening active positions with the same token across different accounts')
+                    ->onlyOnDetail(),
+            ]),
+
+            Panel::make('Notifications', [
+                Text::make('Pushover Key', 'pushover_key')
+                    ->onlyOnForms()
+                    ->nullable(),
+
+                Code::make('Notification Channels', 'notification_channels')
+                    ->json()
+                    ->onlyOnDetail()
+                    ->nullable(),
+            ]),
+
+            Panel::make('Configuration', [
+                Code::make('Behaviours', 'behaviours')
+                    ->json()
+                    ->onlyOnDetail()
+                    ->nullable(),
+            ]),
+
+            Panel::make('Activity', [
+                HumanDateTime::make('Last Logged In', 'last_logged_in_at')
+                    ->sortable()
+                    ->onlyOnDetail(),
+
+                HumanDateTime::make('Previous Logged In', 'previous_logged_in_at')
+                    ->onlyOnDetail(),
+
+                HumanDateTime::make('Email Verified At', 'email_verified_at')
+                    ->onlyOnDetail(),
+
+                HumanDateTime::make('Created At')
+                    ->sortable()
+                    ->onlyOnDetail(),
+
+                HumanDateTime::make('Updated At')
+                    ->onlyOnDetail(),
+            ]),
         ];
     }
 

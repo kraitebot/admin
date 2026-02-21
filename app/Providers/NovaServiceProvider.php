@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\User;
 use Illuminate\Support\Facades\Gate;
+use Kraite\Core\Models\User;
 use Laravel\Fortify\Features;
 use Laravel\Nova\Nova;
 use Laravel\Nova\NovaApplicationServiceProvider;
@@ -17,7 +17,8 @@ class NovaServiceProvider extends NovaApplicationServiceProvider
     {
         parent::boot();
 
-        //
+        Nova::withoutThemeSwitcher();
+        Nova::script('nova-custom', resource_path('js/nova.js'));
     }
 
     /**
