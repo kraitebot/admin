@@ -1657,7 +1657,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "a1b1316b9c5627c690fcb22f7484a3496cc08ce9"
+                "reference": "0f828552acd2567c2b3a40dbfae316814ca1ac33"
             },
             "require": {
                 "angle/chrono": "^1.0",
