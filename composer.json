@@ -3,28 +3,24 @@
     "name": "laravel/laravel",
     "type": "project",
     "description": "The skeleton application for the Laravel framework.",
-    "keywords": [
-        "laravel",
-        "framework"
-    ],
+    "keywords": ["laravel", "framework"],
     "license": "MIT",
     "require": {
-        "php": "^8.2",
+        "php": "^8.4",
+        "brunocfalcao/hub-ui": "@dev",
         "kraitebot/core": "@dev",
-        "laravel/framework": "^12.0",
-        "laravel/nova": "^5.7",
-        "laravel/tinker": "^2.10.1",
-        "kraite/command-runner": "@dev"
+        "laravel/framework": "^12.0|^13.0",
+        "laravel/tinker": "^2.10|^3.0",
+        "livewire/livewire": "^4.2"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
-        "laravel/boost": "^2.2",
-        "laravel/pail": "^1.2.2",
-        "laravel/pint": "^1.24",
-        "laravel/sail": "^1.41",
+        "laravel/breeze": "^2.4",
+        "laravel/pail": "^1.2.5",
+        "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.6",
-        "phpunit/phpunit": "^11.5.3"
+        "phpunit/phpunit": "^12.5.12"
     },
     "autoload": {
         "psr-4": {
@@ -44,7 +40,7 @@
             "@php -r \"file_exists('.env') || copy('.env.example', '.env');\"",
             "@php artisan key:generate",
             "@php artisan migrate --force",
-            "npm install",
+            "npm install --ignore-scripts",
             "npm run build"
         ],
         "dev": [
@@ -92,6 +88,14 @@
     "prefer-stable": true,
     "repositories": [
         {
+            "name": "hub-ui",
+            "type": "path",
+            "url": "/home/waygou/packages/brunocfalcao/hub-ui",
+            "options": {
+                "symlink": true
+            }
+        },
+        {
             "name": "laravel-helpers",
             "type": "path",
             "url": "/home/waygou/packages/brunocfalcao/laravel-helpers",
@@ -114,15 +118,6 @@
             "options": {
                 "symlink": true
             }
-        },
-        {
-            "name": "nova",
-            "type": "composer",
-            "url": "https://nova.laravel.com"
-        },
-        {
-            "type": "path",
-            "url": "./nova-components/CommandRunner"
         }
     ]
 }
