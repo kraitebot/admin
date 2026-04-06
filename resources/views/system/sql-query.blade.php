@@ -1,9 +1,5 @@
-<x-app-layout :activeSection="'system'" :activeHighlight="'sql-query'">
-    <div class="flex -mx-12 -my-12 overflow-hidden"
-         x-data="sqlQuery()"
-         x-init="$el.parentElement.classList.remove('overflow-y-auto'); $el.parentElement.classList.add('overflow-hidden')"
-         x-destroy="$el.parentElement.classList.add('overflow-y-auto'); $el.parentElement.classList.remove('overflow-hidden')"
-         style="height: 100%">
+<x-app-layout :activeSection="'system'" :activeHighlight="'sql-query'" :flush="true">
+    <div class="flex h-full" x-data="sqlQuery()">
         {{-- Secondary Sidebar: Table Browser --}}
         <div class="w-72 flex-shrink-0 border-r ui-border overflow-hidden flex flex-col" style="background-color: rgb(var(--ui-bg-sidebar))">
             {{-- Search --}}
@@ -17,15 +13,23 @@
                         x-model="tableSearch"
                         placeholder="Filter tables..."
                         class="w-full pl-9 pr-3 py-2 text-xs rounded-lg border ui-input"
+                        @keydown.enter.prevent="if (filteredTables.length === 1) queryTable(filteredTables[0].name)"
                     />
                 </div>
             </div>
 
             {{-- Table List --}}
             <div class="flex-1 overflow-y-auto py-2 ui-scrollbar">
-                <div class="px-3 pb-1">
-                    <span class="text-[10px] font-semibold uppercase tracking-wider ui-text-subtle">Tables</span>
-                    <span class="text-[10px] ui-text-subtle ml-1">({{ count($tables) }})</span>
+                <div class="px-3 pb-1 flex items-center justify-between">
+                    <div>
+                        <span class="text-[10px] font-semibold uppercase tracking-wider ui-text-subtle">Tables</span>
+                        <span class="text-[10px] ui-text-subtle ml-1" x-text="'(' + tables.length + ')'"></span>
+                    </div>
+                    <button @click="refreshTables()" class="p-0.5 rounded transition-colors ui-text-subtle hover:ui-text" :class="refreshingTables ? 'animate-spin' : ''">
+                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
+                        </svg>
+                    </button>
                 </div>
 
                 <template x-for="table in filteredTables" :key="table.name">
@@ -44,7 +48,7 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M21.375 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M12 17.25v-5.25" />
                             </svg>
                             <span class="text-xs ui-text truncate" x-text="table.name"></span>
-                            <span class="text-[10px] ui-text-subtle ml-auto opacity-0 group-hover:opacity-100" x-text="table.rows"></span>
+                            <span class="text-[10px] ui-text-subtle ml-auto" x-text="table.rows"></span>
                         </button>
 
                         {{-- Columns --}}
@@ -128,89 +132,183 @@
                 <div x-show="activeTab === 'query'" class="flex flex-col h-full">
                     {{-- Editor --}}
                     <div class="p-6 border-b ui-border">
-                        <form method="POST" action="{{ route('system.sql-query.execute') }}" class="space-y-3">
-                            @csrf
+                        <div class="space-y-3">
                             <div>
                                 <textarea
-                                    name="query"
                                     x-ref="queryInput"
+                                    x-model="query"
                                     placeholder="SELECT * FROM users LIMIT 10"
                                     rows="6"
-                                    required
-                                    class="w-full px-4 py-3 text-sm border rounded-lg shadow-sm focus:ring-2 focus:ring-offset-2 transition ui-input font-mono"
+                                    class="w-full px-4 py-3 text-sm border rounded-lg shadow-sm focus:ring-0 focus:ring-offset-0 focus:border-[rgb(var(--ui-border))] transition ui-input font-mono"
                                     style="font-family: 'JetBrains Mono', monospace; tab-size: 4;"
-                                    @keydown.ctrl.enter="$el.closest('form').submit()"
-                                    @keydown.meta.enter="$el.closest('form').submit()"
-                                >{{ old('query') }}</textarea>
+                                    @keydown.ctrl.enter.prevent="runQuery()"
+                                    @keydown.meta.enter.prevent="runQuery()"
+                                ></textarea>
                             </div>
                             <div class="flex items-center gap-3">
-                                <x-hub-ui::button type="submit" size="sm">
-                                    <x-slot:icon>
+                                <button @click="runQuery()" :disabled="loading || !query.trim()" class="ui-btn ui-btn-primary ui-btn-sm">
+                                    <template x-if="loading">
+                                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                        </svg>
+                                    </template>
+                                    <template x-if="!loading">
                                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
                                         </svg>
-                                    </x-slot:icon>
-                                    Run Query
-                                </x-hub-ui::button>
+                                    </template>
+                                    <span x-text="loading ? 'Running...' : 'Run Query'"></span>
+                                </button>
                                 <span class="text-xs ui-text-subtle">Ctrl+Enter to run</span>
                             </div>
-                        </form>
+                        </div>
                     </div>
 
                     {{-- Results --}}
                     <div class="flex-1 overflow-auto p-6">
-                        @if(session('error'))
-                            <x-hub-ui::alert type="error">{{ session('error') }}</x-hub-ui::alert>
-                        @endif
-
-                        @if(session('results') !== null)
-                            <div class="space-y-3">
-                                <div class="flex items-center gap-3">
-                                    <span class="text-xs font-medium ui-text-muted">
-                                        {{ count(session('results')) }} {{ Str::plural('row', count(session('results'))) }}
-                                    </span>
-                                    <span class="text-xs ui-text-subtle">{{ session('duration') }}ms</span>
+                        {{-- Error --}}
+                        <template x-if="error">
+                            <div class="rounded-md border p-4 ui-alert-error">
+                                <div class="flex">
+                                    <div class="flex-shrink-0">
+                                        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                    <div class="ml-3">
+                                        <p class="text-sm" x-text="error"></p>
+                                    </div>
                                 </div>
+                            </div>
+                        </template>
+
+                        {{-- Results table --}}
+                        <template x-if="columns.length">
+                            <div class="space-y-3">
                                 <div class="overflow-x-auto rounded-lg border ui-border">
                                     <table class="w-full text-sm text-left ui-table">
-                                        @if(count(session('columns')))
-                                            <thead class="text-xs uppercase tracking-wider ui-bg-elevated">
-                                                <tr>
-                                                    @foreach(session('columns') as $col)
-                                                        <th class="px-4 py-2.5 font-medium whitespace-nowrap">{{ $col }}</th>
-                                                    @endforeach
-                                                </tr>
-                                            </thead>
-                                        @endif
+                                        <thead>
+                                            <tr class="text-xs uppercase tracking-wider ui-bg-elevated">
+                                                <template x-for="(col, colIdx) in columns" :key="col">
+                                                    <th
+                                                        class="px-4 py-2.5 font-medium whitespace-nowrap transition-colors"
+                                                        :class="hoveredCol === colIdx ? 'bg-white/10' : ''"
+                                                        x-text="col"
+                                                    ></th>
+                                                </template>
+                                            </tr>
+                                            <tr class="ui-bg-elevated" style="opacity: 0.7">
+                                                <template x-for="col in columns" :key="'filter-'+col">
+                                                    <th class="px-2 py-1.5">
+                                                        <input
+                                                            type="text"
+                                                            :placeholder="'Filter...'"
+                                                            class="w-full px-2 py-1 text-xs rounded border ui-input font-normal normal-case"
+                                                            style="min-width: 60px;"
+                                                            x-model="columnFilters[col]"
+                                                            @keydown.enter.prevent="applyFilters()"
+                                                            @keydown.tab="applyFilters()"
+                                                        />
+                                                    </th>
+                                                </template>
+                                            </tr>
+                                        </thead>
                                         <tbody>
-                                            @foreach(session('results') as $row)
-                                                <tr class="transition-colors">
-                                                    @foreach(session('columns') as $col)
-                                                        <td class="px-4 py-2 whitespace-nowrap max-w-xs truncate text-xs" title="{{ $row[$col] ?? '' }}">
-                                                            @if(is_null($row[$col] ?? null))
-                                                                <span class="ui-text-subtle italic">NULL</span>
-                                                            @else
-                                                                {{ $row[$col] }}
-                                                            @endif
-                                                        </td>
-                                                    @endforeach
+                                            <template x-if="results && results.length > 0">
+                                                <template x-for="(row, i) in results" :key="i">
+                                                    <tr class="transition-colors">
+                                                        <template x-for="(col, colIdx) in columns" :key="col">
+                                                            <td
+                                                                class="px-4 py-2 whitespace-nowrap max-w-xs truncate text-xs cursor-pointer transition-colors"
+                                                                :title="row[col] ?? ''"
+                                                                @mouseenter="hoveredCol = colIdx; $el.style.backgroundColor = '#eff6ff'"
+                                                                @mouseleave="hoveredCol = null; $el.style.backgroundColor = ''"
+                                                                @click="copyCell(row[col])"
+                                                            >
+                                                                <span x-show="row[col] === null" class="ui-text-subtle italic">NULL</span>
+                                                                <span x-show="row[col] !== null" x-text="row[col]"></span>
+                                                            </td>
+                                                        </template>
+                                                    </tr>
+                                                </template>
+                                            </template>
+                                            <template x-if="!results || results.length === 0">
+                                                <tr>
+                                                    <td :colspan="columns.length" class="px-4 py-6 text-center text-xs ui-text-subtle italic">
+                                                        No results
+                                                    </td>
                                                 </tr>
-                                            @endforeach
+                                            </template>
                                         </tbody>
                                     </table>
                                 </div>
-                            </div>
-                        @elseif(!session('error'))
-                            <div class="flex flex-col items-center justify-center py-16 text-center">
-                                <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 ui-bg-elevated">
-                                    <svg class="w-7 h-7 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                                    </svg>
+
+                                {{-- Pagination --}}
+                                <div x-show="results && results.length > 0" class="flex items-center justify-between pt-1">
+                                    <div class="flex items-center gap-3">
+                                        <span class="text-xs ui-text-subtle" x-text="'Showing ' + ((page - 1) * perPage + 1) + '-' + Math.min(page * perPage, total) + ' of ' + total + ' rows'"></span>
+                                        <span class="text-xs ui-text-subtle" x-text="duration + 'ms'"></span>
+                                    </div>
+                                    <div class="flex items-center gap-1">
+                                        {{-- First --}}
+                                        <button @click="goToPage(1)" :disabled="page === 1" class="p-1.5 rounded transition-colors" :class="page === 1 ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+                                            </svg>
+                                        </button>
+                                        {{-- Previous --}}
+                                        <button @click="goToPage(page - 1)" :disabled="page === 1" class="p-1.5 rounded transition-colors" :class="page === 1 ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
+                                            </svg>
+                                        </button>
+                                        {{-- Page numbers --}}
+                                        <template x-for="p in visiblePages" :key="'p'+p">
+                                            <button
+                                                @click="goToPage(p)"
+                                                class="min-w-[28px] h-7 px-1.5 text-xs rounded transition-colors"
+                                                :class="p === page ? 'ui-bg-primary text-white font-medium' : (p === '...' ? 'ui-text-subtle cursor-default' : 'ui-text-muted hover:ui-text hover:ui-bg-elevated')"
+                                                x-text="p"
+                                            ></button>
+                                        </template>
+                                        {{-- Next --}}
+                                        <button @click="goToPage(page + 1)" :disabled="page === lastPage" class="p-1.5 rounded transition-colors" :class="page === lastPage ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </button>
+                                        {{-- Last --}}
+                                        <button @click="goToPage(lastPage)" :disabled="page === lastPage" class="p-1.5 rounded transition-colors" :class="page === lastPage ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" />
+                                            </svg>
+                                        </button>
+                                        {{-- Per page --}}
+                                        <div class="ml-3 flex items-center gap-2 pl-3 border-l ui-border">
+                                            <select x-model.number="perPage" @change="goToPage(1)" class="text-xs py-1 pl-2 pr-6 rounded border ui-input" style="min-width: 4rem;">
+                                                <option value="10">10</option>
+                                                <option value="25">25</option>
+                                                <option value="50">50</option>
+                                                <option value="100">100</option>
+                                            </select>
+                                            <span class="text-xs ui-text-subtle">per page</span>
+                                        </div>
+                                    </div>
                                 </div>
-                                <p class="text-sm ui-text-muted">Write a query and press Run to see results.</p>
-                                <p class="text-xs ui-text-subtle mt-1">Double-click a table name to insert it.</p>
                             </div>
-                        @endif
+                        </template>
+
+                        {{-- Empty state --}}
+                        <div x-show="!results && !error" class="flex flex-col items-center justify-center py-16 text-center">
+                            <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 ui-bg-elevated">
+                                <svg class="w-7 h-7 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
+                                </svg>
+                            </div>
+                            <p class="text-sm ui-text-muted">Write a query and press Run to see results.</p>
+                            <p class="text-xs ui-text-subtle mt-1">Click a table to query it. Double-click to see columns.</p>
+                        </div>
                     </div>
                 </div>
 
@@ -250,17 +348,114 @@
                 expandedTable: null,
                 tableSearch: '',
                 tables: @json($tables),
+                refreshingTables: false,
                 _clickTimer: null,
+
+                query: '',
+                baseQuery: '',
+                loading: false,
+                results: null,
+                columns: [],
+                duration: 0,
+                error: null,
+                page: 1,
+                perPage: 25,
+                total: 0,
+                lastPage: 1,
+                columnFilters: {},
+                hoveredCol: null,
+
+                get visiblePages() {
+                    const total = this.lastPage;
+                    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+                    const pages = [];
+                    const current = this.page;
+                    pages.push(1);
+                    if (current > 3) pages.push('...');
+                    for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) {
+                        pages.push(i);
+                    }
+                    if (current < total - 2) pages.push('...');
+                    if (total > 1) pages.push(total);
+                    return pages;
+                },
+
+                async refreshTables() {
+                    if (this.refreshingTables) return;
+                    this.refreshingTables = true;
+                    const { ok, data } = await hubUiFetch('{{ route("system.sql-query.tables") }}', { method: 'GET' });
+                    if (ok) this.tables = data;
+                    this.refreshingTables = false;
+                },
+
+                async goToPage(p) {
+                    if (p === '...' || p < 1 || p > this.lastPage || p === this.page) return;
+                    this.page = p;
+                    await this.fetchResults();
+                },
 
                 get filteredTables() {
                     if (!this.tableSearch) return this.tables;
                     const search = this.tableSearch.toLowerCase();
-                    return this.tables.filter(t => t.name.toLowerCase().includes(search));
+                    return this.tables.filter(t => t.name.toLowerCase().startsWith(search));
+                },
+
+                async runQuery() {
+                    this.baseQuery = this.query.trim();
+                    this.columnFilters = {};
+                    this.page = 1;
+                    await this.fetchResults();
+                },
+
+
+                applyFilters() {
+                    const conditions = Object.entries(this.columnFilters)
+                        .filter(([_, v]) => v && v.trim())
+                        .map(([col, v]) => {
+                            const val = v.trim();
+                            if (val.toLowerCase() === 'null') return col + ' IS NULL';
+                            if (val.includes('%')) return col + " LIKE '" + val + "'";
+                            return col + " LIKE '%" + val + "%'";
+                        });
+
+                    if (conditions.length) {
+                        this.query = 'SELECT * FROM (' + this.baseQuery + ') AS _filtered WHERE ' + conditions.join(' AND ');
+                    } else {
+                        this.query = this.baseQuery;
+                    }
+                    this.page = 1;
+                    this.fetchResults();
+                },
+
+                async fetchResults() {
+                    const q = this.query.trim();
+                    if (!q || this.loading) return;
+
+                    this.loading = true;
+                    this.error = null;
+
+                    const { ok, data } = await hubUiFetch('{{ route("system.sql-query.execute") }}', {
+                        body: { query: q, page: this.page, per_page: this.perPage },
+                    });
+
+                    if (ok) {
+                        this.results = data.results;
+                        if (data.columns.length) this.columns = data.columns;
+                        this.duration = data.duration;
+                        this.total = data.total;
+                        this.page = data.page;
+                        this.lastPage = data.last_page;
+                    } else {
+                        this.error = data.error || data.message || 'An error occurred.';
+                        this.results = null;
+                    }
+
+                    this.loading = false;
                 },
 
                 handleTableClick(name) {
                     clearTimeout(this._clickTimer);
-                    this._clickTimer = setTimeout(() => this.insertTableName(name), 250);
+                    this._clickTimer = setTimeout(() => this.queryTable(name), 250);
                 },
 
                 handleTableDblClick(name) {
@@ -268,13 +463,21 @@
                     this.expandedTable = this.expandedTable === name ? null : name;
                 },
 
-                insertTableName(name) {
-                    const el = this.$refs.queryInput;
-                    if (!el) return;
+                queryTable(name) {
                     this.activeTab = 'query';
-                    el.value = 'SELECT * FROM ' + name + ' LIMIT 10';
-                    el.focus();
-                    el.closest('form').submit();
+                    this.query = 'SELECT * FROM ' + name;
+                    this.baseQuery = this.query;
+                    this.columnFilters = {};
+                    this.page = 1;
+                    const table = this.tables.find(t => t.name === name);
+                    if (table) this.columns = table.columns.map(c => c.name);
+                    this.fetchResults();
+                },
+
+                async copyCell(value) {
+                    const text = value === null ? '' : String(value);
+                    await navigator.clipboard.writeText(text);
+                    window.showToast('Copied to clipboard', 'success', 2000);
                 },
 
                 insertColumnName(name) {
@@ -283,10 +486,12 @@
                     this.activeTab = 'query';
                     const start = el.selectionStart;
                     const end = el.selectionEnd;
-                    const text = el.value;
-                    el.value = text.substring(0, start) + name + text.substring(end);
-                    el.selectionStart = el.selectionEnd = start + name.length;
-                    el.focus();
+                    const text = this.query;
+                    this.query = text.substring(0, start) + name + text.substring(end);
+                    this.$nextTick(() => {
+                        el.selectionStart = el.selectionEnd = start + name.length;
+                        el.focus();
+                    });
                 },
             };
         }

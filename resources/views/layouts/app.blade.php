@@ -1,12 +1,12 @@
 @php
-    $activeSection = $activeSection ?? (request()->is('system/*') ? 'system' : 'dashboard');
-    $activeHighlight = $activeHighlight ?? match(true) {
+    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : 'dashboard');
+    $activeHighlight = $activeHighlight ?: match(true) {
         request()->routeIs('system.sql-query') => 'sql-query',
         default => $activeSection,
     };
 @endphp
 
-<x-hub-ui::layouts.dashboard :title="$title ?? config('app.name')">
+<x-hub-ui::layouts.dashboard :title="$title ?? config('app.name')" :flush="$flush">
     <x-slot:sidebar>
         <x-hub-ui::sidebar :activeSection="$activeSection" :activeHighlight="$activeHighlight">
             <x-slot:logo>

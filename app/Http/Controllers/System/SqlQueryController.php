@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -17,38 +18,60 @@ class SqlQueryController extends Controller
         return view('system.sql-query', compact('tables'));
     }
 
-    public function execute(Request $request)
+    public function tables(): JsonResponse
+    {
+        return response()->json($this->getTableMetadata());
+    }
+
+    public function execute(Request $request): JsonResponse
     {
         $request->validate([
             'query' => ['required', 'string', 'max:5000'],
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
         ]);
 
         $query = trim($request->input('query'));
+        $page = $request->integer('page', 1);
+        $perPage = $request->integer('per_page', 25);
 
-        // Only allow read-only statements
         $allowed = ['select', 'show', 'describe', 'desc', 'explain'];
         $firstWord = strtolower(strtok($query, " \t\n\r"));
 
         if (! in_array($firstWord, $allowed)) {
-            return back()
-                ->withInput()
-                ->with('error', 'Only read-only queries are allowed (SELECT, SHOW, DESCRIBE, EXPLAIN).');
+            return response()->json([
+                'error' => 'Only read-only queries are allowed (SELECT, SHOW, DESCRIBE, EXPLAIN).',
+            ], 422);
         }
 
         try {
             $startTime = microtime(true);
-            $results = DB::select($query);
+
+            // Get total count by wrapping in a subquery
+            $countQuery = "SELECT COUNT(*) as total FROM ({$query}) as _count_sub";
+            $total = DB::select($countQuery)[0]->total;
+
+            // Get paginated results
+            $offset = ($page - 1) * $perPage;
+            $paginatedQuery = "SELECT * FROM ({$query}) as _page_sub LIMIT {$perPage} OFFSET {$offset}";
+            $results = DB::select($paginatedQuery);
+
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             $results = array_map(fn ($row) => (array) $row, $results);
-
             $columns = ! empty($results) ? array_keys($results[0]) : [];
 
-            return back()->withInput()->with(compact('results', 'columns', 'duration'));
+            return response()->json([
+                'results' => $results,
+                'columns' => $columns,
+                'duration' => $duration,
+                'total' => (int) $total,
+                'page' => $page,
+                'per_page' => $perPage,
+                'last_page' => (int) max(1, ceil($total / $perPage)),
+            ]);
         } catch (\Throwable $e) {
-            return back()
-                ->withInput()
-                ->with('error', $e->getMessage());
+            return response()->json(['error' => $e->getMessage()], 422);
         }
     }
 

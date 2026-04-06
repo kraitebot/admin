@@ -20,6 +20,7 @@ Route::middleware('auth')->group(function () {
     // System
     Route::get('/system/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
     Route::post('/system/sql-query', [SqlQueryController::class, 'execute'])->name('system.sql-query.execute');
+    Route::get('/system/sql-query/tables', [SqlQueryController::class, 'tables'])->name('system.sql-query.tables');
 });
 
 require __DIR__.'/auth.php';
