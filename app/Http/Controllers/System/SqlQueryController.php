@@ -75,6 +75,85 @@ class SqlQueryController extends Controller
         }
     }
 
+    public function truncate(Request $request): JsonResponse
+    {
+        $request->validate([
+            'table' => ['required', 'string'],
+        ]);
+
+        $table = str_replace('`', '', $request->input('table'));
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return response()->json(['error' => "Table \"{$table}\" does not exist."], 422);
+        }
+
+        try {
+            DB::statement('TRUNCATE TABLE `'.$table.'`');
+
+            return response()->json(['success' => true]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function primaryKey(Request $request): JsonResponse
+    {
+        $request->validate([
+            'table' => ['required', 'string'],
+        ]);
+
+        $table = str_replace('`', '', $request->input('table'));
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return response()->json(['pk' => null, 'reason' => 'Table does not exist'], 422);
+        }
+
+        $keys = DB::select("SHOW KEYS FROM `{$table}` WHERE Key_name = 'PRIMARY'");
+
+        if (count($keys) === 0) {
+            return response()->json(['pk' => null, 'reason' => 'No primary key']);
+        }
+
+        if (count($keys) > 1) {
+            return response()->json(['pk' => null, 'reason' => 'Composite primary key not supported']);
+        }
+
+        return response()->json(['pk' => $keys[0]->Column_name]);
+    }
+
+    public function update(Request $request): JsonResponse
+    {
+        $request->validate([
+            'table' => ['required', 'string'],
+            'pk_column' => ['required', 'string'],
+            'pk_value' => ['required'],
+            'column' => ['required', 'string'],
+            'value' => ['nullable'],
+        ]);
+
+        $table = str_replace('`', '', $request->input('table'));
+        $pkColumn = str_replace('`', '', $request->input('pk_column'));
+        $column = str_replace('`', '', $request->input('column'));
+        $pkValue = $request->input('pk_value');
+        $value = $request->input('value');
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable($table)) {
+            return response()->json(['error' => "Table \"{$table}\" does not exist."], 422);
+        }
+
+        $resolvedValue = (is_string($value) && strtoupper($value) === 'NULL') ? null : $value;
+
+        try {
+            DB::table($table)
+                ->where($pkColumn, $pkValue)
+                ->update([$column => $resolvedValue]);
+
+            return response()->json(['success' => true, 'value' => $resolvedValue]);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
     private function getTableMetadata(): array
     {
         $database = DB::getDatabaseName();

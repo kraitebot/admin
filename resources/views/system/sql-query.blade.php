@@ -13,6 +13,7 @@
                         x-model="tableSearch"
                         placeholder="Filter tables..."
                         class="w-full pl-9 pr-3 py-2 text-xs rounded-lg border ui-input"
+                        x-init="$nextTick(() => $el.focus())"
                         @keydown.enter.prevent="if (filteredTables.length === 1) queryTable(filteredTables[0].name)"
                     />
                 </div>
@@ -23,7 +24,7 @@
                 <div class="px-3 pb-1 flex items-center justify-between">
                     <div>
                         <span class="text-[10px] font-semibold uppercase tracking-wider ui-text-subtle">Tables</span>
-                        <span class="text-[10px] ui-text-subtle ml-1" x-text="'(' + tables.length + ')'"></span>
+                        <span class="text-[10px] ui-text-subtle ml-1" x-text="'(' + filteredTables.length + ')'"></span>
                     </div>
                     <button @click="refreshTables()" class="p-0.5 rounded transition-colors ui-text-subtle hover:ui-text" :class="refreshingTables ? 'animate-spin' : ''">
                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
@@ -32,42 +33,61 @@
                     </button>
                 </div>
 
-                <template x-for="table in filteredTables" :key="table.name">
+                <template x-for="group in groupedTables" :key="group.letter">
                     <div>
-                        {{-- Table row --}}
+                        {{-- Letter header --}}
                         <button
-                            @click="handleTableClick(table.name)"
-                            @dblclick.stop="handleTableDblClick(table.name)"
-                            class="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors hover:ui-bg-elevated group"
-                            :class="expandedTable === table.name ? 'ui-bg-elevated' : ''"
+                            @click="toggleLetter(group.letter)"
+                            class="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors hover:ui-bg-elevated"
                         >
-                            <svg class="w-3.5 h-3.5 ui-text-subtle transition-transform" :class="expandedTable === table.name ? 'rotate-90' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                            <svg class="w-3 h-3 ui-text-subtle transition-transform" :class="isLetterExpanded(group.letter) ? 'rotate-90' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                             </svg>
-                            <svg class="w-4 h-4 flex-shrink-0" style="color: rgb(var(--ui-warning))" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M21.375 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M12 17.25v-5.25" />
-                            </svg>
-                            <span class="text-xs ui-text truncate" x-text="table.name"></span>
-                            <span class="text-[10px] ui-text-subtle ml-auto" x-text="table.rows"></span>
+                            <span class="text-xs font-semibold ui-text-muted" x-text="group.letter"></span>
+                            <span class="text-[10px] ui-text-subtle ml-auto" x-text="group.tables.length"></span>
                         </button>
 
-                        {{-- Columns --}}
-                        <div x-show="expandedTable === table.name" x-collapse>
-                            <template x-for="col in table.columns" :key="col.name">
-                                <button
-                                    @click="insertColumnName(col.name)"
-                                    class="w-full flex items-center gap-2 pl-10 pr-3 py-1 text-left transition-colors hover:ui-bg-elevated"
-                                >
-                                    <svg x-show="col.key === 'PRI'" class="w-3 h-3 flex-shrink-0" style="color: rgb(var(--ui-warning))" fill="currentColor" viewBox="0 0 20 20">
-                                        <path fill-rule="evenodd" d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" clip-rule="evenodd" />
-                                        <path d="M10.5 8a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-1v1.5a.5.5 0 0 1-1 0V8.5h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1-.5-.5Z" />
-                                    </svg>
-                                    <svg x-show="col.key !== 'PRI'" class="w-3 h-3 flex-shrink-0 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0 0 15 0m-15 0a7.5 7.5 0 0 1 15 0m-15 0H3m16.5 0H21" />
-                                    </svg>
-                                    <span class="text-[11px] ui-text truncate" x-text="col.name"></span>
-                                    <span class="text-[10px] ui-text-subtle ml-auto" x-text="col.type"></span>
-                                </button>
+                        {{-- Tables under this letter --}}
+                        <div x-show="isLetterExpanded(group.letter)" x-collapse>
+                            <template x-for="table in group.tables" :key="table.name">
+                                <div>
+                                    {{-- Table row --}}
+                                    <button
+                                        @click="handleTableClick(table.name)"
+                                        @dblclick.stop="handleTableDblClick(table.name)"
+                                        class="w-full flex items-center gap-2 pl-7 pr-3 py-1.5 text-left transition-colors hover:ui-bg-elevated group"
+                                        :class="expandedTable === table.name ? 'ui-bg-elevated' : ''"
+                                    >
+                                        <svg class="w-3.5 h-3.5 ui-text-subtle transition-transform" :class="expandedTable === table.name ? 'rotate-90' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                                        </svg>
+                                        <svg class="w-4 h-4 flex-shrink-0" style="color: rgb(var(--ui-warning))" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.375 19.5h17.25m-17.25 0a1.125 1.125 0 0 1-1.125-1.125M3.375 19.5h7.5c.621 0 1.125-.504 1.125-1.125m-9.75 0V5.625m0 12.75v-1.5c0-.621.504-1.125 1.125-1.125m18.375 2.625V5.625m0 12.75c0 .621-.504 1.125-1.125 1.125m1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125m0 3.75h-7.5A1.125 1.125 0 0 1 12 18.375m9.75-12.75c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125m19.5 0v1.5c0 .621-.504 1.125-1.125 1.125M2.25 5.625v1.5c0 .621.504 1.125 1.125 1.125m0 0h17.25m-17.25 0h7.5c.621 0 1.125.504 1.125 1.125M3.375 8.25c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125m17.25-3.75h-7.5c-.621 0-1.125.504-1.125 1.125m8.625-1.125c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125m-17.25 0h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125M12 10.875v-1.5m0 1.5c0 .621-.504 1.125-1.125 1.125M12 10.875c0 .621.504 1.125 1.125 1.125m-2.25 0c.621 0 1.125.504 1.125 1.125M12 12h7.5m-7.5 0c-.621 0-1.125.504-1.125 1.125M21.375 12c.621 0 1.125.504 1.125 1.125v1.5c0 .621-.504 1.125-1.125 1.125M12 17.25v-5.25" />
+                                        </svg>
+                                        <span class="text-xs ui-text truncate" x-text="table.name"></span>
+                                        <span class="text-[10px] ui-text-subtle ml-auto" x-text="table.rows"></span>
+                                    </button>
+
+                                    {{-- Columns --}}
+                                    <div x-show="expandedTable === table.name" x-collapse>
+                                        <template x-for="col in table.columns" :key="col.name">
+                                            <button
+                                                @click="insertColumnName(col.name)"
+                                                class="w-full flex items-center gap-2 pl-14 pr-3 py-1 text-left transition-colors hover:ui-bg-elevated"
+                                            >
+                                                <svg x-show="col.key === 'PRI'" class="w-3 h-3 flex-shrink-0" style="color: rgb(var(--ui-warning))" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fill-rule="evenodd" d="M8 4a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm-2 4a2 2 0 1 1 4 0 2 2 0 0 1-4 0Z" clip-rule="evenodd" />
+                                                    <path d="M10.5 8a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-1v1.5a.5.5 0 0 1-1 0V8.5h-1v1a.5.5 0 0 1-1 0v-1h-1a.5.5 0 0 1-.5-.5Z" />
+                                                </svg>
+                                                <svg x-show="col.key !== 'PRI'" class="w-3 h-3 flex-shrink-0 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12a7.5 7.5 0 0 0 15 0m-15 0a7.5 7.5 0 0 1 15 0m-15 0H3m16.5 0H21" />
+                                                </svg>
+                                                <span class="text-[11px] ui-text truncate" x-text="col.name"></span>
+                                                <span class="text-[10px] ui-text-subtle ml-auto" x-text="col.type"></span>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
                             </template>
                         </div>
                     </div>
@@ -145,22 +165,38 @@
                                     @keydown.meta.enter.prevent="runQuery()"
                                 ></textarea>
                             </div>
-                            <div class="flex items-center gap-3">
-                                <button @click="runQuery()" :disabled="loading || !query.trim()" class="ui-btn ui-btn-primary ui-btn-sm">
-                                    <template x-if="loading">
-                                        <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                        </svg>
-                                    </template>
-                                    <template x-if="!loading">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <button @click="runQuery()" :disabled="loading || !query.trim()" class="ui-btn ui-btn-primary ui-btn-sm">
+                                        <template x-if="loading">
+                                            <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                        </template>
+                                        <template x-if="!loading">
+                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                                            </svg>
+                                        </template>
+                                        <span x-text="loading ? 'Running...' : 'Run Query'"></span>
+                                    </button>
+                                    <span class="text-xs ui-text-subtle">Ctrl+Enter to run</span>
+                                </div>
+                                <div x-show="isBrowsingTable && results && results.length > 0" class="flex items-center gap-2">
+                                    <button @click="resetTable()" class="ui-btn ui-btn-ghost ui-btn-sm">
                                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
                                         </svg>
-                                    </template>
-                                    <span x-text="loading ? 'Running...' : 'Run Query'"></span>
-                                </button>
-                                <span class="text-xs ui-text-subtle">Ctrl+Enter to run</span>
+                                        <span>Reset</span>
+                                    </button>
+                                    <button @click="confirmTruncate()" class="ui-btn ui-btn-danger ui-btn-sm">
+                                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                        </svg>
+                                        <span>Truncate</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -186,19 +222,25 @@
                         {{-- Results table --}}
                         <template x-if="columns.length">
                             <div class="space-y-3">
-                                <div class="overflow-x-auto rounded-lg border ui-border">
-                                    <table class="w-full text-sm text-left ui-table">
+                                <div class="overflow-x-auto rounded-lg border ui-border mb-4 pb-3">
+                                    <table class="text-sm text-left ui-table" style="min-width: 100%">
                                         <thead>
                                             <tr class="text-xs uppercase tracking-wider ui-bg-elevated">
                                                 <template x-for="(col, colIdx) in columns" :key="col">
                                                     <th
-                                                        class="px-4 py-2.5 font-medium whitespace-nowrap transition-colors"
-                                                        :class="hoveredCol === colIdx ? 'bg-white/10' : ''"
-                                                        x-text="col"
-                                                    ></th>
+                                                        class="px-4 py-2.5 font-medium whitespace-nowrap transition-colors relative select-none"
+                                                        :style="(hoveredCol === colIdx ? 'background-color: rgb(var(--ui-primary) / 0.08);' : '') + (columnWidths[col] ? 'min-width:' + columnWidths[col] + 'px; max-width:' + columnWidths[col] + 'px' : '')"
+                                                    >
+                                                        <span x-text="col"></span>
+                                                        <div
+                                                            @mousedown.prevent.stop="startResize($event, col)"
+                                                            class="absolute top-0 right-0 w-2 h-full cursor-col-resize opacity-0 hover:opacity-100 transition-opacity"
+                                                            style="background-color: rgb(var(--ui-primary) / 0.3)"
+                                                        ></div>
+                                                    </th>
                                                 </template>
                                             </tr>
-                                            <tr class="ui-bg-elevated" style="opacity: 0.7">
+                                            <tr x-ref="filterRow" class="ui-bg-elevated" style="opacity: 0.7">
                                                 <template x-for="col in columns" :key="'filter-'+col">
                                                     <th class="px-2 py-1.5">
                                                         <input
@@ -207,8 +249,7 @@
                                                             class="w-full px-2 py-1 text-xs rounded border ui-input font-normal normal-case"
                                                             style="min-width: 60px;"
                                                             x-model="columnFilters[col]"
-                                                            @keydown.enter.prevent="applyFilters()"
-                                                            @keydown.tab="applyFilters()"
+                                                            @input.debounce.1000ms="applyFilters()"
                                                         />
                                                     </th>
                                                 </template>
@@ -220,14 +261,33 @@
                                                     <tr class="transition-colors">
                                                         <template x-for="(col, colIdx) in columns" :key="col">
                                                             <td
-                                                                class="px-4 py-2 whitespace-nowrap max-w-xs truncate text-xs cursor-pointer transition-colors"
+                                                                class="px-4 py-2 whitespace-nowrap max-w-xs text-xs cursor-pointer transition-colors"
+                                                                :class="editingCell && editingCell.rowIndex === i && editingCell.colName === col ? 'ring-2 ring-inset' : 'truncate'"
+                                                                :style="(editingCell && editingCell.rowIndex === i && editingCell.colName === col ? 'ring-color: rgb(var(--ui-primary)); padding: 0;' : '') + (hoveredCol === colIdx && !(editingCell && editingCell.rowIndex === i && editingCell.colName === col) ? 'background-color: rgb(var(--ui-primary) / 0.08);' : '')"
                                                                 :title="row[col] ?? ''"
-                                                                @mouseenter="hoveredCol = colIdx; $el.style.backgroundColor = '#eff6ff'"
-                                                                @mouseleave="hoveredCol = null; $el.style.backgroundColor = ''"
-                                                                @click="copyCell(row[col])"
+                                                                @mouseenter="hoveredCol = colIdx"
+                                                                @mouseleave="hoveredCol = null"
+                                                                @click="!(editingCell && editingCell.rowIndex === i && editingCell.colName === col) && copyCell(row[col])"
+                                                                @dblclick.stop="startEditing(i, col, row[col])"
                                                             >
-                                                                <span x-show="row[col] === null" class="ui-text-subtle italic">NULL</span>
-                                                                <span x-show="row[col] !== null" x-text="row[col]"></span>
+                                                                <template x-if="editingCell && editingCell.rowIndex === i && editingCell.colName === col">
+                                                                    <input
+                                                                        type="text"
+                                                                        x-ref="editInput"
+                                                                        x-model="editingValue"
+                                                                        class="w-full h-full px-4 py-2 bg-transparent outline-none font-mono text-xs"
+                                                                        @keydown.enter.prevent="commitEdit()"
+                                                                        @keydown.tab.prevent="commitEdit()"
+                                                                        @keydown.escape.prevent="cancelEdit()"
+                                                                        @blur="commitEdit()"
+                                                                    />
+                                                                </template>
+                                                                <template x-if="!(editingCell && editingCell.rowIndex === i && editingCell.colName === col)">
+                                                                    <span>
+                                                                        <span x-show="row[col] === null" class="ui-text-subtle italic">NULL</span>
+                                                                        <span x-show="row[col] !== null" x-text="row[col]"></span>
+                                                                    </span>
+                                                                </template>
                                                             </td>
                                                         </template>
                                                     </tr>
@@ -346,6 +406,7 @@
             return {
                 activeTab: 'query',
                 expandedTable: null,
+                expandedLetters: {},
                 tableSearch: '',
                 tables: @json($tables),
                 refreshingTables: false,
@@ -364,6 +425,25 @@
                 lastPage: 1,
                 columnFilters: {},
                 hoveredCol: null,
+                columnWidths: {},
+                _resizing: null,
+
+                // Inline editing
+                editingCell: null,
+                editingValue: '',
+                savingCell: false,
+                tablePk: null,
+                tablePkFetched: false,
+                _escPressed: false,
+
+                get isBrowsingTable() {
+                    return /^SELECT \* FROM (\w+)$/i.test(this.baseQuery);
+                },
+
+                get browsedTableName() {
+                    const match = this.baseQuery.match(/^SELECT \* FROM (\w+)$/i);
+                    return match ? match[1] : null;
+                },
 
                 get visiblePages() {
                     const total = this.lastPage;
@@ -400,10 +480,31 @@
                     return this.tables.filter(t => t.name.toLowerCase().startsWith(search));
                 },
 
+                get groupedTables() {
+                    const groups = {};
+                    for (const table of this.filteredTables) {
+                        const letter = table.name[0].toUpperCase();
+                        if (!groups[letter]) groups[letter] = [];
+                        groups[letter].push(table);
+                    }
+                    return Object.keys(groups).sort().map(letter => ({ letter, tables: groups[letter] }));
+                },
+
+                toggleLetter(letter) {
+                    this.expandedLetters[letter] = !this.expandedLetters[letter];
+                },
+
+                isLetterExpanded(letter) {
+                    return this.tableSearch.length > 0 || !!this.expandedLetters[letter];
+                },
+
                 async runQuery() {
                     this.baseQuery = this.query.trim();
                     this.columnFilters = {};
                     this.page = 1;
+                    this.editingCell = null;
+                    this.tablePk = null;
+                    this.tablePkFetched = false;
                     await this.fetchResults();
                 },
 
@@ -469,15 +570,59 @@
                     this.baseQuery = this.query;
                     this.columnFilters = {};
                     this.page = 1;
+                    this.editingCell = null;
+                    this.tablePk = null;
+                    this.tablePkFetched = false;
                     const table = this.tables.find(t => t.name === name);
                     if (table) this.columns = table.columns.map(c => c.name);
-                    this.fetchResults();
+                    this.fetchPrimaryKey(name);
+                    this.fetchResults().then(() => {
+                        this.$nextTick(() => {
+                            const firstFilter = this.$refs.filterRow?.querySelector('input');
+                            if (firstFilter) firstFilter.focus();
+                        });
+                    });
+                },
+
+                async fetchPrimaryKey(tableName) {
+                    this.tablePk = null;
+                    this.tablePkFetched = false;
+                    const { ok, data } = await hubUiFetch(
+                        '{{ route("system.sql-query.primary-key") }}?table=' + encodeURIComponent(tableName),
+                        { method: 'GET' }
+                    );
+                    if (ok) {
+                        this.tablePk = data.pk;
+                    }
+                    this.tablePkFetched = true;
                 },
 
                 async copyCell(value) {
                     const text = value === null ? '' : String(value);
                     await navigator.clipboard.writeText(text);
                     window.showToast('Copied to clipboard', 'success', 2000);
+                },
+
+                startResize(e, col) {
+                    const th = e.target.closest('th');
+                    const startX = e.clientX;
+                    const startW = th.offsetWidth;
+
+                    const onMove = (ev) => {
+                        const w = Math.max(60, startW + ev.clientX - startX);
+                        this.columnWidths[col] = w;
+                    };
+                    const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                    };
+
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
                 },
 
                 insertColumnName(name) {
@@ -492,6 +637,97 @@
                         el.selectionStart = el.selectionEnd = start + name.length;
                         el.focus();
                     });
+                },
+
+                resetTable() {
+                    this.query = this.baseQuery;
+                    this.columnFilters = {};
+                    this.page = 1;
+                    this.fetchResults();
+                },
+
+                confirmTruncate() {
+                    const tableName = this.browsedTableName;
+                    if (!tableName) return;
+
+                    window.showConfirmation({
+                        title: 'Truncate Table',
+                        message: 'Are you sure you want to truncate "' + tableName + '"? All data will be permanently deleted.',
+                        confirmText: 'Truncate',
+                        type: 'danger',
+                        onConfirm: () => this.truncateTable(tableName),
+                    });
+                },
+
+                startEditing(rowIndex, colName, currentValue) {
+                    if (!this.isBrowsingTable) return;
+                    if (!this.tablePk) {
+                        window.showToast('Cannot edit: table has no primary key', 'error');
+                        return;
+                    }
+                    this._escPressed = false;
+                    this.editingCell = { rowIndex, colName, originalValue: currentValue };
+                    this.editingValue = currentValue === null ? '' : String(currentValue);
+                    this.$nextTick(() => {
+                        const input = this.$refs.editInput;
+                        if (input) {
+                            input.focus();
+                            input.select();
+                        }
+                    });
+                },
+
+                async commitEdit() {
+                    if (this._escPressed || !this.editingCell || this.savingCell) return;
+                    this.savingCell = true;
+
+                    const { rowIndex, colName, originalValue } = this.editingCell;
+                    const tableName = this.browsedTableName;
+                    const pkValue = this.results[rowIndex][this.tablePk];
+                    const resolvedValue = this.editingValue.toUpperCase() === 'NULL' ? 'NULL' : this.editingValue;
+
+                    const { ok, data } = await hubUiFetch('{{ route("system.sql-query.update") }}', {
+                        body: {
+                            table: tableName,
+                            pk_column: this.tablePk,
+                            pk_value: pkValue,
+                            column: colName,
+                            value: resolvedValue,
+                        },
+                    });
+
+                    if (ok) {
+                        this.results[rowIndex][colName] = data.value;
+                        window.showToast('Cell updated', 'success', 2000);
+                    } else {
+                        this.results[rowIndex][colName] = originalValue;
+                        window.showToast(data.error || data.message || 'Failed to update cell', 'error');
+                    }
+
+                    this.editingCell = null;
+                    this.savingCell = false;
+                },
+
+                cancelEdit() {
+                    this._escPressed = true;
+                    this.editingCell = null;
+                },
+
+                async truncateTable(tableName) {
+                    const { ok, data } = await hubUiFetch('{{ route("system.sql-query.truncate") }}', {
+                        body: { table: tableName },
+                    });
+
+                    if (ok) {
+                        window.showToast('Table truncated successfully', 'success');
+                        this.query = this.baseQuery;
+                        this.columnFilters = {};
+                        this.page = 1;
+                        await this.fetchResults();
+                        this.refreshTables();
+                    } else {
+                        window.showToast(data.error || data.message || 'Failed to truncate table', 'error');
+                    }
                 },
             };
         }
