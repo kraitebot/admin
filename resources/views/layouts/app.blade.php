@@ -2,6 +2,9 @@
     $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : 'dashboard');
     $activeHighlight = $activeHighlight ?: match(true) {
         request()->routeIs('system.sql-query') => 'sql-query',
+        request()->routeIs('system.commands') => 'commands',
+        request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
+        request()->routeIs('system.heartbeat') => 'heartbeat',
         default => $activeSection,
     };
 @endphp
@@ -51,6 +54,51 @@
                         </svg>
                     </span>
                     <span class="text-xs">SQL Query</span>
+                </a>
+
+                <a
+                    href="{{ route('system.commands') }}" wire:navigate
+                    data-nav-item="commands"
+                    @click="highlight = 'commands'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'commands' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Commands</span>
+                </a>
+
+                <a
+                    href="{{ route('system.step-dispatcher') }}" wire:navigate
+                    data-nav-item="step-dispatcher"
+                    @click="highlight = 'step-dispatcher'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'step-dispatcher' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Steps</span>
+                </a>
+
+                <a
+                    href="{{ route('system.heartbeat') }}" wire:navigate
+                    data-nav-item="heartbeat"
+                    @click="highlight = 'heartbeat'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'heartbeat' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Heartbeat</span>
                 </a>
             </x-hub-ui::sidebar.section>
 

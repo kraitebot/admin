@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\System\CommandsController;
+use App\Http\Controllers\System\HeartbeatController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use Illuminate\Support\Facades\Route;
@@ -37,6 +38,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/system/step-dispatcher/data', [StepDispatcherController::class, 'data'])->name('system.step-dispatcher.data');
     Route::get('/system/step-dispatcher/blocks', [StepDispatcherController::class, 'blocks'])->name('system.step-dispatcher.blocks');
     Route::get('/system/step-dispatcher/block-steps', [StepDispatcherController::class, 'blockSteps'])->name('system.step-dispatcher.block-steps');
+
+    // Heartbeat
+    Route::get('/system/heartbeat', [HeartbeatController::class, 'index'])->name('system.heartbeat');
+    Route::get('/system/heartbeat/data', [HeartbeatController::class, 'data'])->name('system.heartbeat.data');
 });
 
 require __DIR__.'/auth.php';

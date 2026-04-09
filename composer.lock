@@ -166,7 +166,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/brunocfalcao/hub-ui",
-                "reference": "c8f5552da0d3780dd32d7c9cf17caf690194808f"
+                "reference": "0ef1669fe314757dbd2aee236934a4d924d41b4b"
             },
             "require": {
                 "illuminate/support": "^11.0|^12.0",
@@ -217,7 +217,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/brunocfalcao/laravel-helpers",
-                "reference": "791af9932a81b537a6e044af1edfbb6ced00e02a"
+                "reference": "6574e733a0fc5b631e5e8ce00b83158556b73737"
             },
             "require": {
                 "php": "^8.2",
@@ -1400,7 +1400,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "a52cef411b8b30bb5e6a035ddb2819a46d9500e7"
+                "reference": "7144b51c7f7e854a3fcfae252177367e52ec25fb"
             },
             "require": {
                 "angle/chrono": "^1.0",

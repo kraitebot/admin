@@ -7,6 +7,10 @@
 
         <title>{{ config('app.name', 'Kraite Admin') }}</title>
 
+        {{-- Hub UI theme --}}
+        @include('hub-ui::partials.scripts')
+        @include('hub-ui::partials.styles')
+
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +19,7 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body class="font-sans antialiased bg-[#0a0a0a] text-white">
+    <body class="font-sans antialiased" style="background-color: rgb(var(--ui-bg-body)); color: rgb(var(--ui-text))">
         <div class="min-h-screen flex flex-col sm:justify-center items-center pt-6 sm:pt-0">
             <div class="mb-2">
                 <a href="/">
@@ -23,11 +27,11 @@
                 </a>
             </div>
 
-            <div class="w-full sm:max-w-md mt-4 px-8 py-6 bg-zinc-900/80 border border-white/10 backdrop-blur-sm overflow-hidden rounded-xl shadow-2xl">
+            <div class="w-full sm:max-w-md mt-4 px-8 py-6 ui-card overflow-hidden rounded-xl shadow-2xl">
                 {{ $slot }}
             </div>
 
-            <p class="mt-6 text-xs text-zinc-600">&copy; {{ date('Y') }} Kraite</p>
+            <p class="mt-6 text-xs ui-text-subtle">&copy; {{ date('Y') }} Kraite</p>
         </div>
     </body>
 </html>

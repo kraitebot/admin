@@ -1,5 +1,5 @@
 <section>
-    <p class="text-sm text-white/40 mb-4">
+    <p class="text-sm ui-text-subtle mb-4">
         {{ __("Update your account's profile information and email address.") }}
     </p>
 
@@ -11,38 +11,30 @@
         @csrf
         @method('patch')
 
-        <div>
-            <x-input-label for="name" :value="__('Name')" />
-            <x-text-input id="name" name="name" type="text" class="mt-1 block w-full" :value="old('name', $user->name)" required autofocus autocomplete="name" />
-            <x-input-error class="mt-2" :messages="$errors->get('name')" />
-        </div>
+        <x-hub-ui::input name="name" :label="__('Name')" type="text" :value="old('name', $user->name)" required autofocus autocomplete="name" />
 
-        <div>
-            <x-input-label for="email" :value="__('Email')" />
-            <x-text-input id="email" name="email" type="email" class="mt-1 block w-full" :value="old('email', $user->email)" required autocomplete="username" />
-            <x-input-error class="mt-2" :messages="$errors->get('email')" />
+        <x-hub-ui::input name="email" :label="__('Email')" type="email" :value="old('email', $user->email)" required autocomplete="username" />
 
-            @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
-                <div>
-                    <p class="text-sm mt-2 text-white/60">
-                        {{ __('Your email address is unverified.') }}
+        @if ($user instanceof \Illuminate\Contracts\Auth\MustVerifyEmail && ! $user->hasVerifiedEmail())
+            <div>
+                <p class="text-sm ui-text-muted">
+                    {{ __('Your email address is unverified.') }}
 
-                        <button form="send-verification" class="underline text-sm text-zinc-400 hover:text-krait-400 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krait-500 focus:ring-offset-zinc-900">
-                            {{ __('Click here to re-send the verification email.') }}
-                        </button>
+                    <button form="send-verification" class="underline text-sm ui-text-subtle hover:ui-text-primary transition">
+                        {{ __('Click here to re-send the verification email.') }}
+                    </button>
+                </p>
+
+                @if (session('status') === 'verification-link-sent')
+                    <p class="mt-2 font-medium text-sm ui-text-success">
+                        {{ __('A new verification link has been sent to your email address.') }}
                     </p>
-
-                    @if (session('status') === 'verification-link-sent')
-                        <p class="mt-2 font-medium text-sm text-krait-400">
-                            {{ __('A new verification link has been sent to your email address.') }}
-                        </p>
-                    @endif
-                </div>
-            @endif
-        </div>
+                @endif
+            </div>
+        @endif
 
         <div class="flex items-center gap-4">
-            <x-primary-button>{{ __('Save') }}</x-primary-button>
+            <x-hub-ui::button type="submit">{{ __('Save') }}</x-hub-ui::button>
 
             @if (session('status') === 'profile-updated')
                 <p
@@ -50,7 +42,7 @@
                     x-show="show"
                     x-transition
                     x-init="setTimeout(() => show = false, 2000)"
-                    class="text-sm text-krait-400"
+                    class="text-sm ui-text-success"
                 >{{ __('Saved.') }}</p>
             @endif
         </div>

@@ -1,31 +1,27 @@
 <x-guest-layout>
-    <div class="mb-4 text-sm text-zinc-400">
+    <p class="mb-4 text-sm ui-text-muted">
         {{ __('Thanks for signing up! Before getting started, could you verify your email address by clicking on the link we just emailed to you? If you didn\'t receive the email, we will gladly send you another.') }}
-    </div>
+    </p>
 
     @if (session('status') == 'verification-link-sent')
-        <div class="mb-4 font-medium text-sm text-krait-400">
+        <x-hub-ui::alert type="success" class="mb-4">
             {{ __('A new verification link has been sent to the email address you provided during registration.') }}
-        </div>
+        </x-hub-ui::alert>
     @endif
 
     <div class="mt-4 flex items-center justify-between">
         <form method="POST" action="{{ route('verification.send') }}">
             @csrf
-
-            <div>
-                <x-primary-button>
-                    {{ __('Resend Verification Email') }}
-                </x-primary-button>
-            </div>
+            <x-hub-ui::button type="submit">
+                {{ __('Resend Verification Email') }}
+            </x-hub-ui::button>
         </form>
 
         <form method="POST" action="{{ route('logout') }}">
             @csrf
-
-            <button type="submit" class="text-sm text-zinc-400 hover:text-krait-400 rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-krait-500 focus:ring-offset-zinc-900 transition">
+            <x-hub-ui::button type="submit" variant="ghost">
                 {{ __('Log Out') }}
-            </button>
+            </x-hub-ui::button>
         </form>
     </div>
 </x-guest-layout>
