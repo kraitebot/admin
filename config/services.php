@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'pushover' => [
+        'token' => env('ADMIN_USER_PUSHOVER_APPLICATION_KEY'),
+    ],
+
 ];

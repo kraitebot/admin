@@ -7,10 +7,12 @@ namespace App\Http\Controllers\System;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Process;
 
 class CommandsController extends Controller
 {
+    private const INGESTION_PATH = '/home/waygou/ingestion.kraite.com';
+
     public function index()
     {
         $commands = $this->getCommandList();
@@ -25,46 +27,58 @@ class CommandsController extends Controller
         ]);
 
         $commandName = $request->input('command');
-        $all = Artisan::all();
 
-        if (! isset($all[$commandName])) {
+        if (! str_starts_with($commandName, 'kraite:')) {
+            return response()->json(['error' => 'Only kraite commands are available.'], 422);
+        }
+
+        $result = Process::path(self::INGESTION_PATH)
+            ->run(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
+
+        if (! $result->successful()) {
             return response()->json(['error' => 'Command not found.'], 404);
         }
 
-        $cmd = $all[$commandName];
-        $definition = $cmd->getDefinition();
+        $data = json_decode($result->output(), true);
+
+        if (! $data) {
+            return response()->json(['error' => 'Failed to parse command details.'], 500);
+        }
 
         $arguments = [];
-        foreach ($definition->getArguments() as $arg) {
+        foreach ($data['definition']['arguments'] ?? [] as $name => $arg) {
+            if ($name === 'command') {
+                continue;
+            }
             $arguments[] = [
-                'name' => $arg->getName(),
-                'description' => $arg->getDescription(),
-                'required' => $arg->isRequired(),
-                'is_array' => $arg->isArray(),
-                'default' => $arg->getDefault(),
+                'name' => $name,
+                'description' => $arg['description'] ?? '',
+                'required' => $arg['is_required'] ?? false,
+                'is_array' => $arg['is_array'] ?? false,
+                'default' => $arg['default'] ?? null,
             ];
         }
 
         $options = [];
-        foreach ($definition->getOptions() as $opt) {
-            if (in_array($opt->getName(), ['help', 'quiet', 'verbose', 'version', 'ansi', 'no-ansi', 'no-interaction', 'env'])) {
+        foreach ($data['definition']['options'] ?? [] as $name => $opt) {
+            if (in_array($name, ['help', 'quiet', 'verbose', 'version', 'ansi', 'no-ansi', 'no-interaction', 'env'])) {
                 continue;
             }
 
             $options[] = [
-                'name' => $opt->getName(),
-                'shortcut' => $opt->getShortcut(),
-                'description' => $opt->getDescription(),
-                'default' => $opt->getDefault(),
-                'accept_value' => $opt->acceptValue(),
-                'value_required' => $opt->isValueRequired(),
+                'name' => $name,
+                'shortcut' => $opt['shortcut'] ?? null,
+                'description' => $opt['description'] ?? '',
+                'default' => $opt['default'] ?? null,
+                'accept_value' => $opt['accept_value'] ?? false,
+                'value_required' => $opt['is_value_required'] ?? false,
             ];
         }
 
         return response()->json([
             'name' => $commandName,
-            'description' => $cmd->getDescription(),
-            'help' => $cmd->getHelp(),
+            'description' => $data['description'] ?? '',
+            'help' => $data['help'] ?? '',
             'arguments' => $arguments,
             'options' => $options,
         ]);
@@ -86,27 +100,30 @@ class CommandsController extends Controller
             return response()->json(['error' => 'Only kraite commands can be executed.'], 422);
         }
 
-        $all = Artisan::all();
+        $cmd = ['php', 'artisan', $commandName, '--no-interaction', '--no-ansi'];
 
-        if (! isset($all[$commandName])) {
-            return response()->json(['error' => 'Command not found.'], 404);
+        foreach ($arguments as $value) {
+            if ($value !== null && $value !== '') {
+                $cmd[] = (string) $value;
+            }
         }
 
-        $params = $arguments;
         foreach ($options as $key => $value) {
-            $params['--'.$key] = $value;
+            if ($value === true) {
+                $cmd[] = '--'.$key;
+            } elseif ($value !== null && $value !== '' && $value !== false) {
+                $cmd[] = '--'.$key.'='.$value;
+            }
         }
-        $params['--no-interaction'] = true;
 
         try {
             $startTime = microtime(true);
-            $exitCode = Artisan::call($commandName, $params);
-            $output = Artisan::output();
+            $result = Process::path(self::INGESTION_PATH)->timeout(300)->run($cmd);
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             return response()->json([
-                'exit_code' => $exitCode,
-                'output' => $output,
+                'exit_code' => $result->exitCode(),
+                'output' => $result->output() ?: $result->errorOutput() ?: '(no output)',
                 'duration' => $duration,
             ]);
         } catch (\Throwable $e) {
@@ -116,17 +133,25 @@ class CommandsController extends Controller
 
     private function getCommandList(): array
     {
-        $commands = Artisan::all();
+        $result = Process::path(self::INGESTION_PATH)
+            ->run(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
+
+        if (! $result->successful()) {
+            return [];
+        }
+
+        $data = json_decode($result->output(), true);
         $list = [];
 
-        foreach ($commands as $name => $command) {
+        foreach ($data['commands'] ?? [] as $command) {
+            $name = $command['name'] ?? '';
             if (! str_starts_with($name, 'kraite:')) {
                 continue;
             }
 
             $list[] = [
                 'name' => $name,
-                'description' => $command->getDescription(),
+                'description' => $command['description'] ?? '',
             ];
         }
 

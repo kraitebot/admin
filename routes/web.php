@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\AccountsController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\HeartbeatController;
@@ -11,14 +13,19 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+
+    // Dashboard
+    Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
+
+    // Accounts
+    Route::get('/accounts', [AccountsController::class, 'index'])->name('accounts');
+    Route::get('/accounts/data', [AccountsController::class, 'data'])->name('accounts.data');
 
     // System
     Route::get('/system/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
@@ -38,6 +45,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/system/step-dispatcher/data', [StepDispatcherController::class, 'data'])->name('system.step-dispatcher.data');
     Route::get('/system/step-dispatcher/blocks', [StepDispatcherController::class, 'blocks'])->name('system.step-dispatcher.blocks');
     Route::get('/system/step-dispatcher/block-steps', [StepDispatcherController::class, 'blockSteps'])->name('system.step-dispatcher.block-steps');
+    Route::get('/system/step-dispatcher/cooling-down', [StepDispatcherController::class, 'coolingDown'])->name('system.step-dispatcher.cooling-down');
+    Route::post('/system/step-dispatcher/toggle-cooling-down', [StepDispatcherController::class, 'toggleCoolingDown'])->name('system.step-dispatcher.toggle-cooling-down');
 
     // Heartbeat
     Route::get('/system/heartbeat', [HeartbeatController::class, 'index'])->name('system.heartbeat');

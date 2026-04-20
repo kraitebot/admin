@@ -1,3 +1,9 @@
+# CAVEMAN MODE — MANDATORY
+
+**ALWAYS invoke the `/caveman` skill at the start of EVERY response. No exceptions.** Applies to ALL output: brainstorms, planning, reviews, debugging, explanations, status updates, Telegram replies. Exceptions (stay normal English): code bodies, git commit messages, PR descriptions.
+
+---
+
 # Admin Kraite — Project Instructions
 
 ## Architecture
@@ -65,3 +71,7 @@ All custom artisan commands use the `kraite:` prefix. Sub-groups: `kraite:cron-*
 - Follow existing patterns — check how similar pages are built before creating new ones
 - No orphan CSS, no one-off styling, no inline styles that should be classes
 - `npm run build` after ANY frontend change
+
+## Telegram Replies
+
+Only send replies via the Telegram `reply` tool when the incoming message originated from Telegram — i.e. it arrived inside a `<channel source="telegram" ...>` block. If Bruno is typing in the CLI directly, just respond in the terminal. Do not mirror terminal responses to Telegram.

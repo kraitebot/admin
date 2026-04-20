@@ -1,6 +1,7 @@
 @php
-    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : 'dashboard');
+    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : (request()->is('accounts*') ? 'accounts' : 'dashboard'));
     $activeHighlight = $activeHighlight ?: match(true) {
+        request()->routeIs('accounts') => 'accounts',
         request()->routeIs('system.sql-query') => 'sql-query',
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
@@ -31,6 +32,19 @@
                     </svg>
                 </span>
                 <span class="text-xs">Dashboard</span>
+            </a>
+
+            <a
+                href="{{ route('accounts') }}" wire:navigate
+                data-nav-item="accounts"
+                @click="highlight = 'accounts'; $nextTick(() => open = null)"
+                class="flex flex-col items-center gap-1 py-2 rounded-xl cursor-pointer transition-colors relative z-10"
+                :class="highlight === 'accounts' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+            >
+                <span class="w-7 h-7">
+                    <x-feathericon-users class="w-full h-full" />
+                </span>
+                <span class="text-xs">Accounts</span>
             </a>
 
             <x-hub-ui::sidebar.section name="system" label="System">
