@@ -1,13 +1,16 @@
 <x-app-layout :activeSection="'system'" :activeHighlight="'sql-query'" :flush="true">
-    <div class="flex h-full" x-data="sqlQuery()">
-        {{-- Secondary Sidebar: Table Browser --}}
-        <div class="w-72 flex-shrink-0 border-r ui-border overflow-hidden flex flex-col" style="background-color: rgb(var(--ui-bg-sidebar))">
+    <div class="flex flex-col h-full" x-data="sqlQuery()">
+        <x-hub-ui::live-header
+            title="SQL Query"
+            description="Inspect the database directly. Browse tables in the sidebar, write queries, edit cells inline."
+            :live="false"
+        />
+        <div class="flex flex-1 overflow-hidden">
+        <x-hub-ui::secondary-sidebar>
             {{-- Search --}}
             <div class="p-3 border-b ui-border">
                 <div class="relative">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
-                    </svg>
+                    <x-feathericon-search class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ui-text-subtle" />
                     <input
                         type="text"
                         x-model="tableSearch"
@@ -27,9 +30,7 @@
                         <span class="text-[10px] ui-text-subtle ml-1" x-text="'(' + filteredTables.length + ')'"></span>
                     </div>
                     <button @click="refreshTables()" class="p-0.5 rounded transition-colors ui-text-subtle hover:ui-text" :class="refreshingTables ? 'animate-spin' : ''">
-                        <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
-                        </svg>
+                        <x-feathericon-refresh-cw class="w-3.5 h-3.5" />
                     </button>
                 </div>
 
@@ -93,58 +94,18 @@
                     </div>
                 </template>
             </div>
-        </div>
+        </x-hub-ui::secondary-sidebar>
 
         {{-- Main Content Area --}}
         <div class="flex-1 flex flex-col overflow-hidden">
-            {{-- Tabs --}}
-            <div class="flex border-b ui-border px-6 pt-4" style="background-color: rgb(var(--ui-bg-body))">
-                <button
-                    @click="activeTab = 'query'"
-                    class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px"
-                    :class="activeTab === 'query'
-                        ? 'ui-text border-current'
-                        : 'ui-text-muted border-transparent hover:ui-text hover:border-current'"
-                    :style="activeTab === 'query' ? 'border-color: rgb(var(--ui-primary))' : ''"
-                >
-                    <span class="flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z" />
-                        </svg>
-                        SQL Query
-                    </span>
-                </button>
-                <button
-                    @click="activeTab = 'favorites'"
-                    class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px"
-                    :class="activeTab === 'favorites'
-                        ? 'ui-text border-current'
-                        : 'ui-text-muted border-transparent hover:ui-text hover:border-current'"
-                    :style="activeTab === 'favorites' ? 'border-color: rgb(var(--ui-primary))' : ''"
-                >
-                    <span class="flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                        </svg>
-                        Favorites
-                    </span>
-                </button>
-                <button
-                    @click="activeTab = 'history'"
-                    class="px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px"
-                    :class="activeTab === 'history'
-                        ? 'ui-text border-current'
-                        : 'ui-text-muted border-transparent hover:ui-text hover:border-current'"
-                    :style="activeTab === 'history' ? 'border-color: rgb(var(--ui-primary))' : ''"
-                >
-                    <span class="flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                        </svg>
-                        History
-                    </span>
-                </button>
-            </div>
+            <x-hub-ui::tabs
+                active="activeTab"
+                :tabs="[
+                    ['key' => 'query',     'label' => 'SQL Query', 'icon' => 'code'],
+                    ['key' => 'favorites', 'label' => 'Favorites', 'icon' => 'star'],
+                    ['key' => 'history',   'label' => 'History',   'icon' => 'clock'],
+                ]"
+            />
 
             {{-- Tab Content --}}
             <div class="flex-1 overflow-y-auto">
@@ -181,7 +142,12 @@
                                         </template>
                                         <span x-text="loading ? 'Running...' : 'Run Query'"></span>
                                     </button>
-                                    <span class="text-xs ui-text-subtle">Ctrl+Enter to run</span>
+                                    <span class="flex items-center gap-1.5 text-[11px] ui-text-subtle">
+                                        <kbd class="ui-kbd">Ctrl</kbd>
+                                        <span>+</span>
+                                        <kbd class="ui-kbd">Enter</kbd>
+                                        <span>to run</span>
+                                    </span>
                                 </div>
                                 <div x-show="isBrowsingTable && results && results.length > 0" class="flex items-center gap-2">
                                     <button @click="resetTable()" class="ui-btn ui-btn-ghost ui-btn-sm">
@@ -228,12 +194,20 @@
                                             <tr class="text-xs uppercase tracking-wider ui-bg-elevated">
                                                 <template x-for="(col, colIdx) in columns" :key="col">
                                                     <th
-                                                        class="px-4 py-2.5 font-medium whitespace-nowrap transition-colors relative select-none"
+                                                        class="px-4 py-2.5 font-medium whitespace-nowrap transition-colors relative select-none cursor-pointer"
                                                         :style="(hoveredCol === colIdx ? 'background-color: rgb(var(--ui-primary) / 0.08);' : '') + (columnWidths[col] ? 'min-width:' + columnWidths[col] + 'px; max-width:' + columnWidths[col] + 'px' : '')"
+                                                        @click="toggleSort(col)"
                                                     >
-                                                        <span x-text="col"></span>
+                                                        <span class="flex items-center gap-1.5">
+                                                            <span x-text="col"></span>
+                                                            <span class="inline-flex flex-col -space-y-1">
+                                                                <svg class="w-2.5 h-2.5 transition-colors" :class="sortColumn === col && sortDirection === 'asc' ? 'ui-text-primary' : 'ui-text-subtle'" fill="currentColor" viewBox="0 0 10 5"><path d="M5 0l5 5H0z"/></svg>
+                                                                <svg class="w-2.5 h-2.5 transition-colors" :class="sortColumn === col && sortDirection === 'desc' ? 'ui-text-primary' : 'ui-text-subtle'" fill="currentColor" viewBox="0 0 10 5"><path d="M5 5L0 0h10z"/></svg>
+                                                            </span>
+                                                        </span>
                                                         <div
                                                             @mousedown.prevent.stop="startResize($event, col)"
+                                                            @click.stop
                                                             class="absolute top-0 right-0 w-2 h-full cursor-col-resize opacity-0 hover:opacity-100 transition-opacity"
                                                             style="background-color: rgb(var(--ui-primary) / 0.3)"
                                                         ></div>
@@ -305,99 +279,53 @@
                                 </div>
 
                                 {{-- Pagination --}}
-                                <div x-show="results && results.length > 0" class="flex items-center justify-between pt-1">
-                                    <div class="flex items-center gap-3">
-                                        <span class="text-xs ui-text-subtle" x-text="'Showing ' + ((page - 1) * perPage + 1) + '-' + Math.min(page * perPage, total) + ' of ' + total + ' rows'"></span>
-                                        <span class="text-xs ui-text-subtle" x-text="duration + 'ms'"></span>
-                                    </div>
-                                    <div class="flex items-center gap-1">
-                                        {{-- First --}}
-                                        <button @click="goToPage(1)" :disabled="page === 1" class="p-1.5 rounded transition-colors" :class="page === 1 ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
-                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
-                                            </svg>
-                                        </button>
-                                        {{-- Previous --}}
-                                        <button @click="goToPage(page - 1)" :disabled="page === 1" class="p-1.5 rounded transition-colors" :class="page === 1 ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
-                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
-                                            </svg>
-                                        </button>
-                                        {{-- Page numbers --}}
-                                        <template x-for="p in visiblePages" :key="'p'+p">
-                                            <button
-                                                @click="goToPage(p)"
-                                                class="min-w-[28px] h-7 px-1.5 text-xs rounded transition-colors"
-                                                :class="p === page ? 'ui-bg-primary text-white font-medium' : (p === '...' ? 'ui-text-subtle cursor-default' : 'ui-text-muted hover:ui-text hover:ui-bg-elevated')"
-                                                x-text="p"
-                                            ></button>
-                                        </template>
-                                        {{-- Next --}}
-                                        <button @click="goToPage(page + 1)" :disabled="page === lastPage" class="p-1.5 rounded transition-colors" :class="page === lastPage ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
-                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                                            </svg>
-                                        </button>
-                                        {{-- Last --}}
-                                        <button @click="goToPage(lastPage)" :disabled="page === lastPage" class="p-1.5 rounded transition-colors" :class="page === lastPage ? 'ui-text-subtle cursor-not-allowed' : 'ui-text-muted hover:ui-text'">
-                                            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 4.5l7.5 7.5-7.5 7.5m6-15l7.5 7.5-7.5 7.5" />
-                                            </svg>
-                                        </button>
-                                        {{-- Per page --}}
-                                        <div class="ml-3 flex items-center gap-2 pl-3 border-l ui-border">
-                                            <select x-model.number="perPage" @change="goToPage(1)" class="text-xs py-1 pl-2 pr-6 rounded border ui-input" style="min-width: 4rem;">
-                                                <option value="10">10</option>
-                                                <option value="25">25</option>
-                                                <option value="50">50</option>
-                                                <option value="100">100</option>
-                                            </select>
-                                            <span class="text-xs ui-text-subtle">per page</span>
-                                        </div>
-                                    </div>
-                                </div>
+                                <x-hub-ui::pager
+                                    x-show="results && results.length > 0"
+                                    duration="duration"
+                                />
+
                             </div>
                         </template>
 
                         {{-- Empty state --}}
-                        <div x-show="!results && !error" class="flex flex-col items-center justify-center py-16 text-center">
-                            <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 ui-bg-elevated">
-                                <svg class="w-7 h-7 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 0v3.75m-16.5-3.75v3.75m16.5 0v3.75C20.25 16.153 16.556 18 12 18s-8.25-1.847-8.25-4.125v-3.75m16.5 0c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125" />
-                                </svg>
-                            </div>
-                            <p class="text-sm ui-text-muted">Write a query and press Run to see results.</p>
-                            <p class="text-xs ui-text-subtle mt-1">Click a table to query it. Double-click to see columns.</p>
+                        <div x-show="!results && !error">
+                            <x-hub-ui::empty-state
+                                title="Write a query and press Run"
+                                description="Click a table to query it. Double-click to see columns."
+                            >
+                                <x-slot:icon>
+                                    <x-feathericon-database class="w-full h-full" />
+                                </x-slot:icon>
+                            </x-hub-ui::empty-state>
                         </div>
                     </div>
                 </div>
 
                 {{-- Favorites Tab --}}
                 <div x-show="activeTab === 'favorites'" class="p-6">
-                    <div class="flex flex-col items-center justify-center py-16 text-center">
-                        <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 ui-bg-elevated">
-                            <svg class="w-7 h-7 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" />
-                            </svg>
-                        </div>
-                        <p class="text-sm ui-text-muted">No favorite queries yet.</p>
-                        <p class="text-xs ui-text-subtle mt-1">Save frequently used queries for quick access.</p>
-                    </div>
+                    <x-hub-ui::empty-state
+                        title="No favorite queries yet"
+                        description="Save frequently used queries for quick access."
+                    >
+                        <x-slot:icon>
+                            <x-feathericon-star class="w-full h-full" />
+                        </x-slot:icon>
+                    </x-hub-ui::empty-state>
                 </div>
 
                 {{-- History Tab --}}
                 <div x-show="activeTab === 'history'" class="p-6">
-                    <div class="flex flex-col items-center justify-center py-16 text-center">
-                        <div class="w-14 h-14 rounded-full flex items-center justify-center mb-3 ui-bg-elevated">
-                            <svg class="w-7 h-7 ui-text-subtle" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                            </svg>
-                        </div>
-                        <p class="text-sm ui-text-muted">No query history yet.</p>
-                        <p class="text-xs ui-text-subtle mt-1">Queries you run will appear here.</p>
-                    </div>
+                    <x-hub-ui::empty-state
+                        title="No query history yet"
+                        description="Queries you run will appear here."
+                    >
+                        <x-slot:icon>
+                            <x-feathericon-clock class="w-full h-full" />
+                        </x-slot:icon>
+                    </x-hub-ui::empty-state>
                 </div>
             </div>
+        </div>
         </div>
     </div>
 
@@ -411,6 +339,7 @@
                 tables: @json($tables),
                 refreshingTables: false,
                 _clickTimer: null,
+                sidebarWidth: 288,
 
                 query: '',
                 baseQuery: '',
@@ -427,6 +356,8 @@
                 hoveredCol: null,
                 columnWidths: {},
                 _resizing: null,
+                sortColumn: null,
+                sortDirection: null, // 'asc' or 'desc'
 
                 // Inline editing
                 editingCell: null,
@@ -501,6 +432,8 @@
                 async runQuery() {
                     this.baseQuery = this.query.trim();
                     this.columnFilters = {};
+                    this.sortColumn = null;
+                    this.sortDirection = null;
                     this.page = 1;
                     this.editingCell = null;
                     this.tablePk = null;
@@ -508,23 +441,52 @@
                     await this.fetchResults();
                 },
 
+                toggleSort(col) {
+                    if (this.sortColumn === col) {
+                        if (this.sortDirection === 'asc') {
+                            this.sortDirection = 'desc';
+                        } else if (this.sortDirection === 'desc') {
+                            this.sortColumn = null;
+                            this.sortDirection = null;
+                        }
+                    } else {
+                        this.sortColumn = col;
+                        this.sortDirection = 'asc';
+                    }
+                    this.page = 1;
+                    this.rebuildQuery();
+                    this.fetchResults();
+                },
 
-                applyFilters() {
+                rebuildQuery() {
+                    let q = this.baseQuery;
+
+                    // Apply filters
                     const conditions = Object.entries(this.columnFilters)
                         .filter(([_, v]) => v && v.trim())
                         .map(([col, v]) => {
                             const val = v.trim();
                             if (val.toLowerCase() === 'null') return col + ' IS NULL';
+                            if (val.startsWith('=')) return col + " = '" + val.slice(1) + "'";
                             if (val.includes('%')) return col + " LIKE '" + val + "'";
                             return col + " LIKE '%" + val + "%'";
                         });
 
                     if (conditions.length) {
-                        this.query = 'SELECT * FROM (' + this.baseQuery + ') AS _filtered WHERE ' + conditions.join(' AND ');
-                    } else {
-                        this.query = this.baseQuery;
+                        q = 'SELECT * FROM (' + q + ') AS _filtered WHERE ' + conditions.join(' AND ');
                     }
+
+                    // Apply sorting
+                    if (this.sortColumn && this.sortDirection) {
+                        q = 'SELECT * FROM (' + q + ') AS _sorted ORDER BY ' + this.sortColumn + ' ' + this.sortDirection.toUpperCase();
+                    }
+
+                    this.query = q;
+                },
+
+                applyFilters() {
                     this.page = 1;
+                    this.rebuildQuery();
                     this.fetchResults();
                 },
 
@@ -569,6 +531,8 @@
                     this.query = 'SELECT * FROM ' + name;
                     this.baseQuery = this.query;
                     this.columnFilters = {};
+                    this.sortColumn = null;
+                    this.sortDirection = null;
                     this.page = 1;
                     this.editingCell = null;
                     this.tablePk = null;
@@ -601,6 +565,26 @@
                     const text = value === null ? '' : String(value);
                     await navigator.clipboard.writeText(text);
                     window.showToast('Copied to clipboard', 'success', 2000);
+                },
+
+                startSidebarResize(e) {
+                    const startX = e.clientX;
+                    const startW = this.sidebarWidth;
+
+                    const onMove = (ev) => {
+                        this.sidebarWidth = Math.max(200, Math.min(600, startW + ev.clientX - startX));
+                    };
+                    const onUp = () => {
+                        document.removeEventListener('mousemove', onMove);
+                        document.removeEventListener('mouseup', onUp);
+                        document.body.style.cursor = '';
+                        document.body.style.userSelect = '';
+                    };
+
+                    document.body.style.cursor = 'col-resize';
+                    document.body.style.userSelect = 'none';
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
                 },
 
                 startResize(e, col) {
@@ -642,6 +626,8 @@
                 resetTable() {
                     this.query = this.baseQuery;
                     this.columnFilters = {};
+                    this.sortColumn = null;
+                    this.sortDirection = null;
                     this.page = 1;
                     this.fetchResults();
                 },
