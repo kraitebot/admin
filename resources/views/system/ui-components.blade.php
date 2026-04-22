@@ -250,7 +250,7 @@
             </div>
 
             @include('system.ui-components._section', ['title' => 'Stat Metric', 'description' => 'Labelled KPI with optional hint/delta.'])
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <div class="ui-card p-4"><x-hub-ui::stat-metric label="Positions" value="12" /></div>
                 <div class="ui-card p-4"><x-hub-ui::stat-metric label="Tradeable symbols" value="347" color="success" /></div>
                 <div class="ui-card p-4"><x-hub-ui::stat-metric label="Saturation" value="63%" color="warning" /></div>

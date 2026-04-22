@@ -99,7 +99,7 @@
                     </div>
 
                     {{-- Metrics strip --}}
-                    <div class="grid grid-cols-4 border-t lg:border-t-0 lg:border-l ui-border">
+                    <div class="grid grid-cols-2 sm:grid-cols-4 border-t lg:border-t-0 lg:border-l ui-border">
                         <div class="px-5 py-4 border-l ui-border first:border-l-0">
                             <div class="text-[9px] font-semibold uppercase tracking-[0.12em] ui-text-subtle">DB Pos</div>
                             <div class="text-xl font-bold ui-text font-mono ui-tabular mt-1 leading-none" x-text="dbPositionCount"></div>
@@ -224,7 +224,7 @@
                                             <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Database</span>
                                         </div>
                                         <template x-if="pair.db">
-                                            <div class="grid grid-cols-3 gap-x-4 gap-y-3">
+                                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
                                                 @foreach (['quantity' => 'Qty', 'entry_price' => 'Entry', 'leverage' => 'Lev', 'margin' => 'Margin', 'margin_mode' => 'Mode'] as $field => $label)
                                                     <div>
                                                         <div class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle mb-1">{{ $label }}</div>
@@ -258,7 +258,7 @@
                                             </template>
                                         </div>
                                         <template x-if="pair.exchange">
-                                            <div class="grid grid-cols-3 gap-x-4 gap-y-3">
+                                            <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
                                                 @foreach (['quantity' => 'Qty', 'entry_price' => 'Entry', 'leverage' => 'Lev', 'margin' => 'Margin', 'margin_mode' => 'Mode'] as $field => $label)
                                                     <div>
                                                         <div class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle mb-1">{{ $label }}</div>
