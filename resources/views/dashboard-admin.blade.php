@@ -5,6 +5,32 @@
         </div>
 
         <div x-show="!loading" x-cloak class="dash-layout">
+            {{-- System State — cooling-down toggle --}}
+            <div
+                class="ui-card flex items-center justify-between gap-4 px-5 py-4 flex-wrap"
+                :style="isCoolingDown ? 'border-color: rgb(var(--ui-warning) / 0.5); background-color: rgb(var(--ui-warning) / 0.08)' : ''"
+            >
+                <div class="flex items-center gap-3 min-w-0">
+                    <template x-if="isCoolingDown">
+                        <x-hub-ui::pulse-dot type="warning" :pulse="true" size="md" />
+                    </template>
+                    <template x-if="!isCoolingDown">
+                        <x-hub-ui::pulse-dot type="success" size="md" />
+                    </template>
+                    <div class="min-w-0">
+                        <div class="text-sm font-semibold ui-text">Cooling Down</div>
+                        <p class="text-xs ui-text-subtle mt-0.5" x-text="isCoolingDown ? 'Scheduled commands are paused — cron-gated jobs will skip until disabled.' : 'Scheduled commands are active and running on cadence.'"></p>
+                    </div>
+                </div>
+                <x-hub-ui::switch
+                    state="isCoolingDown"
+                    @click="toggleCoolingDown()"
+                    onColor="warning"
+                    size="md"
+                    x-bind:class="togglingCoolingDown ? 'opacity-50 pointer-events-none' : ''"
+                />
+            </div>
+
             {{-- Dashboard Grid --}}
             <div class="dash-grid">
 
@@ -576,6 +602,8 @@
                 stats: {},
                 exchanges: [],
                 schedule: [],
+                isCoolingDown: false,
+                togglingCoolingDown: false,
 
                 get tradeablePct() {
                     const total = this.stats.total_exchange_symbols || 0;
@@ -602,13 +630,38 @@
                 },
 
                 async fetchData() {
-                    const { ok, data } = await hubUiFetch('{{ route("dashboard.data") }}', { method: 'GET' });
-                    if (ok) {
-                        this.stats = data;
-                        this.exchanges = data.exchanges;
-                        this.schedule = data.schedule || [];
+                    const [dashRes, coolingRes] = await Promise.all([
+                        hubUiFetch('{{ route("dashboard.data") }}', { method: 'GET' }),
+                        hubUiFetch('{{ route("system.step-dispatcher.cooling-down") }}', { method: 'GET' }),
+                    ]);
+
+                    if (dashRes.ok) {
+                        this.stats = dashRes.data;
+                        this.exchanges = dashRes.data.exchanges;
+                        this.schedule = dashRes.data.schedule || [];
                     }
+
+                    if (coolingRes.ok) {
+                        this.isCoolingDown = coolingRes.data.is_cooling_down;
+                    }
+
                     this.loading = false;
+                },
+
+                async toggleCoolingDown() {
+                    if (this.togglingCoolingDown) return;
+                    this.togglingCoolingDown = true;
+
+                    const previous = this.isCoolingDown;
+                    this.isCoolingDown = !this.isCoolingDown;
+
+                    const { ok, data } = await hubUiFetch('{{ route("system.step-dispatcher.toggle-cooling-down") }}');
+                    if (ok) {
+                        this.isCoolingDown = data.is_cooling_down;
+                    } else {
+                        this.isCoolingDown = previous;
+                    }
+                    this.togglingCoolingDown = false;
                 },
             };
         }

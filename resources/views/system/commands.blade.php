@@ -84,9 +84,9 @@
 
             {{-- Command Details --}}
             <div x-show="commandDetails && !loadingDetails" class="flex-1 overflow-y-auto" @keydown.window.ctrl.enter.prevent="commandDetails && executeCommand()" @keydown.window.meta.enter.prevent="commandDetails && executeCommand()">
-                <div class="p-6 space-y-6 max-w-5xl">
+                <div class="p-4 sm:p-6 space-y-4 sm:space-y-6 max-w-5xl">
                     {{-- Identity strip --}}
-                    <div class="ui-card p-5">
+                    <div class="ui-card p-4 sm:p-5">
                         <div class="flex items-center gap-2 font-mono text-[11px] ui-text-subtle">
                             <span class="ui-text-muted">$</span>
                             <span>php artisan</span>
@@ -177,7 +177,7 @@
                     </div>
 
                     {{-- Execute bar --}}
-                    <div class="flex items-center gap-4 pt-2 border-t ui-border pt-5">
+                    <div class="flex items-center gap-3 sm:gap-4 pt-5 border-t ui-border flex-wrap">
                         <button @click="executeCommand()" :disabled="executing" class="ui-btn ui-btn-primary ui-btn-md">
                             <template x-if="executing">
                                 <x-hub-ui::spinner size="sm" />

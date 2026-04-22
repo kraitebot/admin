@@ -5,7 +5,8 @@
             description="Class × state pivot for background step orchestration. Click any cell with activity to inspect its blocks."
             last-updated-model="lastUpdated"
         >
-            <x-slot:actions>
+            {{-- Cooling-down toggle hidden for now. Routes + controller remain wired so it can be restored later. --}}
+            {{-- <x-slot:actions>
                 <x-hub-ui::switch
                     state="isCoolingDown"
                     @click="toggleCoolingDown()"
@@ -14,43 +15,80 @@
                     size="sm"
                     x-bind:class="togglingCoolingDown ? 'opacity-50 pointer-events-none' : ''"
                 />
-            </x-slot:actions>
+            </x-slot:actions> --}}
         </x-hub-ui::live-header>
 
         {{-- Content --}}
-        <div class="flex-1 overflow-auto p-6 space-y-6">
+        <div class="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
 
-            {{-- Summary progress strip --}}
-            <div class="ui-card p-5">
-                <div class="flex items-end justify-between mb-4 gap-6 flex-wrap">
-                    <div class="flex items-baseline gap-3">
-                        <div class="text-4xl font-bold ui-text ui-tabular leading-none">
-                            <x-hub-ui::number value="totalSteps" />
-                        </div>
-                        <div class="flex flex-col">
-                            <span class="text-[10px] font-semibold uppercase tracking-wider ui-text-subtle">Total steps</span>
-                            <span class="text-[11px] ui-text-muted" x-text="rows.length + ' class' + (rows.length === 1 ? '' : 'es') + ' tracked'"></span>
-                        </div>
+            {{-- Performance — system throughput + per-API saturation in one row. --}}
+            <div class="ui-card p-4 sm:p-5">
+                <div class="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
+                    <div class="flex items-baseline gap-2 flex-wrap">
+                        <h2 class="text-sm font-semibold ui-text">Performance</h2>
+                        <span class="text-[11px] ui-text-muted">throughput saturation vs 5-min peak · API saturation vs throttler cap</span>
                     </div>
-
-                    <div class="flex items-center gap-6 flex-wrap">
-                        <template x-for="s in summaryStates" :key="s.name">
-                            <div class="flex items-center gap-2">
-                                <span class="w-2 h-2 rounded-full" :style="'background-color: ' + s.color"></span>
-                                <span class="text-[10px] font-semibold uppercase tracking-wider ui-text-subtle" x-text="s.label"></span>
-                                <span class="text-sm font-mono font-semibold ui-tabular" :style="(totals[s.name] || 0) > 0 ? 'color: ' + s.color : 'color: rgb(var(--ui-text-subtle))'" x-text="totals[s.name] || 0"></span>
-                            </div>
-                        </template>
-                    </div>
+                    <span class="text-[10px] ui-text-subtle uppercase tracking-wider">Live</span>
                 </div>
 
-                {{-- Segmented progress bar --}}
-                <div class="flex w-full h-2 rounded-full overflow-hidden ui-bg-elevated">
-                    <template x-for="seg in progressSegments" :key="seg.name">
-                        <div
-                            :style="'width:' + seg.pct + '%; background-color:' + seg.color + '; transition: width 0.6s ease;'"
-                            :title="seg.label + ': ' + seg.count + ' (' + seg.pct.toFixed(1) + '%)'"
-                        ></div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
+                    {{-- System throughput --}}
+                    <div class="ui-bg-elevated rounded-lg p-3">
+                        <div class="flex items-baseline justify-between mb-2">
+                            <span class="text-xs font-semibold ui-text">System</span>
+                            <span
+                                class="text-[11px] font-mono ui-tabular"
+                                :class="throughput.has_data ? '' : 'ui-text-subtle'"
+                                x-text="throughput.has_data ? ((throughput.saturation ?? 0).toFixed(1) + '%') : 'no data'"
+                                :style="throughput.has_data ? ('color: ' + gaugeColor(throughput.saturation || 0)) : ''"
+                            ></span>
+                        </div>
+
+                        <x-hub-ui::progress-bar
+                            value="throughput.saturation || 0"
+                            ticks="10"
+                            empty="!throughput.has_data"
+                            tick-width="8"
+                            tick-height="18"
+                            tick-gap="2"
+                            class="w-full"
+                        />
+
+                        <div class="flex items-center justify-between mt-2 text-[10px] ui-text-subtle font-mono">
+                            <span x-text="throughput.has_data ? ((throughput.current_per_10s ?? 0) + ' / 10s') : '—'"></span>
+                            <span x-text="throughput.has_data ? ('peak ' + (throughput.peak_per_10s ?? 0)) : ''"></span>
+                        </div>
+                    </div>
+
+                    {{-- Per-API gauges --}}
+                    <template x-for="gauge in apiGauges" :key="gauge.api">
+                        <div class="ui-bg-elevated rounded-lg p-3">
+                            <div class="flex items-baseline justify-between mb-2">
+                                <span class="text-xs font-semibold ui-text" x-text="gauge.label"></span>
+                                <span
+                                    class="text-[11px] font-mono ui-tabular"
+                                    :class="gauge.has_data ? '' : 'ui-text-subtle'"
+                                    x-text="gauge.has_data ? (gauge.saturation.toFixed(1) + '%') : 'no data'"
+                                    :style="gauge.has_data ? ('color: ' + gaugeColor(gauge.saturation, gauge.is_stale)) : ''"
+                                ></span>
+                            </div>
+
+                            <x-hub-ui::progress-bar
+                                value="gauge.saturation"
+                                ticks="10"
+                                stale="gauge.is_stale"
+                                empty="!gauge.has_data"
+                                tick-width="8"
+                                tick-height="18"
+                                tick-gap="2"
+                                class="w-full"
+                            />
+
+                            <div class="flex items-center justify-between mt-2 text-[10px] ui-text-subtle font-mono">
+                                <span x-text="gauge.has_data ? (gauge.observed_rps + ' / ' + gauge.cap_rps + ' rps') : '—'"></span>
+                                <span x-text="gauge.sample_count + ' / ' + gauge.window_seconds + 's'"></span>
+                            </div>
+                        </div>
                     </template>
                 </div>
             </div>
@@ -58,9 +96,13 @@
             <x-hub-ui::data-table>
                 <x-slot:head>
                     <tr>
-                        <th class="sticky left-0 ui-bg-elevated" style="min-width: 200px">Class</th>
+                        <th class="sticky left-0 ui-bg-elevated" style="min-width: 140px">Class</th>
                         <template x-for="state in states" :key="state.name">
-                            <th class="text-center" style="min-width: 90px">
+                            <th
+                                class="text-center"
+                                :class="state.mobile ? '' : 'hidden sm:table-cell'"
+                                style="min-width: 90px"
+                            >
                                 <div class="flex flex-col items-center gap-1">
                                     <span :style="'color: ' + state.color" x-text="state.label"></span>
                                     <span
@@ -69,6 +111,11 @@
                                         :class="(totals[state.name] || 0) === 0 ? 'ui-text-subtle' : ''"
                                         :style="(totals[state.name] || 0) > 0 ? 'color: ' + state.color + '; font-weight: 700' : ''"
                                     ></span>
+                                    <span
+                                        class="text-[10px] font-mono normal-case tracking-normal ui-text-subtle"
+                                        :title="'Leaf steps (child_block_uuid IS NULL) in ' + state.label"
+                                        x-text="leafTotals[state.name] || 0"
+                                    ></span>
                                 </div>
                             </th>
                         </template>
@@ -76,15 +123,16 @@
                             <div class="flex flex-col items-center gap-1">
                                 <span>Total</span>
                                 <span class="text-sm font-mono font-bold ui-text" x-text="totalSteps"></span>
+                                <span class="text-[10px] font-mono normal-case tracking-normal ui-text-subtle" x-text="totalLeafSteps"></span>
                             </div>
                         </th>
-                        <th class="text-center" style="min-width: 80px" title="Highest retries value across this class — high numbers = recover-stale ping-pong">
+                        <th class="text-center hidden md:table-cell" style="min-width: 80px" title="Highest retries value across this class — high numbers = recover-stale ping-pong">
                             <div class="flex flex-col items-center gap-1">
                                 <span>Max Retry</span>
                                 <span class="text-[10px] ui-text-subtle font-normal normal-case tracking-normal">ping-pong</span>
                             </div>
                         </th>
-                        <th class="text-center" style="min-width: 100px" title="Oldest Running step age — high numbers = zombies">
+                        <th class="text-center hidden md:table-cell" style="min-width: 100px" title="Oldest Running step age — high numbers = zombies">
                             <div class="flex flex-col items-center gap-1">
                                 <span>Oldest Run</span>
                                 <span class="text-[10px] ui-text-subtle font-normal normal-case tracking-normal">zombies</span>
@@ -101,7 +149,7 @@
                         <template x-for="state in states" :key="row.class + '-' + state.name">
                             <td
                                 class="text-center font-mono"
-                                :class="(row.states[state.name] || 0) > 0 ? 'cursor-pointer' : ''"
+                                :class="((row.states[state.name] || 0) > 0 ? 'cursor-pointer ' : '') + (state.mobile ? '' : 'hidden sm:table-cell')"
                                 @click="(row.states[state.name] || 0) > 0 && fetchBlocks(row.class, state.name)"
                             >
                                 <span
@@ -114,13 +162,13 @@
                         <td class="text-center font-mono font-semibold ui-text">
                             <span x-text="rowTotal(row)"></span>
                         </td>
-                        <td class="text-center font-mono ui-tabular">
+                        <td class="text-center font-mono ui-tabular hidden md:table-cell">
                             <span
                                 x-text="row.max_retries || 0"
                                 :class="retryClass(row.max_retries)"
                             ></span>
                         </td>
-                        <td class="text-center font-mono ui-tabular">
+                        <td class="text-center font-mono ui-tabular hidden md:table-cell">
                             <span
                                 x-text="formatAge(row.oldest_running_sec)"
                                 :class="oldestRunningClass(row.oldest_running_sec)"
@@ -202,6 +250,7 @@
                                     <template x-for="col in stepColumns" :key="col.key">
                                         <th
                                             class="relative select-none"
+                                            :class="col.mobile ? '' : 'hidden md:table-cell'"
                                             :style="stepColWidths[col.key] ? 'min-width:' + stepColWidths[col.key] + 'px; max-width:' + stepColWidths[col.key] + 'px' : 'min-width:' + col.minW + 'px'"
                                         >
                                             <span x-text="col.label"></span>
@@ -225,11 +274,11 @@
                                         <td>
                                             <span class="font-medium" :style="'color: ' + stateColor(step.state)" x-text="step.state"></span>
                                         </td>
-                                        <td class="font-mono ui-text-subtle" x-text="step.child_block_uuid || '-'"></td>
-                                        <td class="font-mono" x-text="step.retries || 0"></td>
-                                        <td class="font-mono" x-text="step.duration ? step.duration + 'ms' : '-'"></td>
-                                        <td class="font-mono ui-text-subtle" x-text="step.started_at || '-'"></td>
-                                        <td class="font-mono ui-text-subtle" x-text="step.completed_at || '-'"></td>
+                                        <td class="font-mono ui-text-subtle hidden md:table-cell" x-text="step.child_block_uuid || '-'"></td>
+                                        <td class="font-mono hidden md:table-cell" x-text="step.retries || 0"></td>
+                                        <td class="font-mono hidden md:table-cell" x-text="step.duration ? step.duration + 'ms' : '-'"></td>
+                                        <td class="font-mono ui-text-subtle hidden md:table-cell" x-text="step.started_at || '-'"></td>
+                                        <td class="font-mono ui-text-subtle hidden md:table-cell" x-text="step.completed_at || '-'"></td>
                                         <td class="whitespace-normal break-words" x-text="step.error_message || '-'"></td>
                                     </tr>
                                 </template>
@@ -253,6 +302,16 @@
             return {
                 rows: [],
                 totals: {},
+                leafTotals: {},
+                throughput: { current_per_10s: 0, peak_per_10s: 0, saturation: 0, has_data: false },
+                apiGauges: [
+                    { api: 'taapi',         label: 'TAAPI',         has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                    { api: 'coinmarketcap', label: 'CoinMarketCap', has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                    { api: 'binance',       label: 'Binance',       has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                    { api: 'bybit',         label: 'Bybit',         has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                    { api: 'kucoin',        label: 'KuCoin',        has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                    { api: 'bitget',        label: 'Bitget',        has_data: false, is_stale: false, saturation: 0, observed_rps: null, cap_rps: null, sample_count: 0, window_seconds: 0 },
+                ],
                 loading: true,
                 lastUpdated: null,
                 _interval: null,
@@ -272,33 +331,37 @@
                 stepColWidths: {},
 
                 stepColumns: [
-                    { key: 'id', label: '#', minW: 40 },
-                    { key: 'index', label: 'Idx', minW: 40 },
-                    { key: 'class', label: 'Class', minW: 140 },
-                    { key: 'state', label: 'State', minW: 70 },
-                    { key: 'child_block_uuid', label: 'Child Block', minW: 100 },
-                    { key: 'retries', label: 'Ret', minW: 35 },
-                    { key: 'duration', label: 'Duration', minW: 60 },
-                    { key: 'started_at', label: 'Started', minW: 120 },
-                    { key: 'completed_at', label: 'Completed', minW: 120 },
-                    { key: 'error', label: 'Error', minW: 150 },
+                    { key: 'id',               label: '#',           minW: 40,  mobile: true  },
+                    { key: 'index',            label: 'Idx',         minW: 40,  mobile: true  },
+                    { key: 'class',            label: 'Class',       minW: 140, mobile: true  },
+                    { key: 'state',            label: 'State',       minW: 70,  mobile: true  },
+                    { key: 'child_block_uuid', label: 'Child Block', minW: 100, mobile: false },
+                    { key: 'retries',          label: 'Ret',         minW: 35,  mobile: false },
+                    { key: 'duration',         label: 'Duration',    minW: 60,  mobile: false },
+                    { key: 'started_at',       label: 'Started',     minW: 120, mobile: false },
+                    { key: 'completed_at',     label: 'Completed',   minW: 120, mobile: false },
+                    { key: 'error',            label: 'Error',       minW: 150, mobile: true  },
                 ],
 
                 states: [
-                    { name: 'NotRunnable', label: 'Not Runnable', color: 'rgb(var(--ui-text-subtle))' },
-                    { name: 'Pending',     label: 'Pending',      color: 'rgb(var(--ui-info))' },
-                    { name: 'Throttled',   label: 'Throttled',    color: '#8b5cf6' },
-                    { name: 'Dispatched',  label: 'Dispatched',   color: '#6366f1' },
-                    { name: 'Running',     label: 'Running',      color: 'rgb(var(--ui-warning))' },
-                    { name: 'Completed',   label: 'Completed',    color: 'rgb(var(--ui-success))' },
-                    { name: 'Skipped',     label: 'Skipped',      color: 'rgb(var(--ui-text-muted))' },
-                    { name: 'Cancelled',   label: 'Cancelled',    color: '#f97316' },
-                    { name: 'Failed',      label: 'Failed',       color: 'rgb(var(--ui-danger))' },
-                    { name: 'Stopped',     label: 'Stopped',      color: 'rgb(var(--ui-danger))' },
+                    { name: 'NotRunnable', label: 'Not Runnable', color: 'rgb(var(--ui-text-subtle))', mobile: false },
+                    { name: 'Pending',     label: 'Pending',      color: 'rgb(var(--ui-info))',        mobile: true  },
+                    { name: 'Throttled',   label: 'Throttled',    color: '#8b5cf6',                    mobile: false },
+                    { name: 'Dispatched',  label: 'Dispatched',   color: '#6366f1',                    mobile: false },
+                    { name: 'Running',     label: 'Running',      color: 'rgb(var(--ui-warning))',     mobile: true  },
+                    { name: 'Completed',   label: 'Completed',    color: 'rgb(var(--ui-success))',     mobile: true  },
+                    { name: 'Skipped',     label: 'Skipped',      color: 'rgb(var(--ui-text-muted))',  mobile: false },
+                    { name: 'Cancelled',   label: 'Cancelled',    color: '#f97316',                    mobile: false },
+                    { name: 'Failed',      label: 'Failed',       color: 'rgb(var(--ui-danger))',      mobile: true  },
+                    { name: 'Stopped',     label: 'Stopped',      color: 'rgb(var(--ui-danger))',      mobile: false },
                 ],
 
                 get totalSteps() {
                     return Object.values(this.totals).reduce((sum, v) => sum + v, 0);
+                },
+
+                get totalLeafSteps() {
+                    return Object.values(this.leafTotals).reduce((sum, v) => sum + v, 0);
                 },
 
                 rowTotal(row) {
@@ -328,36 +391,15 @@
                     return Math.floor(secs / 86400) + 'd';
                 },
 
-                // Top-of-page summary — only the states that matter at a glance
-                get summaryStates() {
-                    const keep = ['Pending', 'Running', 'Completed', 'Failed', 'Stopped'];
-                    return this.states.filter(s => keep.includes(s.name));
-                },
-
-                // Segments for the progress bar, ordered: completed | running | pending | failed/stopped | rest
-                get progressSegments() {
-                    const total = this.totalSteps || 1;
-                    const segOrder = [
-                        { name: 'Completed', label: 'Completed' },
-                        { name: 'Running',   label: 'Running' },
-                        { name: 'Dispatched',label: 'Dispatched' },
-                        { name: 'Pending',   label: 'Pending' },
-                        { name: 'Throttled', label: 'Throttled' },
-                        { name: 'Failed',    label: 'Failed' },
-                        { name: 'Stopped',   label: 'Stopped' },
-                        { name: 'Cancelled', label: 'Cancelled' },
-                    ];
-                    return segOrder.map(seg => {
-                        const count = this.totals[seg.name] || 0;
-                        const stateDef = this.states.find(s => s.name === seg.name);
-                        return {
-                            name: seg.name,
-                            label: seg.label,
-                            count,
-                            pct: total > 0 ? (count / total) * 100 : 0,
-                            color: stateDef ? stateDef.color : 'rgb(var(--ui-text-subtle))',
-                        };
-                    }).filter(s => s.count > 0);
+                // Saturation → Kraite theme color. Inverted vs a typical load
+                // meter: riding the throttler cap is the *goal*, so high
+                // saturation is green and anemic utilization is red.
+                gaugeColor(saturation, stale = false) {
+                    if (stale) return '#374151';
+                    if (!saturation || saturation <= 0) return 'rgb(var(--ui-text-subtle))';
+                    if (saturation >= 70) return 'rgb(var(--ui-success))';
+                    if (saturation >= 30) return 'rgb(var(--ui-warning))';
+                    return 'rgb(var(--ui-danger))';
                 },
 
                 async fetchData() {
@@ -369,6 +411,10 @@
                     if (dataRes.ok) {
                         this.rows = dataRes.data.rows;
                         this.totals = dataRes.data.totals;
+                        this.leafTotals = dataRes.data.leaf_totals || {};
+                        const t = dataRes.data.throughput || { current_per_10s: 0, peak_per_10s: 0, saturation: 0 };
+                        this.throughput = { ...t, has_data: (t.peak_per_10s ?? 0) > 0 };
+                        this.apiGauges = dataRes.data.api_gauges || this.apiGauges;
                         this.lastUpdated = new Date().toLocaleTimeString();
                     }
 
@@ -398,7 +444,10 @@
                 },
 
                 startPolling() {
-                    this._interval = setInterval(() => this.fetchData(), 5000);
+                    // 10s feels live enough for an observability dashboard and
+                    // aligns with the 3s server-side cache window (fewer than
+                    // 4 fetches per cache lifetime). Halves the DB load vs 5s.
+                    this._interval = setInterval(() => this.fetchData(), 10000);
                 },
 
                 stateColor(state) {

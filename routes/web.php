@@ -1,12 +1,13 @@
 <?php
 
-use App\Http\Controllers\AccountsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\System\AccountsController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\HeartbeatController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
+use App\Http\Controllers\System\UiComponentsController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -23,11 +24,11 @@ Route::middleware('auth')->group(function () {
     // Dashboard
     Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
 
-    // Accounts
-    Route::get('/accounts', [AccountsController::class, 'index'])->name('accounts');
-    Route::get('/accounts/data', [AccountsController::class, 'data'])->name('accounts.data');
-
     // System
+    Route::get('/system/accounts', [AccountsController::class, 'index'])->name('system.accounts');
+    Route::get('/system/accounts/data', [AccountsController::class, 'data'])->name('system.accounts.data');
+    Route::get('/system/accounts/history', [AccountsController::class, 'history'])->name('system.accounts.history');
+
     Route::get('/system/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
     Route::post('/system/sql-query', [SqlQueryController::class, 'execute'])->name('system.sql-query.execute');
     Route::get('/system/sql-query/tables', [SqlQueryController::class, 'tables'])->name('system.sql-query.tables');
@@ -51,6 +52,9 @@ Route::middleware('auth')->group(function () {
     // Heartbeat
     Route::get('/system/heartbeat', [HeartbeatController::class, 'index'])->name('system.heartbeat');
     Route::get('/system/heartbeat/data', [HeartbeatController::class, 'data'])->name('system.heartbeat.data');
+
+    // UI Components showcase
+    Route::get('/system/ui-components', [UiComponentsController::class, 'index'])->name('system.ui-components');
 });
 
 require __DIR__.'/auth.php';

@@ -6,122 +6,105 @@
             last-updated-model="lastUpdated"
         >
             <x-slot:actions>
-                <div class="flex items-center gap-2">
-                    <span
-                        class="relative flex h-2 w-2 rounded-full ui-pulse-ring"
-                        :style="systemHealthy ? 'background-color: rgb(var(--ui-success))' : 'background-color: rgb(var(--ui-danger))'"
-                    ></span>
-                    <span
-                        class="text-[10px] font-semibold uppercase tracking-wider"
-                        :style="systemHealthy ? 'color: rgb(var(--ui-success))' : 'color: rgb(var(--ui-danger))'"
-                        x-text="systemHealthy ? 'OPERATIONAL' : 'DEGRADED'"
-                    ></span>
-                </div>
+                <template x-if="systemHealthy">
+                    <x-hub-ui::badge type="success" size="sm" :dot="true">Operational</x-hub-ui::badge>
+                </template>
+                <template x-if="!systemHealthy">
+                    <x-hub-ui::badge type="danger" size="sm" :dot="true">Degraded</x-hub-ui::badge>
+                </template>
             </x-slot:actions>
         </x-hub-ui::live-header>
 
-        <div class="flex-1 overflow-auto p-6 space-y-6">
+        <div class="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
 
-            {{-- Gauges — hero row --}}
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <template x-for="gauge in gauges" :key="gauge.label">
-                    <div class="ui-card overflow-hidden">
-                        <div class="flex items-center gap-5 p-5">
-                            {{-- SVG gauge --}}
-                            <div class="relative flex-shrink-0" style="width: 120px; height: 120px;">
-                                <svg viewBox="0 0 120 120" class="w-full h-full" style="transform: rotate(-90deg);">
-                                    <circle
-                                        cx="60" cy="60" r="50"
-                                        fill="none"
-                                        stroke-width="8"
-                                        stroke-linecap="round"
-                                        style="stroke: rgb(var(--ui-border))"
-                                        stroke-dasharray="314.16"
-                                        stroke-dashoffset="78.54"
-                                    />
-                                    <circle
-                                        cx="60" cy="60" r="50"
-                                        fill="none"
-                                        stroke-width="8"
-                                        stroke-linecap="round"
-                                        :style="'stroke: ' + gaugeColor(gauge.percent) + '; stroke-dasharray: 314.16; stroke-dashoffset: ' + (314.16 - (235.62 * gauge.percent / 100)) + '; transition: stroke-dashoffset 0.7s ease, stroke 0.5s ease;'"
-                                    />
-                                </svg>
-                                <div class="absolute inset-0 flex flex-col items-center justify-center" style="padding-top: 8px;">
-                                    <span
-                                        class="text-3xl font-bold ui-tabular"
-                                        :style="'color: ' + gaugeColor(gauge.percent)"
-                                    >
-                                        <x-hub-ui::number value="gauge.percent" format="float" decimals="0" />
-                                    </span>
-                                    <span class="text-[10px] font-medium uppercase tracking-wider ui-text-subtle -mt-0.5">percent</span>
-                                </div>
+            {{-- Vitals strip — CPU / RAM / HDD on horizontal lanes --}}
+            <div class="ui-card overflow-hidden">
+                <div class="flex items-center gap-2 px-4 py-2.5 border-b ui-border ui-bg-elevated">
+                    <x-feathericon-cpu class="w-3.5 h-3.5 ui-text-muted" />
+                    <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Vitals</span>
+                </div>
+                <div class="divide-y ui-border">
+                    <template x-for="gauge in gauges" :key="gauge.label">
+                        <div class="px-4 py-3 flex items-center gap-4 flex-wrap">
+                            <div class="flex items-center gap-3 min-w-[110px]">
+                                <span class="text-[11px] font-semibold uppercase tracking-[0.18em] ui-text-muted w-9" x-text="gauge.label"></span>
+                                <span
+                                    class="text-xl font-bold font-mono ui-tabular leading-none"
+                                    :style="'color: ' + gaugeColor(gauge.percent)"
+                                    x-text="gauge.percent.toFixed(0) + '%'"
+                                ></span>
                             </div>
 
-                            {{-- Labels --}}
-                            <div class="flex-1 min-w-0">
+                            <div class="flex-1 min-w-[200px] order-3 sm:order-none flex items-center">
+                                <x-hub-ui::progress-bar
+                                    value="gauge.percent"
+                                    ticks="20"
+                                    tick-width="6"
+                                    tick-height="18"
+                                    tick-gap="2"
+                                    class="w-full"
+                                />
+                            </div>
+
+                            <div class="flex flex-col sm:items-end min-w-[180px]">
                                 <div class="flex items-center gap-2">
-                                    <span class="text-sm font-semibold ui-text" x-text="gauge.label"></span>
+                                    <span class="text-[11px] font-mono ui-text-muted" x-text="gauge.detail"></span>
                                     <x-hub-ui::trend-delta value="gauge.delta" suffix="pt" precision="1" />
                                 </div>
-                                <p class="text-xs ui-text-subtle mt-1 font-mono" x-text="gauge.detail"></p>
-                                <p x-show="gauge.sub" class="text-[11px] ui-text-subtle mt-0.5 font-mono" x-text="gauge.sub"></p>
+                                <span x-show="gauge.sub" class="text-[10px] ui-text-subtle uppercase tracking-[0.12em] mt-0.5" x-text="gauge.sub"></span>
                             </div>
                         </div>
-                    </div>
-                </template>
+                    </template>
+                </div>
             </div>
 
-            {{-- Step Dispatcher summary — full width --}}
-            <div class="ui-card overflow-hidden">
-                <div class="flex items-center justify-between px-4 py-3 ui-bg-elevated border-b ui-border">
-                    <div class="flex items-center gap-3">
-                        <span class="text-sm font-semibold ui-text">Step Dispatcher</span>
-                        <span class="flex items-center gap-2">
-                            <span class="relative flex h-2 w-2">
-                                <template x-if="stepDispatcher.running">
-                                    <span>
-                                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ui-bg-success"></span>
-                                        <span class="relative inline-flex rounded-full h-2 w-2 ui-bg-success"></span>
-                                    </span>
-                                </template>
-                                <template x-if="!stepDispatcher.running">
-                                    <span class="relative inline-flex rounded-full h-2 w-2 ui-bg-danger"></span>
-                                </template>
-                            </span>
-                            <span
-                                class="text-[10px] font-semibold uppercase tracking-wider"
-                                :style="stepDispatcher.running ? 'color: rgb(var(--ui-success))' : 'color: rgb(var(--ui-danger))'"
-                                x-text="stepDispatcher.running ? 'Running' : 'Stopped'"
-                            ></span>
-                        </span>
+            {{-- Dispatcher lane — single horizontal row --}}
+            <div class="ui-card overflow-hidden relative">
+                <span
+                    class="absolute top-0 left-0 bottom-0 w-[3px] pointer-events-none"
+                    :style="'background-color: ' + (stepDispatcher.running ? 'rgb(var(--ui-success))' : 'rgb(var(--ui-danger))')"
+                ></span>
+                <div class="pl-5 pr-4 py-3 flex items-center gap-4 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <x-feathericon-layers class="w-3.5 h-3.5 ui-text-muted" />
+                        <span class="text-[11px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Step Dispatcher</span>
+                        <template x-if="stepDispatcher.running">
+                            <x-hub-ui::badge type="success" size="sm" :dot="true">Running</x-hub-ui::badge>
+                        </template>
+                        <template x-if="!stepDispatcher.running">
+                            <x-hub-ui::badge type="danger" size="sm" :dot="true">Stopped</x-hub-ui::badge>
+                        </template>
                     </div>
-                    <a href="{{ route('system.step-dispatcher') }}" class="text-[11px] font-medium hover:underline" style="color: rgb(var(--ui-primary))">
-                        View Details &rarr;
-                    </a>
-                </div>
-                <div class="px-4 py-5">
-                    <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                        <div class="text-center">
-                            <div class="text-2xl font-bold ui-text ui-tabular">
-                                <x-hub-ui::number value="stepDispatcher.total || 0" />
-                            </div>
-                            <div class="text-[10px] font-medium uppercase tracking-wider ui-text-subtle mt-1">Total</div>
+
+                    <div class="hidden sm:block w-px h-4" style="background-color: rgb(var(--ui-border))"></div>
+
+                    <div class="flex items-center gap-4 flex-wrap">
+                        <div class="flex items-baseline gap-1.5">
+                            <span class="text-lg font-bold font-mono ui-text ui-tabular" x-text="(stepDispatcher.total || 0).toLocaleString()"></span>
+                            <span class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle">total</span>
                         </div>
                         <template x-for="key in ['Running', 'Pending', 'Failed', 'Completed']" :key="key">
-                            <div class="text-center">
-                                <div
-                                    class="text-2xl font-bold ui-tabular"
-                                    :style="'color: ' + stepStateColor(key)"
-                                    x-text="(stepDispatcher.by_state || {})[key] || 0"
-                                ></div>
-                                <div class="text-[10px] font-medium uppercase tracking-wider ui-text-subtle mt-1" x-text="key"></div>
+                            <div class="flex items-baseline gap-1.5">
+                                <span
+                                    class="text-base font-bold font-mono ui-tabular"
+                                    :style="((stepDispatcher.by_state || {})[key] || 0) > 0 ? 'color: ' + stepStateColor(key) : ''"
+                                    :class="((stepDispatcher.by_state || {})[key] || 0) === 0 ? 'ui-text-subtle' : ''"
+                                    x-text="((stepDispatcher.by_state || {})[key] || 0).toLocaleString()"
+                                ></span>
+                                <span class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle" x-text="key"></span>
                             </div>
                         </template>
                     </div>
-                    <div x-show="stepDispatcher.last_tick" class="mt-4 pt-3 border-t ui-border text-[11px] ui-text-subtle text-center">
-                        Last tick <span class="font-mono ui-text-muted" x-text="stepDispatcher.last_tick"></span>
-                    </div>
+
+                    <span class="flex-1"></span>
+
+                    <span x-show="stepDispatcher.last_tick" class="text-[10px] ui-text-subtle font-mono hidden lg:inline">
+                        last tick <span class="ui-text-muted" x-text="stepDispatcher.last_tick"></span>
+                    </span>
+                    <a href="{{ route('system.step-dispatcher') }}" wire:navigate class="text-[11px] font-medium flex items-center gap-1 hover:opacity-80 transition-opacity" style="color: rgb(var(--ui-primary))">
+                        <span>Details</span>
+                        <x-feathericon-chevron-right class="w-3.5 h-3.5" />
+                    </a>
                 </div>
             </div>
 
@@ -129,15 +112,22 @@
             <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {{-- Supervisor --}}
                 <div class="ui-card overflow-hidden">
-                    <div class="flex items-center justify-between px-4 py-3 ui-bg-elevated border-b ui-border">
+                    <div class="flex items-center justify-between px-4 py-2.5 ui-bg-elevated border-b ui-border">
                         <div class="flex items-center gap-2">
-                            <x-feathericon-server class="w-4 h-4 ui-text-muted" />
-                            <span class="text-sm font-semibold ui-text">Supervisor</span>
-                            <span x-show="supervisor.processes" class="text-[11px] ui-text-subtle" x-text="'· ' + (supervisor.processes || []).length + ' processes'"></span>
+                            <x-feathericon-server class="w-3.5 h-3.5 ui-text-muted" />
+                            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Supervisor</span>
+                            <span x-show="supervisor.processes" class="text-[10px] ui-text-subtle font-mono" x-text="'· ' + (supervisor.processes || []).length"></span>
                         </div>
-                        <span x-show="supervisor.available && runningCount > 0" class="text-[10px] font-semibold uppercase tracking-wider" style="color: rgb(var(--ui-success))">
-                            <span x-text="runningCount"></span> / <span x-text="(supervisor.processes || []).length"></span> UP
-                        </span>
+                        <template x-if="supervisor.available && runningCount === (supervisor.processes || []).length && runningCount > 0">
+                            <x-hub-ui::badge type="success" size="sm" :dot="true">
+                                <span><span x-text="runningCount"></span>/<span x-text="(supervisor.processes || []).length"></span> up</span>
+                            </x-hub-ui::badge>
+                        </template>
+                        <template x-if="supervisor.available && runningCount !== (supervisor.processes || []).length">
+                            <x-hub-ui::badge type="warning" size="sm" :dot="true">
+                                <span><span x-text="runningCount"></span>/<span x-text="(supervisor.processes || []).length"></span> up</span>
+                            </x-hub-ui::badge>
+                        </template>
                     </div>
                     <div>
                         <template x-if="!supervisor.available">
@@ -163,11 +153,11 @@
                                             <tr>
                                                 <td class="font-mono" x-text="proc.name"></td>
                                                 <td>
-                                                    <span
-                                                        class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider"
-                                                        :class="supervisorBadgeClass(proc.state)"
-                                                        x-text="proc.state"
-                                                    ></span>
+                                                    <template x-if="proc.state === 'RUNNING'"><x-hub-ui::badge type="success" size="sm" :dot="true"><span x-text="proc.state.toLowerCase()"></span></x-hub-ui::badge></template>
+                                                    <template x-if="proc.state === 'STOPPED' || proc.state === 'BACKOFF'"><x-hub-ui::badge type="warning" size="sm" :dot="true"><span x-text="proc.state.toLowerCase()"></span></x-hub-ui::badge></template>
+                                                    <template x-if="proc.state === 'FATAL' || proc.state === 'EXITED'"><x-hub-ui::badge type="danger" size="sm" :dot="true"><span x-text="proc.state.toLowerCase()"></span></x-hub-ui::badge></template>
+                                                    <template x-if="proc.state === 'STARTING'"><x-hub-ui::badge type="info" size="sm" :dot="true"><span x-text="proc.state.toLowerCase()"></span></x-hub-ui::badge></template>
+                                                    <template x-if="!['RUNNING','STOPPED','BACKOFF','FATAL','EXITED','STARTING'].includes(proc.state)"><x-hub-ui::badge type="default" size="sm" :dot="true"><span x-text="proc.state.toLowerCase()"></span></x-hub-ui::badge></template>
                                                 </td>
                                                 <td class="font-mono ui-text-subtle ui-tabular" x-text="proc.pid || '—'"></td>
                                                 <td class="font-mono ui-text-subtle ui-tabular" x-text="proc.uptime || '—'"></td>
@@ -179,7 +169,7 @@
                         </template>
                         <template x-if="supervisor.available && (!supervisor.processes || supervisor.processes.length === 0)">
                             <div class="p-6 text-center">
-                                <p class="text-sm ui-text-subtle">No supervisor processes found</p>
+                                <p class="text-xs ui-text-subtle">No supervisor processes found</p>
                             </div>
                         </template>
                     </div>
@@ -187,14 +177,15 @@
 
                 {{-- Scheduled Commands --}}
                 <div class="ui-card overflow-hidden">
-                    <div class="flex items-center justify-between px-4 py-3 ui-bg-elevated border-b ui-border">
+                    <div class="flex items-center justify-between px-4 py-2.5 ui-bg-elevated border-b ui-border">
                         <div class="flex items-center gap-2">
-                            <x-feathericon-clock class="w-4 h-4 ui-text-muted" />
-                            <span class="text-sm font-semibold ui-text">Schedule</span>
-                            <span x-show="schedule.tasks" class="text-[11px] ui-text-subtle" x-text="'· ' + (schedule.tasks || []).length + ' tasks'"></span>
+                            <x-feathericon-clock class="w-3.5 h-3.5 ui-text-muted" />
+                            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Schedule</span>
+                            <span x-show="schedule.tasks" class="text-[10px] ui-text-subtle font-mono" x-text="'· ' + (schedule.tasks || []).length"></span>
                         </div>
-                        <span x-show="nextTask" class="text-[10px] ui-text-subtle">
-                            next in <span class="font-mono ui-text-muted" x-text="nextTask?._countdown || '—'"></span>
+                        <span x-show="nextTask" class="text-[10px] ui-text-subtle font-mono flex items-center gap-1">
+                            <span>next</span>
+                            <span class="ui-text-muted" x-text="nextTask?._countdown || '—'"></span>
                         </span>
                     </div>
                     <div>
@@ -205,7 +196,7 @@
                                         <tr>
                                             <th>Command</th>
                                             <th>Cron</th>
-                                            <th>Countdown</th>
+                                            <th class="text-right">In</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -213,7 +204,7 @@
                                             <tr>
                                                 <td class="font-mono" :title="task.next_run" x-text="task.command"></td>
                                                 <td class="font-mono ui-text-subtle" x-text="task.expression"></td>
-                                                <td class="font-mono ui-tabular" :class="task === nextTask ? 'ui-text-success font-semibold' : 'ui-text-muted'" x-text="task._countdown || '—'"></td>
+                                                <td class="font-mono ui-tabular text-right" :class="task === nextTask ? 'ui-text-success font-semibold' : 'ui-text-muted'" x-text="task._countdown || '—'"></td>
                                             </tr>
                                         </template>
                                     </tbody>
@@ -221,8 +212,8 @@
                             </div>
                         </template>
                         <template x-if="!schedule.tasks || schedule.tasks.length === 0">
-                            <div class="p-8 text-center">
-                                <p class="text-sm ui-text-subtle">No scheduled tasks</p>
+                            <div class="p-6 text-center">
+                                <p class="text-xs ui-text-subtle">No scheduled tasks</p>
                             </div>
                         </template>
                     </div>
@@ -231,13 +222,13 @@
 
             {{-- Slow Queries --}}
             <div class="ui-card overflow-hidden">
-                <div class="flex items-center justify-between px-4 py-3 ui-bg-elevated border-b ui-border">
+                <div class="flex items-center justify-between px-4 py-2.5 ui-bg-elevated border-b ui-border">
                     <div class="flex items-center gap-2">
-                        <x-feathericon-zap class="w-4 h-4 ui-text-muted" />
-                        <span class="text-sm font-semibold ui-text">Slow Queries</span>
-                        <span class="text-[11px] ui-text-subtle">·
-                            <span class="font-mono ui-tabular" x-text="slowQueries.last_hour_count"></span>
-                            <span>in last hour</span>
+                        <x-feathericon-zap class="w-3.5 h-3.5 ui-text-muted" />
+                        <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Slow Queries</span>
+                        <span class="text-[10px] ui-text-subtle font-mono">·
+                            <span class="ui-tabular" x-text="slowQueries.last_hour_count"></span>
+                            <span>last hour</span>
                         </span>
                     </div>
                 </div>
@@ -247,25 +238,23 @@
                             <table class="w-full ui-table ui-data-table ui-data-table--sm">
                                 <thead class="ui-bg-elevated">
                                     <tr>
-                                        <th>Duration</th>
+                                        <th style="width: 100px">Duration</th>
                                         <th>Query</th>
                                         <th>Connection</th>
-                                        <th>Time</th>
+                                        <th class="text-right">Time</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <template x-for="q in slowQueries.recent" :key="q.id">
                                         <tr>
                                             <td>
-                                                <span
-                                                    class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ui-tabular"
-                                                    :class="slowQueryBadgeClass(q.time_ms)"
-                                                    x-text="q.time_ms + 'ms'"
-                                                ></span>
+                                                <template x-if="q.time_ms > 500"><x-hub-ui::badge type="danger" size="sm" :dot="true"><span x-text="q.time_ms + 'ms'"></span></x-hub-ui::badge></template>
+                                                <template x-if="q.time_ms >= 100 && q.time_ms <= 500"><x-hub-ui::badge type="warning" size="sm" :dot="true"><span x-text="q.time_ms + 'ms'"></span></x-hub-ui::badge></template>
+                                                <template x-if="q.time_ms < 100"><x-hub-ui::badge type="success" size="sm" :dot="true"><span x-text="q.time_ms + 'ms'"></span></x-hub-ui::badge></template>
                                             </td>
                                             <td class="font-mono max-w-md truncate" :title="q.sql" x-text="q.sql"></td>
                                             <td class="font-mono ui-text-subtle" x-text="q.connection || '—'"></td>
-                                            <td class="font-mono ui-text-subtle ui-tabular" x-text="q.created_at"></td>
+                                            <td class="font-mono ui-text-subtle ui-tabular text-right" x-text="q.created_at"></td>
                                         </tr>
                                     </template>
                                 </tbody>
@@ -273,13 +262,13 @@
                         </div>
                     </template>
                     <template x-if="!slowQueries.recent || slowQueries.recent.length === 0">
-                        <div class="p-10 text-center">
-                            <div class="inline-flex flex-col items-center gap-2">
-                                <div class="w-12 h-12 rounded-full flex items-center justify-center ui-bg-elevated">
-                                    <x-feathericon-check-circle class="w-6 h-6" style="color: rgb(var(--ui-success))" />
-                                </div>
-                                <p class="text-sm font-medium ui-text">All clear</p>
-                                <p class="text-xs ui-text-subtle">No slow queries recorded.</p>
+                        <div class="px-5 py-4 flex items-center gap-3">
+                            <div class="flex-shrink-0 w-8 h-8 rounded-lg ui-bg-elevated flex items-center justify-center">
+                                <x-feathericon-check-circle class="w-4 h-4" style="color: rgb(var(--ui-success))" />
+                            </div>
+                            <div>
+                                <div class="text-sm font-medium ui-text">All clear</div>
+                                <div class="text-[11px] ui-text-subtle mt-0.5 font-mono">No slow queries in the last hour.</div>
                             </div>
                         </div>
                     </template>
@@ -298,7 +287,6 @@
                 _countdownInterval: null,
                 _hasSnapshot: false,
 
-                // Server gauges — carry previous percent for trend delta
                 gauges: [
                     { label: 'CPU', percent: 0, delta: 0, detail: '—', sub: null },
                     { label: 'RAM', percent: 0, delta: 0, detail: '—', sub: null },
@@ -340,33 +328,14 @@
                         const hddPercent = s.hdd_total_gb > 0 ? (s.hdd_used_gb / s.hdd_total_gb * 100) : 0;
 
                         const newGauges = [
-                            {
-                                label: 'CPU',
-                                percent: s.cpu_percent,
-                                detail: 'Load average across 32 vCPUs',
-                                sub: null,
-                            },
-                            {
-                                label: 'RAM',
-                                percent: Math.round(ramPercent * 10) / 10,
-                                detail: this.formatMb(s.ram_used_mb) + ' / ' + this.formatMb(s.ram_total_mb),
-                                sub: 'memory in use',
-                            },
-                            {
-                                label: 'HDD',
-                                percent: Math.round(hddPercent * 10) / 10,
-                                detail: s.hdd_used_gb + ' GB / ' + s.hdd_total_gb + ' GB',
-                                sub: 'root filesystem',
-                            },
+                            { label: 'CPU', percent: s.cpu_percent, detail: 'load across 32 vCPU', sub: null },
+                            { label: 'RAM', percent: Math.round(ramPercent * 10) / 10, detail: this.formatMb(s.ram_used_mb) + ' / ' + this.formatMb(s.ram_total_mb), sub: 'memory in use' },
+                            { label: 'HDD', percent: Math.round(hddPercent * 10) / 10, detail: s.hdd_used_gb + ' / ' + s.hdd_total_gb + ' GB', sub: 'root filesystem' },
                         ];
 
-                        // Compute delta only after first snapshot — first load has no baseline to compare
                         this.gauges = newGauges.map((g, i) => {
                             const prev = this._hasSnapshot && this.gauges[i] ? this.gauges[i].percent : g.percent;
-                            return {
-                                ...g,
-                                delta: Math.round((g.percent - prev) * 10) / 10,
-                            };
+                            return { ...g, delta: Math.round((g.percent - prev) * 10) / 10 };
                         });
                         this._hasSnapshot = true;
 
@@ -398,16 +367,16 @@
                     return 'rgb(var(--ui-success))';
                 },
 
-                supervisorBadgeClass(state) {
+                supervisorBadgeType(state) {
                     const map = {
-                        'RUNNING': 'ui-badge-success',
-                        'STOPPED': 'ui-badge-warning',
-                        'FATAL': 'ui-badge-danger',
-                        'STARTING': 'ui-badge-info',
-                        'BACKOFF': 'ui-badge-warning',
-                        'EXITED': 'ui-badge-danger',
+                        'RUNNING': 'success',
+                        'STOPPED': 'warning',
+                        'FATAL': 'danger',
+                        'STARTING': 'info',
+                        'BACKOFF': 'warning',
+                        'EXITED': 'danger',
                     };
-                    return map[state] || 'ui-badge-default';
+                    return map[state] || 'default';
                 },
 
                 stepStateColor(state) {
@@ -420,31 +389,23 @@
                     return map[state] || 'rgb(var(--ui-text-subtle))';
                 },
 
-                slowQueryBadgeClass(ms) {
-                    if (ms > 500) return 'ui-badge-danger';
-                    if (ms >= 100) return 'ui-badge-warning';
-                    return 'ui-badge-success';
+                slowQueryBadgeType(ms) {
+                    if (ms > 500) return 'danger';
+                    if (ms >= 100) return 'warning';
+                    return 'success';
                 },
 
                 updateCountdowns() {
                     if (!this.schedule.tasks) return;
                     const now = new Date();
                     this.schedule.tasks.forEach(task => {
-                        if (!task.next_run_iso) {
-                            task._countdown = '—';
-                            return;
-                        }
+                        if (!task.next_run_iso) { task._countdown = '—'; return; }
                         const next = new Date(task.next_run_iso);
                         const diff = Math.max(0, Math.floor((next - now) / 1000));
-                        if (diff <= 0) {
-                            task._countdown = 'now';
-                        } else if (diff < 60) {
-                            task._countdown = diff + 's';
-                        } else if (diff < 3600) {
-                            task._countdown = Math.floor(diff / 60) + 'm ' + (diff % 60) + 's';
-                        } else {
-                            task._countdown = Math.floor(diff / 3600) + 'h ' + Math.floor((diff % 3600) / 60) + 'm';
-                        }
+                        if (diff <= 0) task._countdown = 'now';
+                        else if (diff < 60) task._countdown = diff + 's';
+                        else if (diff < 3600) task._countdown = Math.floor(diff / 60) + 'm ' + (diff % 60) + 's';
+                        else task._countdown = Math.floor(diff / 3600) + 'h ' + Math.floor((diff % 3600) / 60) + 'm';
                     });
                 },
             };

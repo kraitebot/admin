@@ -1,11 +1,12 @@
 @php
-    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : (request()->is('accounts*') ? 'accounts' : 'dashboard'));
+    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : 'dashboard');
     $activeHighlight = $activeHighlight ?: match(true) {
-        request()->routeIs('accounts') => 'accounts',
+        request()->routeIs('system.accounts') => 'accounts',
         request()->routeIs('system.sql-query') => 'sql-query',
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
         request()->routeIs('system.heartbeat') => 'heartbeat',
+        request()->routeIs('system.ui-components') => 'ui-components',
         default => $activeSection,
     };
 @endphp
@@ -34,19 +35,6 @@
                 <span class="text-xs">Dashboard</span>
             </a>
 
-            <a
-                href="{{ route('accounts') }}" wire:navigate
-                data-nav-item="accounts"
-                @click="highlight = 'accounts'; $nextTick(() => open = null)"
-                class="flex flex-col items-center gap-1 py-2 rounded-xl cursor-pointer transition-colors relative z-10"
-                :class="highlight === 'accounts' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
-            >
-                <span class="w-7 h-7">
-                    <x-feathericon-users class="w-full h-full" />
-                </span>
-                <span class="text-xs">Accounts</span>
-            </a>
-
             <x-hub-ui::sidebar.section name="system" label="System">
                 <x-slot:icon>
                     <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -54,6 +42,19 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
                     </svg>
                 </x-slot:icon>
+
+                <a
+                    href="{{ route('system.accounts') }}" wire:navigate
+                    data-nav-item="accounts"
+                    @click="highlight = 'accounts'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'accounts' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <x-feathericon-users class="w-full h-full" />
+                    </span>
+                    <span class="text-xs">Accounts</span>
+                </a>
 
                 <a
                     href="{{ route('system.sql-query') }}" wire:navigate
@@ -113,6 +114,22 @@
                         </svg>
                     </span>
                     <span class="text-xs">Heartbeat</span>
+                </a>
+
+                <a
+                    href="{{ route('system.ui-components') }}" wire:navigate
+                    data-nav-item="ui-components"
+                    @click="highlight = 'ui-components'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'ui-components' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 9h18" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">UI Kit</span>
                 </a>
             </x-hub-ui::sidebar.section>
 

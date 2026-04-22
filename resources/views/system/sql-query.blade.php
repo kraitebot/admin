@@ -112,7 +112,7 @@
                 {{-- SQL Query Tab --}}
                 <div x-show="activeTab === 'query'" class="flex flex-col h-full">
                     {{-- Editor --}}
-                    <div class="p-6 border-b ui-border">
+                    <div class="p-4 sm:p-6 border-b ui-border">
                         <div class="space-y-3">
                             <div>
                                 <textarea
@@ -126,8 +126,8 @@
                                     @keydown.meta.enter.prevent="runQuery()"
                                 ></textarea>
                             </div>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center gap-3">
+                            <div class="flex items-center justify-between flex-wrap gap-3">
+                                <div class="flex items-center gap-3 flex-wrap">
                                     <button @click="runQuery()" :disabled="loading || !query.trim()" class="ui-btn ui-btn-primary ui-btn-sm">
                                         <template x-if="loading">
                                             <svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -168,7 +168,7 @@
                     </div>
 
                     {{-- Results --}}
-                    <div class="flex-1 overflow-auto p-6">
+                    <div class="flex-1 overflow-auto p-4 sm:p-6">
                         {{-- Error --}}
                         <template x-if="error">
                             <div class="rounded-md border p-4 ui-alert-error">
@@ -302,7 +302,7 @@
                 </div>
 
                 {{-- Favorites Tab --}}
-                <div x-show="activeTab === 'favorites'" class="p-6">
+                <div x-show="activeTab === 'favorites'" class="p-4 sm:p-6">
                     <x-hub-ui::empty-state
                         title="No favorite queries yet"
                         description="Save frequently used queries for quick access."
@@ -314,7 +314,7 @@
                 </div>
 
                 {{-- History Tab --}}
-                <div x-show="activeTab === 'history'" class="p-6">
+                <div x-show="activeTab === 'history'" class="p-4 sm:p-6">
                     <x-hub-ui::empty-state
                         title="No query history yet"
                         description="Queries you run will appear here."
