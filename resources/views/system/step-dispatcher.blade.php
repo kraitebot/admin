@@ -93,10 +93,36 @@
                 </div>
             </div>
 
+            <div class="flex items-center gap-3 flex-wrap pt-2">
+                <span class="text-[11px] ui-text-subtle font-mono ui-tabular" x-text="'· ' + visibleRows.length + ' / ' + rows.length + ' classes'"></span>
+                <span class="flex-1"></span>
+                <x-hub-ui::switch
+                    x-model="onlyChildren"
+                    onColor="success"
+                    size="sm"
+                    label="Only children"
+                    labelPosition="right"
+                />
+            </div>
+
             <x-hub-ui::data-table>
                 <x-slot:head>
                     <tr>
-                        <th class="sticky left-0 ui-bg-elevated" style="min-width: 140px">Class</th>
+                        <th class="sticky left-0 ui-bg-elevated" style="min-width: 140px">
+                            <div class="flex flex-col gap-1.5">
+                                <span>Class</span>
+                                <div class="relative">
+                                    <x-feathericon-search class="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 ui-text-subtle" />
+                                    <input
+                                        type="text"
+                                        x-model="classSearch"
+                                        placeholder="Filter classes…"
+                                        class="w-full pl-7 pr-2 py-1 text-[11px] rounded border ui-input font-normal normal-case tracking-normal"
+                                        @click.stop
+                                    />
+                                </div>
+                            </div>
+                        </th>
                         <template x-for="state in states" :key="state.name">
                             <th
                                 class="text-center"
@@ -141,10 +167,18 @@
                     </tr>
                 </x-slot:head>
 
-                <template x-for="row in rows" :key="row.class">
+                <template x-for="row in visibleRows" :key="row.class">
                     <tr>
                         <td class="font-mono sticky left-0" style="background-color: inherit" :title="row.class">
-                            <span x-text="row.short_name"></span>
+                            <span class="inline-flex items-center gap-1.5">
+                                <span x-text="row.short_name"></span>
+                                <span
+                                    class="text-[10px] font-normal normal-case tracking-normal"
+                                    :class="row.is_parent ? 'ui-text-warning' : 'ui-text-success'"
+                                    :title="row.is_parent ? 'Parent — spawns child blocks' : 'Child (leaf) — does real work'"
+                                    x-text="row.is_parent ? '(parent)' : '(children)'"
+                                ></span>
+                            </span>
                         </td>
                         <template x-for="state in states" :key="row.class + '-' + state.name">
                             <td
@@ -316,6 +350,9 @@
                 lastUpdated: null,
                 _interval: null,
 
+                classSearch: '',
+                onlyChildren: false,
+
                 isCoolingDown: false,
                 togglingCoolingDown: false,
 
@@ -355,6 +392,16 @@
                     { name: 'Failed',      label: 'Failed',       color: 'rgb(var(--ui-danger))',      mobile: true  },
                     { name: 'Stopped',     label: 'Stopped',      color: 'rgb(var(--ui-danger))',      mobile: false },
                 ],
+
+                get visibleRows() {
+                    const q = (this.classSearch || '').trim().toLowerCase();
+                    return this.rows.filter(r => {
+                        if (this.onlyChildren && r.is_parent) return false;
+                        if (!q) return true;
+                        return (r.short_name || '').toLowerCase().includes(q)
+                            || (r.class || '').toLowerCase().includes(q);
+                    });
+                },
 
                 get totalSteps() {
                     return Object.values(this.totals).reduce((sum, v) => sum + v, 0);

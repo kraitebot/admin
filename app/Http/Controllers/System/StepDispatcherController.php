@@ -72,12 +72,15 @@ class StepDispatcherController extends Controller
             ->get()
             ->keyBy('class');
 
+        $parentClasses = array_flip($this->parentClasses());
+
         $result = [];
         foreach ($pivot as $class => $states) {
             $health = $healthRows[$class] ?? null;
             $result[] = [
                 'class' => $class,
                 'short_name' => class_basename($class),
+                'is_parent' => isset($parentClasses[$class]),
                 'states' => $states,
                 'max_retries' => $health ? (int) $health->max_retries : 0,
                 'oldest_running_sec' => $health && $health->oldest_running_sec !== null

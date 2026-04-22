@@ -7,7 +7,6 @@ namespace App\Http\Controllers\System;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Process;
 
 class HeartbeatController extends Controller
 {
@@ -20,8 +19,6 @@ class HeartbeatController extends Controller
     {
         return response()->json([
             'server' => $this->serverMetrics(),
-            'supervisor' => $this->supervisorStatus(),
-            'schedule' => $this->scheduledTasks(),
             'step_dispatcher' => $this->stepDispatcherSummary(),
             'slow_queries' => $this->slowQueries(),
         ]);
@@ -55,115 +52,42 @@ class HeartbeatController extends Controller
         ];
     }
 
-    private function supervisorStatus(): array
-    {
-        try {
-            $result = Process::run('sudo supervisorctl status');
-
-            if (! $result->successful()) {
-                return ['available' => false, 'error' => 'Permission denied or supervisorctl not available', 'processes' => []];
-            }
-
-            $processes = [];
-            foreach (explode("\n", trim($result->output())) as $line) {
-                if (empty(trim($line))) {
-                    continue;
-                }
-
-                // Format: name STATE pid XXXX, uptime X:XX:XX
-                if (preg_match('/^(\S+)\s+(RUNNING|STOPPED|FATAL|STARTING|BACKOFF|EXITED|UNKNOWN)\s+(.*)$/', trim($line), $m)) {
-                    $details = $m[3];
-                    $pid = null;
-                    $uptime = null;
-
-                    if (preg_match('/pid\s+(\d+)/', $details, $pidMatch)) {
-                        $pid = (int) $pidMatch[1];
-                    }
-                    if (preg_match('/uptime\s+(.+)/', $details, $uptimeMatch)) {
-                        $uptime = trim($uptimeMatch[1]);
-                    }
-
-                    $processes[] = [
-                        'name' => $m[1],
-                        'state' => $m[2],
-                        'pid' => $pid,
-                        'uptime' => $uptime,
-                    ];
-                }
-            }
-
-            return ['available' => true, 'processes' => $processes];
-        } catch (\Throwable $e) {
-            return ['available' => false, 'error' => $e->getMessage(), 'processes' => []];
-        }
-    }
-
-    private function scheduledTasks(): array
-    {
-        try {
-            $result = Process::path('/home/waygou/ingestion.kraite.com')
-                ->run('php artisan schedule:list --no-ansi');
-
-            if (! $result->successful()) {
-                return ['available' => false, 'tasks' => []];
-            }
-
-            $tasks = [];
-            foreach (explode("\n", trim($result->output())) as $line) {
-                $line = trim($line);
-                if (empty($line) || str_starts_with($line, '---') || str_contains($line, 'Showing schedule')) {
-                    continue;
-                }
-
-                // Format: "* * * * * 1s  php artisan steps:dispatch ...... Next Due: 0 seconds from now"
-                if (preg_match('/^([\*\/\d\,\-]+(?:\s+[\*\/\d\,\-]+){4}(?:\s+\d+\w)?)\s+(.+?)\s*\.{2,}\s*Next Due:\s+(.+)$/i', $line, $m)) {
-                    $nextRunText = trim($m[3]);
-                    $nextRunIso = null;
-
-                    if (preg_match('/(\d+)\s+(second|minute|hour|day)s?\s+from\s+now/i', $nextRunText, $timeMatch)) {
-                        $amount = (int) $timeMatch[1];
-                        $nextRunIso = match ($timeMatch[2]) {
-                            'second' => now()->addSeconds($amount),
-                            'minute' => now()->addMinutes($amount),
-                            'hour' => now()->addHours($amount),
-                            'day' => now()->addDays($amount),
-                            default => now(),
-                        };
-                        $nextRunIso = $nextRunIso->toIso8601String();
-                    }
-
-                    $tasks[] = [
-                        'expression' => trim($m[1]),
-                        'command' => trim($m[2]),
-                        'next_run' => $nextRunText,
-                        'next_run_iso' => $nextRunIso,
-                    ];
-                }
-            }
-
-            return ['available' => true, 'tasks' => $tasks];
-        } catch (\Throwable) {
-            return ['available' => false, 'tasks' => []];
-        }
-    }
-
     private function stepDispatcherSummary(): array
     {
         $dispatchers = DB::table('steps_dispatcher')->get();
 
-        $running = $dispatchers->contains(function ($d) {
-            return $d->can_dispatch
-                && $d->last_tick_completed
-                && now()->diffInMinutes($d->last_tick_completed) < 2;
-        });
+        // Admin runs in UTC while ingestion writes last_tick_completed in
+        // its app timezone, so a PHP-side diff drifts by the timezone delta.
+        // Compare at the DB level using MySQL's NOW() to stay in the same
+        // frame as the writer.
+        $running = DB::table('steps_dispatcher')
+            ->where('can_dispatch', true)
+            ->whereNotNull('last_tick_completed')
+            ->whereRaw('last_tick_completed >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)')
+            ->exists();
+
+        // Total = all steps (parents + leaves).
+        $total = (int) DB::table('steps')->count();
+
+        // Per-state breakdown restricted to leaf steps — a step class is a
+        // parent if ANY of its rows has child_block_uuid set (runtime-parents
+        // only declare children when they execute, so the detection has to
+        // happen across the whole table). Matches the same logic used on
+        // /system/step-dispatcher's `buildLeafTotals()`.
+        $parentClasses = DB::table('steps')
+            ->whereNotNull('child_block_uuid')
+            ->distinct()
+            ->pluck('class')
+            ->all();
 
         $byState = DB::table('steps')
             ->select(DB::raw('SUBSTRING_INDEX(state, "\\\\", -1) as state_name'), DB::raw('COUNT(*) as total'))
+            ->when(! empty($parentClasses), static function ($q) use ($parentClasses) {
+                $q->whereNotIn('class', $parentClasses);
+            })
             ->groupBy('state_name')
             ->pluck('total', 'state_name')
             ->toArray();
-
-        $total = array_sum($byState);
 
         $lastTick = $dispatchers->max('last_tick_completed');
 
@@ -177,8 +101,10 @@ class HeartbeatController extends Controller
 
     private function slowQueries(): array
     {
+        // Same timezone gotcha as stepDispatcherSummary — compare via DB NOW()
+        // so admin's UTC vs ingestion's tz don't drift the 1h window.
         $lastHourCount = DB::table('slow_queries')
-            ->where('created_at', '>=', now()->subHour())
+            ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)')
             ->count();
 
         $recent = DB::table('slow_queries')
