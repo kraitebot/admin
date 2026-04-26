@@ -5,13 +5,14 @@ declare(strict_types=1);
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
+use DateTimeImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Kraite\Core\Models\Kraite;
 
-class StepDispatcherController extends Controller
+final class StepDispatcherController extends Controller
 {
     public function index()
     {
@@ -109,6 +110,107 @@ class StepDispatcherController extends Controller
         ]);
     }
 
+    public function blocks(Request $request): JsonResponse
+    {
+        $request->validate([
+            'class' => ['required', 'string'],
+            'state' => ['required', 'string'],
+        ]);
+
+        $class = $request->input('class');
+        $stateInput = $request->input('state');
+
+        $query = DB::table('steps')
+            ->select('block_uuid', DB::raw('MAX(created_at) as latest'), DB::raw('COUNT(*) as step_count'))
+            ->where('class', $class);
+
+        if ($stateInput === 'Throttled') {
+            $query->where('state', 'StepDispatcher\\States\\Pending')
+                ->where('is_throttled', true);
+        } else {
+            $query->where('state', 'StepDispatcher\\States\\'.$stateInput);
+            if ($stateInput === 'Pending') {
+                $query->where(fn ($q) => $q->where('is_throttled', false)->orWhereNull('is_throttled'));
+            }
+        }
+
+        $blockUuids = $query
+            ->groupBy('block_uuid')
+            ->orderByDesc('latest')
+            ->limit(10)
+            ->get();
+
+        $blocks = $blockUuids->map(fn ($row) => [
+            'block_uuid' => $row->block_uuid,
+            'step_count' => (int) $row->step_count,
+            'latest' => $row->latest,
+        ]);
+
+        return response()->json(['blocks' => $blocks]);
+    }
+
+    public function blockSteps(Request $request): JsonResponse
+    {
+        $request->validate([
+            'block_uuid' => ['required', 'string'],
+        ]);
+
+        $steps = DB::table('steps')
+            ->where('block_uuid', $request->input('block_uuid'))
+            ->orderBy('index')
+            ->orderBy('id')
+            ->get()
+            ->map(function ($step) {
+                $state = class_basename($step->state ?? '');
+
+                if ($state === 'Pending' && $step->is_throttled) {
+                    $state = 'Throttled';
+                }
+
+                return [
+                    'id' => $step->id,
+                    'index' => $step->index,
+                    'class' => $step->class,
+                    'short_name' => class_basename($step->class ?? ''),
+                    'state' => $state,
+                    'label' => $step->label,
+                    'child_block_uuid' => $step->child_block_uuid,
+                    'error_message' => $step->error_message,
+                    'retries' => $step->retries,
+                    'duration' => $step->duration,
+                    'started_at' => $step->started_at,
+                    'completed_at' => $step->completed_at,
+                ];
+            });
+
+        return response()->json(['steps' => $steps]);
+    }
+
+    public function coolingDown(): JsonResponse
+    {
+        $kraite = Kraite::first();
+
+        return response()->json([
+            'is_cooling_down' => $kraite?->is_cooling_down ?? false,
+        ]);
+    }
+
+    public function toggleCoolingDown(): JsonResponse
+    {
+        $kraite = Kraite::first();
+
+        if (! $kraite) {
+            return response()->json(['error' => 'Kraite record not found.'], 404);
+        }
+
+        $kraite->is_cooling_down = ! $kraite->is_cooling_down;
+        $kraite->save();
+
+        return response()->json([
+            'is_cooling_down' => $kraite->is_cooling_down,
+        ]);
+    }
+
     /**
      * Classes that have ever spawned children, detected from the steps table
      * itself. A class is "parent" if ANY of its rows has `child_block_uuid`
@@ -143,7 +245,13 @@ class StepDispatcherController extends Controller
     {
         $parentClasses = $this->parentClasses();
 
-        $rows = Cache::remember('system.step-dispatcher.leaf-totals', 3, function () use ($parentClasses) {
+        // Cache TTL is 30s rather than 3s: the underlying aggregation is a
+        // GROUP BY on a 700K-row table that takes ~1-2.5s under load. The
+        // dashboard polls every 5s, so a 3s cache only gave ~50% hit-rate
+        // and tripped the slow-query alarm repeatedly. 30s is well within
+        // the operational tolerance for "leaf step counts" — visibility
+        // doesn't suffer from a sub-minute lag.
+        $rows = Cache::remember('system.step-dispatcher.leaf-totals', 30, function () use ($parentClasses) {
             return DB::table('steps')
                 ->select('state', 'is_throttled', DB::raw('COUNT(*) as total'))
                 ->when(! empty($parentClasses), static function ($query) use ($parentClasses) {
@@ -303,7 +411,7 @@ class StepDispatcherController extends Controller
         }
 
         $newest = $meta->newest;
-        $windowStart = (new \DateTimeImmutable($newest))->modify("-{$windowSeconds} seconds")->format('Y-m-d H:i:s');
+        $windowStart = (new DateTimeImmutable($newest))->modify("-{$windowSeconds} seconds")->format('Y-m-d H:i:s');
 
         $count = (int) DB::table('api_request_logs')
             ->where('api_system_id', $apiSystemId)
@@ -389,106 +497,5 @@ class StepDispatcherController extends Controller
         }
 
         return null;
-    }
-
-    public function blocks(Request $request): JsonResponse
-    {
-        $request->validate([
-            'class' => ['required', 'string'],
-            'state' => ['required', 'string'],
-        ]);
-
-        $class = $request->input('class');
-        $stateInput = $request->input('state');
-
-        $query = DB::table('steps')
-            ->select('block_uuid', DB::raw('MAX(created_at) as latest'), DB::raw('COUNT(*) as step_count'))
-            ->where('class', $class);
-
-        if ($stateInput === 'Throttled') {
-            $query->where('state', 'StepDispatcher\\States\\Pending')
-                ->where('is_throttled', true);
-        } else {
-            $query->where('state', 'StepDispatcher\\States\\'.$stateInput);
-            if ($stateInput === 'Pending') {
-                $query->where(fn ($q) => $q->where('is_throttled', false)->orWhereNull('is_throttled'));
-            }
-        }
-
-        $blockUuids = $query
-            ->groupBy('block_uuid')
-            ->orderByDesc('latest')
-            ->limit(10)
-            ->get();
-
-        $blocks = $blockUuids->map(fn ($row) => [
-            'block_uuid' => $row->block_uuid,
-            'step_count' => (int) $row->step_count,
-            'latest' => $row->latest,
-        ]);
-
-        return response()->json(['blocks' => $blocks]);
-    }
-
-    public function blockSteps(Request $request): JsonResponse
-    {
-        $request->validate([
-            'block_uuid' => ['required', 'string'],
-        ]);
-
-        $steps = DB::table('steps')
-            ->where('block_uuid', $request->input('block_uuid'))
-            ->orderBy('index')
-            ->orderBy('id')
-            ->get()
-            ->map(function ($step) {
-                $state = class_basename($step->state ?? '');
-
-                if ($state === 'Pending' && $step->is_throttled) {
-                    $state = 'Throttled';
-                }
-
-                return [
-                    'id' => $step->id,
-                    'index' => $step->index,
-                    'class' => $step->class,
-                    'short_name' => class_basename($step->class ?? ''),
-                    'state' => $state,
-                    'label' => $step->label,
-                    'child_block_uuid' => $step->child_block_uuid,
-                    'error_message' => $step->error_message,
-                    'retries' => $step->retries,
-                    'duration' => $step->duration,
-                    'started_at' => $step->started_at,
-                    'completed_at' => $step->completed_at,
-                ];
-            });
-
-        return response()->json(['steps' => $steps]);
-    }
-
-    public function coolingDown(): JsonResponse
-    {
-        $kraite = Kraite::first();
-
-        return response()->json([
-            'is_cooling_down' => $kraite?->is_cooling_down ?? false,
-        ]);
-    }
-
-    public function toggleCoolingDown(): JsonResponse
-    {
-        $kraite = Kraite::first();
-
-        if (! $kraite) {
-            return response()->json(['error' => 'Kraite record not found.'], 404);
-        }
-
-        $kraite->is_cooling_down = ! $kraite->is_cooling_down;
-        $kraite->save();
-
-        return response()->json([
-            'is_cooling_down' => $kraite->is_cooling_down,
-        ]);
     }
 }

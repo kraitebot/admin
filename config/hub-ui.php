@@ -10,7 +10,7 @@ return [
     ],
 
     'theme' => [
-        'default_mode' => 'dark',
+        'default_mode' => 'light',
 
         'colors' => [
             'primary'   => '#22c55e',

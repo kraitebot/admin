@@ -3,7 +3,9 @@
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\System\AccountsController;
+use App\Http\Controllers\System\BacktrackingController;
 use App\Http\Controllers\System\CommandsController;
+use App\Http\Controllers\System\DashboardController as SystemDashboardController;
 use App\Http\Controllers\System\HeartbeatController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
@@ -25,6 +27,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
 
     // System
+    Route::get('/system/dashboard', [SystemDashboardController::class, 'index'])->name('system.dashboard');
+
     Route::get('/system/accounts', [AccountsController::class, 'index'])->name('system.accounts');
     Route::get('/system/accounts/data', [AccountsController::class, 'data'])->name('system.accounts.data');
     Route::get('/system/accounts/history', [AccountsController::class, 'history'])->name('system.accounts.history');
@@ -53,8 +57,21 @@ Route::middleware('auth')->group(function () {
     Route::get('/system/heartbeat', [HeartbeatController::class, 'index'])->name('system.heartbeat');
     Route::get('/system/heartbeat/data', [HeartbeatController::class, 'data'])->name('system.heartbeat.data');
 
-    // UI Components showcase
-    Route::get('/system/ui-components', [UiComponentsController::class, 'index'])->name('system.ui-components');
+    // Backtracking — admin-only historical-candle ladder backtester.
+    Route::middleware('admin')->group(function () {
+        Route::get('/system/backtracking', [BacktrackingController::class, 'index'])->name('system.backtracking');
+        Route::post('/system/backtracking/fetch-candles', [BacktrackingController::class, 'fetchCandles'])->name('system.backtracking.fetch-candles');
+        Route::post('/system/backtracking/verify-coverage', [BacktrackingController::class, 'verifyCoverage'])->name('system.backtracking.verify-coverage');
+        Route::post('/system/backtracking/run', [BacktrackingController::class, 'run'])->name('system.backtracking.run');
+        Route::post('/system/backtracking/ai-insights', [BacktrackingController::class, 'aiInsights'])
+            ->middleware('throttle:10,1')
+            ->name('system.backtracking.ai-insights');
+    });
+
+    // UI Components showcase — dev-only surface, never reachable in prod.
+    if (! app()->isProduction()) {
+        Route::get('/system/ui-components', [UiComponentsController::class, 'index'])->name('system.ui-components');
+    }
 });
 
 require __DIR__.'/auth.php';

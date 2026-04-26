@@ -27,7 +27,7 @@
                     </div>
                 </div>
             </div>
-            <div x-show="selectedAccountId && !loading" x-cloak class="flex items-center gap-3">
+            <div x-show="selectedAccountId" x-cloak class="flex items-center gap-3">
                 <span class="text-[11px] ui-text-subtle font-mono">
                     ID <span class="ui-text-muted" x-text="selectedAccountId"></span>
                 </span>
@@ -36,18 +36,20 @@
                     @click="fetchAccountData()"
                     :disabled="loading"
                     class="ui-btn ui-btn-secondary ui-btn-sm"
+                    :class="loading ? 'opacity-60 cursor-not-allowed' : ''"
                     title="Refresh"
                 >
-                    <svg class="w-4 h-4" :class="loading ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <svg class="w-4 h-4" :class="loading ? 'animate-spin ui-text-subtle' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
                     </svg>
-                    <span>Refresh</span>
+                    <span :class="loading ? 'ui-text-subtle' : ''" x-text="loading ? 'Refreshing' : 'Refresh'"></span>
                 </button>
             </div>
         </div>
 
-        {{-- Loading --}}
-        <div x-show="loading" class="flex items-center justify-center py-20">
+        {{-- Initial load spinner — suppressed on refresh so the expanded
+             structure stays visible while fresh data streams in. --}}
+        <div x-show="loading && !accountData" class="flex items-center justify-center py-20">
             <x-hub-ui::spinner size="lg" />
         </div>
 
@@ -59,7 +61,7 @@
             </x-hub-ui::alert>
         </div>
 
-        <div x-show="accountData && !loading" x-cloak class="space-y-6">
+        <div x-show="accountData" x-cloak class="space-y-6">
 
             {{-- Hero: identity + metrics strip --}}
             <div class="ui-card overflow-hidden">
@@ -195,6 +197,12 @@
                                 x-text="pair.direction"
                             ></span>
 
+                            <span
+                                x-show="pair.db?.opened_seconds_ago !== null && pair.db?.opened_seconds_ago !== undefined"
+                                class="text-[11px] ui-text-subtle font-mono ui-tabular hidden sm:inline"
+                                x-text="sinceWhen(pair.db?.opened_seconds_ago)"
+                            ></span>
+
                             <span class="flex-1"></span>
 
                             <span class="text-[11px] ui-text-subtle font-mono ui-tabular hidden sm:inline">
@@ -210,6 +218,11 @@
                             <template x-if="pair.status === 'drift'"><x-hub-ui::badge type="warning" size="sm" :dot="true">Drift</x-hub-ui::badge></template>
                             <template x-if="pair.status === 'db_only'"><x-hub-ui::badge type="danger" size="sm" :dot="true">DB only</x-hub-ui::badge></template>
                             <template x-if="pair.status === 'exchange_only'"><x-hub-ui::badge type="warning" size="sm" :dot="true">Exchange only</x-hub-ui::badge></template>
+                            <template x-if="pair.status === 'transient'">
+                                <x-hub-ui::badge type="info" size="sm" :dot="true">
+                                    <span x-text="(pair.db?.status || 'transient').toUpperCase()"></span>
+                                </x-hub-ui::badge>
+                            </template>
                         </button>
 
                         {{-- Expanded --}}
@@ -618,7 +631,7 @@
 
                 get visiblePairs() {
                     if (!this.onlyDrifts) return this.pairs;
-                    return this.pairs.filter(p => p.status !== 'synced');
+                    return this.pairs.filter(p => p.status !== 'synced' && p.status !== 'transient');
                 },
 
                 visibleOrders(pair) {
@@ -630,7 +643,7 @@
                 get exchangePositionCount() { return this.pairs.filter(p => p.exchange).length; },
                 get totalOrderCount()       { return this.pairs.reduce((s, p) => s + p.order_counts.total, 0) + this.orphanOrders.length; },
                 get driftCount() {
-                    return this.pairs.filter(p => p.status !== 'synced').length + this.orphanOrders.length;
+                    return this.pairs.filter(p => p.status !== 'synced' && p.status !== 'transient').length + this.orphanOrders.length;
                 },
 
                 exchangeStyle(exchange) {
@@ -648,11 +661,27 @@
                     if (status === 'drift') return 'rgb(var(--ui-warning))';
                     if (status === 'db_only') return 'rgb(var(--ui-danger))';
                     if (status === 'exchange_only') return 'rgb(var(--ui-warning))';
+                    if (status === 'transient') return 'rgb(var(--ui-info))';
                     return 'rgb(var(--ui-text-subtle))';
                 },
 
                 isPositionFieldDrift(pair, field) { return (pair.position_drift_fields || []).includes(field); },
                 isOrderFieldDrift(order, field)   { return (order.drift_fields || []).includes(field); },
+
+                sinceWhen(seconds) {
+                    if (seconds === null || seconds === undefined) return '';
+                    let secs = Math.max(0, Math.floor(seconds));
+                    if (secs < 60) return secs + 's ago';
+                    if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
+                    if (secs < 86400) {
+                        const h = Math.floor(secs / 3600);
+                        const m = Math.floor((secs % 3600) / 60);
+                        return m > 0 ? `${h}h ${m}m ago` : `${h}h ago`;
+                    }
+                    const d = Math.floor(secs / 86400);
+                    const h = Math.floor((secs % 86400) / 3600);
+                    return h > 0 ? `${d}d ${h}h ago` : `${d}d ago`;
+                },
 
                 toggleHistory(pos) { this.expandedHistory[pos.id] = !this.expandedHistory[pos.id]; },
                 isHistoryOpen(pos) { return !!this.expandedHistory[pos.id]; },

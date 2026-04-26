@@ -1,3 +1,4 @@
+import './persist-patch';
 import './bootstrap';
 
 import { Livewire, Alpine } from '../../vendor/livewire/livewire/dist/livewire.esm';
@@ -7,9 +8,9 @@ import { initToast, initConfirmation, registerCounter, registerSidebarStore } fr
 Alpine.plugin(collapse);
 
 registerSidebarStore(Alpine);
+registerCounter();
 
 Livewire.start();
 
 initToast();
 initConfirmation();
-registerCounter();

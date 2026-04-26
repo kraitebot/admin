@@ -17,9 +17,29 @@ class AccountsController extends Controller
 
     private const NUMERIC_FIELDS = ['quantity', 'price', 'entry_price', 'margin'];
 
-    private const LIVE_ORDER_STATUSES = ['NEW', 'PARTIALLY_FILLED'];
+    // Price fields where exchange-reported precision exceeds what we store
+    // (e.g. Binance returns a 13-decimal volume-weighted entry while we
+    // persist the fill price). Broker-side averaging shifts the reported
+    // entry by fractions of a tick per fill — real drift is orders of
+    // magnitude larger — so a 10bp (0.1%) band absorbs rounding without
+    // letting actual desync slip through.
+    private const PRICE_TOLERANCE_FIELDS = ['price', 'entry_price'];
+
+    private const PRICE_TOLERANCE = '0.001';
+
+    private const COMPARATOR_ORDER_STATUSES = ['NEW', 'PARTIALLY_FILLED', 'FILLED'];
 
     private const OPEN_POSITION_STATUSES = ['new', 'opening', 'active', 'syncing', 'waping', 'closing', 'cancelling'];
+
+    private const PAIR_STATUS_SYNCED = 'synced';
+
+    private const PAIR_STATUS_DRIFT = 'drift';
+
+    private const PAIR_STATUS_DB_ONLY = 'db_only';
+
+    private const PAIR_STATUS_EXCHANGE_ONLY = 'exchange_only';
+
+    private const PAIR_STATUS_TRANSIENT = 'transient';
 
     /**
      * Kraite's internal type labels ↔ the broader set of labels an exchange
@@ -120,11 +140,17 @@ class AccountsController extends Controller
 
         $account = Account::with(['apiSystem'])->findOrFail($request->input('account_id'));
 
+        // MySQL stores opened_at in the session tz (SYSTEM) but Laravel
+        // reads datetimes as UTC, so Carbon diffs drift by the local tz
+        // offset. Let MySQL compute the age in seconds — both sides stay in
+        // the same tz, so the number is correct regardless of the mismatch.
         $dbPositions = $account->positions()
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
+            ->select('positions.*')
+            ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago')
             ->with([
                 'exchangeSymbol',
-                'orders' => fn ($q) => $q->whereIn('status', self::LIVE_ORDER_STATUSES),
+                'orders' => fn ($q) => $q->whereIn('status', self::COMPARATOR_ORDER_STATUSES),
             ])
             ->get();
 
@@ -175,6 +201,13 @@ class AccountsController extends Controller
 
         [$pairs, $matchedExchangeOrderIds] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, $symbolConfigs);
         $orphanOrders = $this->buildOrphanOrders($exchangeOrders, $matchedExchangeOrderIds);
+
+        // Sort open positions newest → oldest by DB opened_at. Pairs without a
+        // DB side (exchange-only) lack an age; push them to the bottom.
+        $pairs = collect($pairs)
+            ->sortBy(fn (array $p) => $p['db']['opened_seconds_ago'] ?? PHP_INT_MAX)
+            ->values()
+            ->all();
 
         return response()->json([
             'account' => [
@@ -259,8 +292,25 @@ class AccountsController extends Controller
         $dbPosData = $dbPos ? $this->dbPositionData($dbPos, $accountMarginMode) : null;
         $exchPosData = $exchPos ? $this->exchangePositionData($exchPos, $symbolConfig) : null;
 
+        // Replace the stored opening_price snapshot with the weighted average
+        // of every FILLED entry-side order. Binance reports the running avg
+        // on the live position; the DB's opening_price only reflects the
+        // first fill and drifts apart as limit ladders fill. Compare apples
+        // to apples by computing the equivalent on our side.
+        if ($dbPosData && $dbPos) {
+            $avg = $this->computeWeightedAvgEntry($dbPos, $direction);
+            if ($avg !== null) {
+                $dbPosData['entry_price'] = $avg;
+            }
+        }
+
+        // Sync analysis only runs on 'active' positions. Transient states
+        // (opening, syncing, waping, closing, cancelling, new) mean the DB
+        // is intentionally mid-flight and will produce false drift alarms.
+        $dbIsActive = $dbPosData !== null && ($dbPosData['status'] ?? null) === 'active';
+
         $positionDriftFields = [];
-        if ($dbPosData && $exchPosData) {
+        if ($dbPosData && $exchPosData && $dbIsActive) {
             foreach (self::POSITION_DRIFT_FIELDS as $field) {
                 if (! $this->valuesEqual($field, $dbPosData[$field] ?? null, $exchPosData[$field] ?? null)) {
                     $positionDriftFields[] = $field;
@@ -289,7 +339,10 @@ class AccountsController extends Controller
                     $matchedExchangeOrderIndices[$exchIdx] = true;
                 }
 
-                $orders[] = $this->buildOrderPair($this->dbOrderData($dbOrder), $exchOrder ? $this->exchangeOrderData($exchOrder) : null);
+                $dbOrderData = $this->dbOrderData($dbOrder);
+                $exchOrderData = $exchOrder ? $this->exchangeOrderData($exchOrder) : null;
+
+                $orders[] = $this->buildOrderPair($dbOrderData, $exchOrderData);
             }
         }
 
@@ -314,17 +367,30 @@ class AccountsController extends Controller
             $orders[] = $this->buildOrderPair(null, $this->exchangeOrderData($exchOrder));
         }
 
-        $anyOrderDrift = collect($orders)->contains(fn ($o) => $o['status'] !== 'synced');
+        // Suppress per-order drift flags while the DB position is mid-flight
+        // (step-dispatcher is writing). Otherwise we flag transient churn
+        // as drift and alarm-fatigue the operator.
+        if ($dbPosData && ! $dbIsActive) {
+            foreach ($orders as &$o) {
+                $o['status'] = self::PAIR_STATUS_SYNCED;
+                $o['drift_fields'] = [];
+            }
+            unset($o);
+        }
+
+        $anyOrderDrift = collect($orders)->contains(fn ($o) => $o['status'] !== self::PAIR_STATUS_SYNCED);
         $positionDrift = ! empty($positionDriftFields);
 
-        if ($dbPosData && ! $exchPosData) {
-            $status = 'db_only';
+        if ($dbPosData && ! $dbIsActive) {
+            $status = self::PAIR_STATUS_TRANSIENT;
+        } elseif ($dbPosData && ! $exchPosData) {
+            $status = self::PAIR_STATUS_DB_ONLY;
         } elseif (! $dbPosData && $exchPosData) {
-            $status = 'exchange_only';
+            $status = self::PAIR_STATUS_EXCHANGE_ONLY;
         } elseif ($positionDrift || $anyOrderDrift) {
-            $status = 'drift';
+            $status = self::PAIR_STATUS_DRIFT;
         } else {
-            $status = 'synced';
+            $status = self::PAIR_STATUS_SYNCED;
         }
 
         return [
@@ -342,10 +408,16 @@ class AccountsController extends Controller
     private function buildOrderPair(?array $db, ?array $exch): array
     {
         if ($db && ! $exch) {
-            return ['status' => 'db_only', 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+            // FILLED orders are historical — they no longer live on the
+            // open-orders endpoint. Their absence is expected, not drift.
+            if (strtoupper((string) ($db['status'] ?? '')) === 'FILLED') {
+                return ['status' => self::PAIR_STATUS_SYNCED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+            }
+
+            return ['status' => self::PAIR_STATUS_DB_ONLY, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
         }
         if (! $db && $exch) {
-            return ['status' => 'exchange_only', 'db' => null, 'exchange' => $exch, 'drift_fields' => []];
+            return ['status' => self::PAIR_STATUS_EXCHANGE_ONLY, 'db' => null, 'exchange' => $exch, 'drift_fields' => []];
         }
 
         $driftFields = [];
@@ -356,7 +428,7 @@ class AccountsController extends Controller
         }
 
         return [
-            'status' => empty($driftFields) ? 'synced' : 'drift',
+            'status' => empty($driftFields) ? self::PAIR_STATUS_SYNCED : self::PAIR_STATUS_DRIFT,
             'db' => $db,
             'exchange' => $exch,
             'drift_fields' => $driftFields,
@@ -380,11 +452,13 @@ class AccountsController extends Controller
     {
         return [
             'id' => $pos->id,
+            'status' => strtolower((string) $pos->status),
             'quantity' => (string) $pos->quantity,
             'entry_price' => (string) $pos->opening_price,
             'leverage' => (string) $pos->leverage,
             'margin' => (string) $pos->margin,
             'margin_mode' => $accountMarginMode,
+            'opened_seconds_ago' => $pos->opened_seconds_ago !== null ? (int) $pos->opened_seconds_ago : null,
             'unrealized_pnl' => null,
         ];
     }
@@ -415,6 +489,69 @@ class AccountsController extends Controller
             'margin_mode' => $marginMode !== null ? strtoupper((string) $marginMode) : null,
             'unrealized_pnl' => (string) ($pos['unRealizedProfit'] ?? $pos['unrealisedPnl'] ?? 0),
         ];
+    }
+
+    /**
+     * Weighted-average entry price across a position's FILLED entry-side
+     * orders (BUY for LONG, SELL for SHORT). Mirrors what Binance reports
+     * as the running position entryPrice, so the comparator has a fair
+     * DB-side value to check against. Null when there are no filled
+     * entry orders (callers should fall back to the stored snapshot).
+     */
+    private function computeWeightedAvgEntry($dbPos, string $direction): ?string
+    {
+        $entrySide = strtoupper($direction) === 'LONG' ? 'BUY' : 'SELL';
+        $totalQty = '0';
+        $weightedCost = '0';
+
+        foreach ($dbPos->orders as $o) {
+            if (strtoupper((string) $o->status) !== 'FILLED') {
+                continue;
+            }
+            if (strtoupper((string) $o->side) !== $entrySide) {
+                continue;
+            }
+            $q = (string) $o->quantity;
+            $p = (string) $o->price;
+            if (! is_numeric($q) || ! is_numeric($p)) {
+                continue;
+            }
+            $totalQty = bcadd($totalQty, $q, 18);
+            $weightedCost = bcadd($weightedCost, bcmul($q, $p, 18), 18);
+        }
+
+        if (bccomp($totalQty, '0', 18) <= 0) {
+            return null;
+        }
+
+        return $this->trim(bcdiv($weightedCost, $totalQty, 18));
+    }
+
+    /**
+     * Relative equality for price-like fields where the exchange reports
+     * finer precision than we persist. Uses float math because the tolerance
+     * (1 basis point) is well above double-precision rounding error, and
+     * floats sidestep bccomp's strict well-formedness checks on edge inputs.
+     */
+    private function numericWithinTolerance(string $a, string $b): bool
+    {
+        if (! is_numeric($a) || ! is_numeric($b)) {
+            return false;
+        }
+
+        $fa = (float) $a;
+        $fb = (float) $b;
+
+        if ($fa === $fb) {
+            return true;
+        }
+
+        $scale = max(abs($fa), abs($fb));
+        if ($scale === 0.0) {
+            return false;
+        }
+
+        return abs($fa - $fb) / $scale <= (float) self::PRICE_TOLERANCE;
     }
 
     private function dbOrderData($order): array
@@ -465,7 +602,21 @@ class AccountsController extends Controller
             return true;
         }
         if (in_array($field, self::NUMERIC_FIELDS, true)) {
-            return bccomp((string) $a, (string) $b, 18) === 0;
+            $sa = (string) $a;
+            $sb = (string) $b;
+
+            // Fall back to string compare when values are empty or not
+            // well-formed for bccomp (e.g. scientific notation, stray
+            // characters). Prevents PHP 8 ValueError on bccomp.
+            if ($sa === '' || $sb === '' || ! is_numeric($sa) || ! is_numeric($sb)) {
+                return $sa === $sb;
+            }
+
+            if (in_array($field, self::PRICE_TOLERANCE_FIELDS, true)) {
+                return $this->numericWithinTolerance($sa, $sb);
+            }
+
+            return bccomp($sa, $sb, 18) === 0;
         }
         if ($field === 'type') {
             return $this->typesEqual((string) $a, (string) $b);

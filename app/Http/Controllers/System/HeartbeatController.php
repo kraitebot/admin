@@ -6,9 +6,10 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
-class HeartbeatController extends Controller
+final class HeartbeatController extends Controller
 {
     public function index()
     {
@@ -74,20 +75,34 @@ class HeartbeatController extends Controller
         // only declare children when they execute, so the detection has to
         // happen across the whole table). Matches the same logic used on
         // /system/step-dispatcher's `buildLeafTotals()`.
+        //
+        // GROUP BY raw `state` (uses idx_steps_class_state_throttled) and
+        // strip the namespace via class_basename in PHP after the query.
+        // Doing SUBSTRING_INDEX(state) inside the GROUP BY is a function on
+        // a column — no index can be used for the aggregation, every row
+        // needs a full read. On a 700K-row steps table that landed in the
+        // slow-query log repeatedly under load.
         $parentClasses = DB::table('steps')
             ->whereNotNull('child_block_uuid')
             ->distinct()
             ->pluck('class')
             ->all();
 
-        $byState = DB::table('steps')
-            ->select(DB::raw('SUBSTRING_INDEX(state, "\\\\", -1) as state_name'), DB::raw('COUNT(*) as total'))
-            ->when(! empty($parentClasses), static function ($q) use ($parentClasses) {
-                $q->whereNotIn('class', $parentClasses);
-            })
-            ->groupBy('state_name')
-            ->pluck('total', 'state_name')
-            ->toArray();
+        $byStateRaw = Cache::remember('system.heartbeat.by-state', 5, function () use ($parentClasses) {
+            return DB::table('steps')
+                ->select('state', DB::raw('COUNT(*) as total'))
+                ->when(! empty($parentClasses), static function ($q) use ($parentClasses) {
+                    $q->whereNotIn('class', $parentClasses);
+                })
+                ->groupBy('state')
+                ->pluck('total', 'state')
+                ->toArray();
+        });
+
+        $byState = [];
+        foreach ($byStateRaw as $stateClass => $total) {
+            $byState[class_basename($stateClass)] = ($byState[class_basename($stateClass)] ?? 0) + (int) $total;
+        }
 
         $lastTick = $dispatchers->max('last_tick_completed');
 

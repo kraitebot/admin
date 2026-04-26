@@ -28,12 +28,12 @@ class SqlQueryController extends Controller
         $request->validate([
             'query' => ['required', 'string', 'max:5000'],
             'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'in:10,25,50,100'],
+            'per_page' => ['sometimes', 'integer', 'in:10,20,50,100'],
         ]);
 
         $query = trim($request->input('query'));
         $page = $request->integer('page', 1);
-        $perPage = $request->integer('per_page', 25);
+        $perPage = $request->integer('per_page', 20);
 
         $allowed = ['select', 'show', 'describe', 'desc', 'explain'];
         $firstWord = strtolower(strtok($query, " \t\n\r"));

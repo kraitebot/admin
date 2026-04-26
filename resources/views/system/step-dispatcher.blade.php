@@ -105,6 +105,57 @@
                 />
             </div>
 
+            {{-- Mobile card list (below sm). The wide-matrix table lives
+                 under `hidden sm:block` so phones get a stacked, readable
+                 view instead of the 10-column pivot. --}}
+            <div class="sm:hidden space-y-2">
+                <template x-for="row in visibleRows" :key="'m-' + row.class">
+                    <div class="ui-card p-3">
+                        <div class="flex items-start justify-between gap-2 mb-2">
+                            <div class="min-w-0 flex-1">
+                                <div class="font-mono text-sm ui-text break-all" x-text="row.short_name"></div>
+                                <div class="text-[10px] mt-0.5"
+                                    :class="row.is_parent ? 'ui-text-warning' : 'ui-text-success'"
+                                    x-text="row.is_parent ? 'parent' : 'children'"
+                                ></div>
+                            </div>
+                            <div class="text-right flex-shrink-0">
+                                <div class="text-[9px] uppercase tracking-wider ui-text-subtle">Total</div>
+                                <div class="text-base font-mono font-bold ui-text" x-text="rowTotal(row)"></div>
+                            </div>
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            <template x-for="state in states" :key="'m-' + row.class + '-' + state.name">
+                                <button
+                                    type="button"
+                                    x-show="(row.states[state.name] || 0) > 0"
+                                    @click="fetchBlocks(row.class, state.name)"
+                                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono ui-bg-elevated"
+                                    :style="'color: ' + state.color"
+                                >
+                                    <span x-text="state.label"></span>
+                                    <span class="font-bold" x-text="row.states[state.name]"></span>
+                                </button>
+                            </template>
+                        </div>
+                        <div
+                            x-show="(row.max_retries || 0) > 0 || (row.oldest_running_sec ?? null) !== null"
+                            class="flex items-center gap-3 mt-2 text-[10px] font-mono ui-text-subtle"
+                        >
+                            <span x-show="(row.max_retries || 0) > 0">
+                                retry
+                                <span :class="retryClass(row.max_retries)" x-text="row.max_retries"></span>
+                            </span>
+                            <span x-show="row.oldest_running_sec !== null && row.oldest_running_sec !== undefined">
+                                oldest run
+                                <span :class="oldestRunningClass(row.oldest_running_sec)" x-text="formatAge(row.oldest_running_sec)"></span>
+                            </span>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="hidden sm:block">
             <x-hub-ui::data-table>
                 <x-slot:head>
                     <tr>
@@ -211,6 +262,7 @@
                     </tr>
                 </template>
             </x-hub-ui::data-table>
+            </div>
 
             {{-- Block Details --}}
             <div x-show="selectedClass" class="mt-6 space-y-4">
