@@ -58,10 +58,9 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      *
-     * Operators without any account membership land on the system overview;
-     * everyone else lands on the trader-facing dashboard. The user-facing
-     * /dashboard surface will be redesigned later — until then it stays
-     * the rich admin layout for the trader identity.
+     * Sysadmins land on the system overview; everyone else lands on the
+     * user dashboard. Account ownership is no longer the gate — the user
+     * dashboard exists for every non-admin even if they own zero accounts.
      */
     public function store(LoginRequest $request): RedirectResponse
     {
@@ -69,12 +68,9 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        $userId = (int) Auth::id();
-        $hasAccounts = DB::table('accounts')->where('user_id', $userId)->exists();
-
-        $target = $hasAccounts
-            ? route('dashboard', absolute: false)
-            : route('system.dashboard', absolute: false);
+        $target = (bool) Auth::user()->is_admin
+            ? route('system.dashboard', absolute: false)
+            : route('dashboard', absolute: false);
 
         return redirect()->intended($target);
     }

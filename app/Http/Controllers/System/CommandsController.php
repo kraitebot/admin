@@ -16,8 +16,91 @@ class CommandsController extends Controller
     public function index()
     {
         $commands = $this->getCommandList();
+        $schedule = $this->getSchedule();
 
-        return view('system.commands', compact('commands'));
+        return view('system.commands', compact('commands', 'schedule'));
+    }
+
+    /**
+     * Read the ingestion app's `schedule:list` and parse it into a list of
+     * scheduled tasks for the read-only Scheduler tab on /system/commands.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function getSchedule(): array
+    {
+        $result = Process::path(self::INGESTION_PATH)
+            ->run(['php', 'artisan', 'schedule:list', '--no-ansi']);
+
+        if (! $result->successful()) {
+            return [];
+        }
+
+        $lines = explode("\n", trim($result->output()));
+        $schedule = [];
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+            if (empty($line)) {
+                continue;
+            }
+
+            // Parse: "cron_expression  command  Next Due: time_string"
+            if (preg_match('/^(.+?)\s+php artisan\s+(\S+)(?:\s+(.+?))?\s+Next Due:\s+(.+)$/i', $line, $matches)) {
+                $cron = trim($matches[1]);
+                $command = trim($matches[2]);
+                $arguments = isset($matches[3]) ? trim($matches[3]) : '';
+                $nextDue = trim($matches[4]);
+
+                // Strip trailing dot Symfony adds on optional argument output.
+                $arguments = rtrim($arguments, ' .');
+
+                $schedule[] = [
+                    'cron' => $cron,
+                    'command' => $command,
+                    'arguments' => $arguments,
+                    'next_due' => $nextDue,
+                    'frequency' => $this->cronToHuman($cron),
+                ];
+            }
+        }
+
+        return $schedule;
+    }
+
+    private function cronToHuman(string $cron): string
+    {
+        // Strip trailing duration modifiers (e.g. "1s") that schedule:list adds.
+        $cron = preg_replace('/\s+\d+[smh]$/', '', $cron);
+        $parts = preg_split('/\s+/', trim($cron));
+
+        if (count($parts) < 5) {
+            return $cron;
+        }
+
+        [$min, $hour, $day, $month, $dow] = $parts;
+
+        if ($min === '*' && $hour === '*' && $day === '*' && $month === '*' && $dow === '*') {
+            return 'Every minute';
+        }
+
+        if (preg_match('/^\*\/(\d+)$/', $min, $m) && $hour === '*') {
+            return "Every {$m[1]} minutes";
+        }
+
+        if (is_numeric($min) && $hour === '*' && $day === '*') {
+            return "Hourly at :{$min}";
+        }
+
+        if (is_numeric($min) && preg_match('/^\*\/(\d+)$/', $hour, $m)) {
+            return "Every {$m[1]} hours at :{$min}";
+        }
+
+        if (is_numeric($min) && is_numeric($hour) && $day === '*' && $month === '*' && $dow === '*') {
+            return sprintf('Daily at %02d:%02d', (int) $hour, (int) $min);
+        }
+
+        return $cron;
     }
 
     public function details(Request $request): JsonResponse

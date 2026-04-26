@@ -2,14 +2,15 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Controllers\System;
+namespace App\Http\Controllers\Accounts;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Kraite\Core\Models\Account;
 
-class AccountsController extends Controller
+class PositionsController extends Controller
 {
     private const POSITION_DRIFT_FIELDS = ['quantity', 'entry_price', 'leverage', 'margin', 'margin_mode'];
 
@@ -55,15 +56,41 @@ class AccountsController extends Controller
         'TRAILING-STOP' => ['TRAILING_STOP_MARKET'],
     ];
 
+    /**
+     * Resolve a per-exchange logo to a self-hosted asset path. Avoids
+     * leaning on api_systems.logo_url, which points at the exchange's
+     * own favicon — a 16×16 .ico that scales to a fuzzy mess in the
+     * 48×48 chip and would force a CSP whitelist for each exchange host.
+     * The local PNGs (64×64, sourced from CoinMarketCap) sit in
+     * public/logos/exchanges/{canonical}.png.
+     */
+    private function exchangeLogoUrl(?string $canonical): ?string
+    {
+        if (! $canonical) {
+            return null;
+        }
+
+        $path = public_path("logos/exchanges/{$canonical}.png");
+
+        return file_exists($path) ? "/logos/exchanges/{$canonical}.png" : null;
+    }
+
     public function history(Request $request): JsonResponse
     {
         $request->validate([
-            'account_id' => ['required', 'integer', 'exists:accounts,id'],
+            'account_id' => ['required', 'integer'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
-        $account = Account::findOrFail($request->input('account_id'));
+        // Sysadmin reads any account; everyone else stays scoped to owner.
+        $query = Account::where('id', $request->input('account_id'));
+
+        if (! Auth::user()->is_admin) {
+            $query->where('user_id', Auth::id());
+        }
+
+        $account = $query->firstOrFail();
         $perPage = (int) $request->input('per_page', 25);
         $page = (int) $request->input('page', 1);
 
@@ -118,27 +145,48 @@ class AccountsController extends Controller
 
     public function index()
     {
-        $accounts = Account::with('apiSystem', 'user')
+        $isAdmin = (bool) Auth::user()->is_admin;
+
+        // Sysadmin sees every account (cross-user) — same surface as the
+        // dashboard. Regular users stay scoped to their own.
+        $query = Account::with('apiSystem', 'user');
+
+        if (! $isAdmin) {
+            $query->where('user_id', Auth::id());
+        }
+
+        $accounts = $query
+            ->orderBy('user_id')
             ->orderBy('name')
             ->get()
             ->map(fn (Account $account) => [
                 'id' => $account->id,
                 'name' => $account->name,
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
+                'exchange_canonical' => $account->apiSystem?->canonical,
+                'exchange_logo' => $this->exchangeLogoUrl($account->apiSystem?->canonical),
                 'user' => $account->user?->name ?? 'Unknown',
                 'can_trade' => (bool) $account->can_trade,
             ]);
 
-        return view('system.accounts.index', compact('accounts'));
+        return view('accounts.positions', compact('accounts'));
     }
 
     public function data(Request $request): JsonResponse
     {
         $request->validate([
-            'account_id' => ['required', 'integer', 'exists:accounts,id'],
+            'account_id' => ['required', 'integer'],
         ]);
 
-        $account = Account::with(['apiSystem'])->findOrFail($request->input('account_id'));
+        // Sysadmin reads any account; everyone else stays scoped to owner.
+        $query = Account::with(['apiSystem'])
+            ->where('id', $request->input('account_id'));
+
+        if (! Auth::user()->is_admin) {
+            $query->where('user_id', Auth::id());
+        }
+
+        $account = $query->firstOrFail();
 
         // MySQL stores opened_at in the session tz (SYSTEM) but Laravel
         // reads datetimes as UTC, so Carbon diffs drift by the local tz
@@ -149,7 +197,7 @@ class AccountsController extends Controller
             ->select('positions.*')
             ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago')
             ->with([
-                'exchangeSymbol',
+                'exchangeSymbol.symbol',
                 'orders' => fn ($q) => $q->whereIn('status', self::COMPARATOR_ORDER_STATUSES),
             ])
             ->get();
@@ -199,7 +247,24 @@ class AccountsController extends Controller
             }
         }
 
-        [$pairs, $matchedExchangeOrderIds] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, $symbolConfigs);
+        // Pre-build a per-pair token info map (icon + display token) from
+        // the eager-loaded ExchangeSymbol→Symbol chain on the DB positions.
+        // Pairs that exist only on the exchange side (no DB row) fall back
+        // to no-icon — that's a rare drift state and the missing icon is
+        // an acceptable signal that the position isn't tracked here.
+        $tokenInfoBySymbol = [];
+        foreach ($dbPositions as $p) {
+            $pair = $p->parsed_trading_pair ?? $p->exchangeSymbol?->symbol;
+            if ($pair && $p->exchangeSymbol?->symbol) {
+                $sym = $p->exchangeSymbol->symbol;
+                $tokenInfoBySymbol[$pair] = [
+                    'token' => $sym->token ?? null,
+                    'token_image' => $sym->image_url ?? null,
+                ];
+            }
+        }
+
+        [$pairs, $matchedExchangeOrderIds] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, $symbolConfigs, $tokenInfoBySymbol);
         $orphanOrders = $this->buildOrphanOrders($exchangeOrders, $matchedExchangeOrderIds);
 
         // Sort open positions newest → oldest by DB opened_at. Pairs without a
@@ -222,7 +287,7 @@ class AccountsController extends Controller
         ]);
     }
 
-    private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = []): array
+    private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
     {
         $accountMarginMode = strtoupper((string) ($account->margin_mode ?? ''));
 
@@ -263,7 +328,7 @@ class AccountsController extends Controller
             $seenKeys[$key] = true;
 
             $exchPos = $exchByKey[$key] ?? null;
-            $pairs[] = $this->buildPair($symbol, $direction, $dbPos, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null);
+            $pairs[] = $this->buildPair($symbol, $direction, $dbPos, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null, $tokenInfoBySymbol[$symbol] ?? []);
         }
 
         foreach ($exchByKey as $key => $exchPos) {
@@ -271,7 +336,7 @@ class AccountsController extends Controller
                 continue;
             }
             [$symbol, $direction] = explode('|', $key, 2);
-            $pairs[] = $this->buildPair($symbol, $direction, null, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null);
+            $pairs[] = $this->buildPair($symbol, $direction, null, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null, $tokenInfoBySymbol[$symbol] ?? []);
         }
 
         return [$pairs, $matched];
@@ -288,6 +353,7 @@ class AccountsController extends Controller
         array $exchOrdersByXid,
         array &$matchedExchangeOrderIndices,
         ?array $symbolConfig = null,
+        array $tokenInfo = [],
     ): array {
         $dbPosData = $dbPos ? $this->dbPositionData($dbPos, $accountMarginMode) : null;
         $exchPosData = $exchPos ? $this->exchangePositionData($exchPos, $symbolConfig) : null;
@@ -395,6 +461,8 @@ class AccountsController extends Controller
 
         return [
             'symbol' => $symbol,
+            'token' => $tokenInfo['token'] ?? null,
+            'token_image' => $tokenInfo['token_image'] ?? null,
             'direction' => $direction,
             'status' => $status,
             'db' => $dbPosData,

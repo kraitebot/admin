@@ -1,7 +1,7 @@
-<x-app-layout :activeSection="'system'" :activeHighlight="'accounts'">
+<x-app-layout :activeSection="'accounts'" :activeHighlight="'positions'">
     <div x-data="accountsPage()" class="max-w-6xl">
         <x-hub-ui::page-header
-            title="Accounts"
+            title="Positions"
             description="Database ⇄ Exchange reconciliation. Expand a row to see field-level drift."
         />
 
@@ -68,11 +68,14 @@
                 <div class="flex flex-col lg:flex-row lg:items-stretch">
                     {{-- Identity zone --}}
                     <div class="flex-1 p-5 flex items-start sm:items-center gap-4 flex-wrap min-w-0">
-                        <div
-                            class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center text-lg font-bold tracking-tight"
-                            :style="exchangeStyle(selectedAccount?.exchange) + '; color: #000;'"
-                            x-text="(selectedAccount?.name || '').charAt(0).toUpperCase()"
-                        ></div>
+                        <div class="flex-shrink-0 w-12 h-12 rounded-lg flex items-center justify-center overflow-hidden ui-bg-elevated">
+                            <template x-if="selectedAccount?.exchange_logo">
+                                <img :src="selectedAccount.exchange_logo" :alt="selectedAccount.exchange" class="w-full h-full object-contain" loading="lazy" />
+                            </template>
+                            <template x-if="!selectedAccount?.exchange_logo">
+                                <span class="text-lg font-bold tracking-tight ui-text-muted" x-text="(selectedAccount?.name || '').charAt(0).toUpperCase()"></span>
+                            </template>
+                        </div>
                         <div class="flex-1 min-w-0">
                             <div class="flex items-center gap-2 flex-wrap">
                                 <h2 class="text-base font-semibold ui-text tracking-tight" x-text="selectedAccount?.name || '—'"></h2>
@@ -188,6 +191,15 @@
                                 <path stroke-linecap="round" stroke-linejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
                             </svg>
 
+                            <div class="w-5 h-5 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style="background-color: rgb(var(--ui-bg-elevated))">
+                                <template x-if="pair.token_image">
+                                    <img :src="pair.token_image" :alt="pair.token" class="w-full h-full object-cover" loading="lazy">
+                                </template>
+                                <template x-if="!pair.token_image">
+                                    <span class="text-[8px] font-bold ui-text-muted" x-text="(pair.token || pair.symbol || '?').slice(0, 3)"></span>
+                                </template>
+                            </div>
+
                             <span class="font-mono text-sm font-semibold ui-text" x-text="pair.symbol"></span>
 
                             <span
@@ -259,8 +271,13 @@
                                     <div class="p-5 border-t md:border-t-0 ui-border">
                                         <div class="flex items-center justify-between mb-3">
                                             <div class="flex items-center gap-2">
-                                                <x-feathericon-globe class="w-3.5 h-3.5 ui-text-muted" />
-                                                <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Exchange</span>
+                                                <template x-if="selectedAccount?.exchange_logo">
+                                                    <img :src="selectedAccount.exchange_logo" :alt="selectedAccount.exchange" class="w-3.5 h-3.5 rounded-sm object-contain" loading="lazy" />
+                                                </template>
+                                                <template x-if="!selectedAccount?.exchange_logo">
+                                                    <x-feathericon-globe class="w-3.5 h-3.5 ui-text-muted" />
+                                                </template>
+                                                <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted" x-text="selectedAccount?.exchange || 'Exchange'"></span>
                                             </div>
                                             <template x-if="pair.exchange && pair.exchange.unrealized_pnl !== null && pair.exchange.unrealized_pnl !== undefined">
                                                 <span
@@ -304,8 +321,23 @@
                                                     <tr class="ui-text-subtle text-[9px] uppercase tracking-[0.12em]">
                                                         <th class="text-left px-5 py-2 font-semibold" style="width: 140px">Status</th>
                                                         <th class="text-left px-3 py-2 font-semibold">Type / Side</th>
-                                                        <th class="text-right px-3 py-2 font-semibold border-l ui-border" style="width: 35%">DB</th>
-                                                        <th class="text-right px-5 py-2 font-semibold border-l ui-border" style="width: 35%">Exchange</th>
+                                                        <th class="text-right px-3 py-2 font-semibold border-l ui-border" style="width: 35%">
+                                                            <span class="inline-flex items-center gap-1 justify-end">
+                                                                <x-feathericon-database class="w-3 h-3 opacity-70" />
+                                                                <span>DB</span>
+                                                            </span>
+                                                        </th>
+                                                        <th class="text-right px-5 py-2 font-semibold border-l ui-border" style="width: 35%">
+                                                            <span class="inline-flex items-center gap-1 justify-end">
+                                                                <template x-if="selectedAccount?.exchange_logo">
+                                                                    <img :src="selectedAccount.exchange_logo" :alt="selectedAccount.exchange" class="w-3 h-3 rounded-sm object-contain" loading="lazy" />
+                                                                </template>
+                                                                <template x-if="!selectedAccount?.exchange_logo">
+                                                                    <x-feathericon-globe class="w-3 h-3 opacity-70" />
+                                                                </template>
+                                                                <span x-text="selectedAccount?.exchange || 'Exchange'"></span>
+                                                            </span>
+                                                        </th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -613,6 +645,15 @@
 
                 accounts: @json($accounts),
 
+                init() {
+                    // Single-account UX: skip the manual "pick one" step
+                    // and load straight into the operator's view.
+                    if (this.accounts.length === 1) {
+                        this.selectedAccountId = String(this.accounts[0].id);
+                        this.fetchAccountData();
+                    }
+                },
+
                 exchangeColors: {
                     binance: '#F0B90B',
                     bybit:   '#F7A600',
@@ -716,7 +757,7 @@
                 async fetchHistory() {
                     if (!this.selectedAccountId) { this.historyPositions = []; return; }
                     this.loadingHistory = true;
-                    const url = '{{ route("system.accounts.history") }}'
+                    const url = '{{ route("accounts.positions.history") }}'
                         + '?account_id=' + this.selectedAccountId
                         + '&page=' + this.historyPage
                         + '&per_page=' + this.historyPerPage;
@@ -757,7 +798,7 @@
                     this.loading = true;
                     this.apiError = null;
                     const { ok, data } = await hubUiFetch(
-                        '{{ route("system.accounts.data") }}?account_id=' + this.selectedAccountId,
+                        '{{ route("accounts.positions.data") }}?account_id=' + this.selectedAccountId,
                         { method: 'GET' }
                     );
                     if (ok) {

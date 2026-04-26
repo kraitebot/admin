@@ -1,12 +1,15 @@
 @php
-    $activeSection = $activeSection ?: (request()->is('system/*') ? 'system' : 'dashboard');
+    $activeSection = $activeSection ?: match(true) {
+        request()->is('accounts/*') => 'accounts',
+        request()->is('system/*')   => 'system',
+        default                      => 'dashboard',
+    };
     $activeHighlight = $activeHighlight ?: match(true) {
+        request()->routeIs('accounts.positions') => 'positions',
         request()->routeIs('system.dashboard') => 'system-dashboard',
-        request()->routeIs('system.accounts') => 'accounts',
         request()->routeIs('system.sql-query') => 'sql-query',
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
-        request()->routeIs('system.heartbeat') => 'heartbeat',
         request()->routeIs('system.backtracking') => 'backtracking',
         request()->routeIs('system.ui-components') => 'ui-components',
         default => $activeSection,
@@ -22,7 +25,6 @@
                 </a>
             </x-slot:logo>
 
-            @if(auth()->user()?->hasAccounts())
             <a
                 href="{{ route('dashboard') }}" wire:navigate
                 data-nav-item="dashboard"
@@ -37,8 +39,29 @@
                 </span>
                 <span class="text-xs">Dashboard</span>
             </a>
-            @endif
 
+            <x-hub-ui::sidebar.section name="accounts" label="Accounts">
+                <x-slot:icon>
+                    <x-feathericon-users class="w-full h-full" />
+                </x-slot:icon>
+
+                <a
+                    href="{{ route('accounts.positions') }}" wire:navigate
+                    data-nav-item="positions"
+                    @click="highlight = 'positions'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'positions' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Positions</span>
+                </a>
+            </x-hub-ui::sidebar.section>
+
+            @if(auth()->user()?->is_admin)
             <x-hub-ui::sidebar.section name="system" label="System">
                 <x-slot:icon>
                     <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -60,19 +83,6 @@
                         </svg>
                     </span>
                     <span class="text-xs">Dashboard</span>
-                </a>
-
-                <a
-                    href="{{ route('system.accounts') }}" wire:navigate
-                    data-nav-item="accounts"
-                    @click="highlight = 'accounts'"
-                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
-                    :class="highlight === 'accounts' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
-                >
-                    <span class="w-5 h-5">
-                        <x-feathericon-users class="w-full h-full" />
-                    </span>
-                    <span class="text-xs">Accounts</span>
                 </a>
 
                 <a
@@ -120,21 +130,6 @@
                     <span class="text-xs">Steps</span>
                 </a>
 
-                <a
-                    href="{{ route('system.heartbeat') }}" wire:navigate
-                    data-nav-item="heartbeat"
-                    @click="highlight = 'heartbeat'"
-                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
-                    :class="highlight === 'heartbeat' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
-                >
-                    <span class="w-5 h-5">
-                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" />
-                        </svg>
-                    </span>
-                    <span class="text-xs">Heartbeat</span>
-                </a>
-
                 @if(auth()->user()?->is_admin)
                 <a
                     href="{{ route('system.backtracking') }}" wire:navigate
@@ -168,28 +163,84 @@
                     <span class="text-xs">UI Kit</span>
                 </a>
             </x-hub-ui::sidebar.section>
+            @endif
 
-            <x-slot:footer>
-                <div class="flex flex-col items-center gap-3 pb-4">
-                    <x-hub-ui::theme-toggle />
-
-                    <a href="{{ route('profile.edit') }}" wire:navigate class="ui-sidebar-text hover:ui-text-muted transition-colors">
-                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-                        </svg>
-                    </a>
-                    <form method="POST" action="{{ route('logout') }}">
-                        @csrf
-                        <button type="submit" class="ui-sidebar-text hover:ui-text-danger transition-colors">
-                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
-                            </svg>
-                        </button>
-                    </form>
-                </div>
-            </x-slot:footer>
         </x-hub-ui::sidebar>
     </x-slot:sidebar>
 
+    <x-slot:topbar>
+        <div class="flex items-center justify-end gap-4 pl-16 pr-4 py-3 sm:px-6 lg:pl-6">
+            {{-- Notifications (stub) --}}
+            <button type="button"
+                    class="relative p-1.5 rounded-md ui-text-muted hover:ui-text transition-colors"
+                    title="Notifications"
+            >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 0 0 5.454-1.31A8.967 8.967 0 0 1 18 9.75V9A6 6 0 0 0 6 9v.75a8.967 8.967 0 0 1-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 0 1-5.714 0m5.714 0a3 3 0 1 1-5.714 0" />
+                </svg>
+                <span class="absolute top-1 right-1 w-1.5 h-1.5 rounded-full" style="background-color: rgb(var(--ui-primary))"></span>
+            </button>
+
+            {{-- User name + avatar --}}
+            <div class="flex items-center gap-2 pl-3 border-l ui-border">
+                <div class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold"
+                     style="background-color: rgb(var(--ui-primary) / 0.18); color: rgb(var(--ui-primary))">
+                    {{ strtoupper(mb_substr(auth()->user()->name ?? '?', 0, 1)) }}
+                </div>
+                <span class="text-xs font-medium ui-text hidden sm:inline">{{ auth()->user()->name }}</span>
+            </div>
+
+            {{-- Theme toggle --}}
+            <x-hub-ui::theme-toggle />
+
+            {{-- Profile --}}
+            <a href="{{ route('profile.edit') }}" wire:navigate
+               class="p-1.5 rounded-md ui-text-muted hover:ui-text transition-colors"
+               title="Profile"
+            >
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+                </svg>
+            </a>
+
+            {{-- Logout --}}
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit"
+                        class="p-1.5 rounded-md ui-text-muted hover:ui-text-danger transition-colors"
+                        title="Sign out"
+                >
+                    <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.6" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />
+                    </svg>
+                </button>
+            </form>
+        </div>
+    </x-slot:topbar>
+
     {{ $slot }}
+
+    <x-slot:footerbar>
+        <div class="flex items-center justify-between gap-5 px-4 sm:px-6 lg:px-12 py-4 text-xs ui-text-muted flex-wrap">
+            <div class="flex items-center gap-4 flex-wrap">
+                <span class="inline-flex items-center gap-1.5 font-mono ui-tabular ui-text-subtle">
+                    <span class="w-1.5 h-1.5 rounded-full" style="background-color: rgb(var(--ui-success))"></span>
+                    v0.1.0
+                </span>
+                <span class="hidden sm:inline" style="width:1px;height:14px;background-color:rgb(var(--ui-border))"></span>
+                <a href="#" class="hover:ui-text-primary transition-colors font-medium">Trade with responsibility</a>
+                <span class="hidden sm:inline" style="width:1px;height:14px;background-color:rgb(var(--ui-border))"></span>
+                <a href="#" class="hover:ui-text-primary transition-colors font-medium">Know your risks</a>
+                <span class="hidden md:inline" style="width:1px;height:14px;background-color:rgb(var(--ui-border))"></span>
+                <a href="#" class="hidden md:inline hover:ui-text-primary transition-colors">Terms</a>
+                <a href="#" class="hidden md:inline hover:ui-text-primary transition-colors">Privacy</a>
+                <a href="#" class="hidden md:inline hover:ui-text-primary transition-colors">Status</a>
+            </div>
+            <div class="flex items-center gap-2 ui-text-subtle">
+                <span>&copy; {{ date('Y') }} Kraite</span>
+                <span class="hidden sm:inline">·</span>
+                <span class="hidden sm:inline italic">Crypto futures · use at your own discretion</span>
+            </div>
+        </div>
+    </x-slot:footerbar>
 </x-hub-ui::layouts.dashboard>

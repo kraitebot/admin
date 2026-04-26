@@ -9,7 +9,6 @@ use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
-use Illuminate\Support\Facades\DB;
 
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token'])]
@@ -29,15 +28,5 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
         ];
-    }
-
-    /**
-     * Whether this user owns at least one trading account. Drives the
-     * sidebar's trader-facing /dashboard entry — sysadmins (no accounts)
-     * shouldn't see a link to a surface they have no data for.
-     */
-    public function hasAccounts(): bool
-    {
-        return DB::table('accounts')->where('user_id', $this->id)->exists();
     }
 }

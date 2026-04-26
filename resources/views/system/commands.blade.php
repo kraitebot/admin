@@ -1,11 +1,68 @@
 <x-app-layout :activeSection="'system'" :activeHighlight="'commands'" :flush="true">
-    <div class="flex flex-col h-full" x-data="commandRunner()">
+    <div class="flex flex-col h-full" x-data="{ activeTab: 'commands' }">
         <x-hub-ui::live-header
             title="Commands"
             description="Run any artisan command from the browser. Arguments and options are introspected from the command signature."
             :live="false"
         />
-        <div class="flex flex-1 overflow-hidden">
+
+        <x-hub-ui::tabs
+            active="activeTab"
+            :tabs="[
+                ['key' => 'commands',  'label' => 'Commands',  'icon' => 'terminal'],
+                ['key' => 'scheduler', 'label' => 'Scheduler', 'icon' => 'clock'],
+            ]"
+            class="!px-6 !pt-3 shrink-0"
+        />
+
+        {{-- Scheduler tab — read-only view of the ingestion app's
+             scheduled artisan tasks, parsed from `schedule:list`. --}}
+        <div x-show="activeTab === 'scheduler'" x-cloak class="flex-1 overflow-y-auto p-6">
+            @if(empty($schedule))
+                <x-hub-ui::empty-state
+                    title="No scheduled tasks"
+                    description="The ingestion app has no scheduler entries, or `schedule:list` is unavailable from this surface."
+                />
+            @else
+                <div class="ui-card overflow-hidden">
+                    <div class="px-4 py-3 border-b ui-border flex items-baseline gap-3 flex-wrap">
+                        <h2 class="text-sm font-semibold ui-text">Scheduled tasks</h2>
+                        <span class="text-[11px] ui-text-muted">{{ count($schedule) }} entries · sourced from `schedule:list` on the ingestion app</span>
+                    </div>
+                    <div class="divide-y ui-border-light">
+                        @foreach($schedule as $task)
+                            <div class="flex items-start gap-3 px-4 py-3">
+                                <div class="w-8 h-8 rounded-lg ui-bg-elevated flex items-center justify-center shrink-0 mt-0.5">
+                                    <x-feathericon-terminal class="w-4 h-4 ui-text-muted" />
+                                </div>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-baseline gap-2 flex-wrap">
+                                        <span class="text-xs font-semibold ui-text" style="font-family: 'JetBrains Mono', ui-monospace, monospace;">{{ $task['command'] }}</span>
+                                        @if(!empty($task['arguments']))
+                                            <span class="text-[11px] ui-text-subtle truncate" style="font-family: 'JetBrains Mono', ui-monospace, monospace;">{{ $task['arguments'] }}</span>
+                                        @endif
+                                    </div>
+                                    <div class="flex items-center gap-4 mt-1 text-[11px] ui-text-subtle flex-wrap">
+                                        <span class="flex items-center gap-1.5">
+                                            <x-feathericon-repeat class="w-3 h-3 opacity-70" />
+                                            {{ $task['frequency'] }}
+                                        </span>
+                                        <span class="flex items-center gap-1.5" style="color: rgb(var(--ui-success))">
+                                            <x-feathericon-play class="w-3 h-3 opacity-80" />
+                                            {{ $task['next_due'] }}
+                                        </span>
+                                        <span class="ui-tabular font-mono ui-text-subtle">{{ $task['cron'] }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+        </div>
+
+        {{-- Commands tab (existing) --}}
+        <div x-show="activeTab === 'commands'" x-cloak class="flex flex-1 overflow-hidden" x-data="commandRunner()">
         <x-hub-ui::secondary-sidebar>
             {{-- Search --}}
             <div class="p-3 border-b ui-border">

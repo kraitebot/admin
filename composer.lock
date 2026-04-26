@@ -355,7 +355,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/brunocfalcao/hub-ui",
-                "reference": "780baa7172b94e92bd6b9abe990c6126c5e6578f"
+                "reference": "27b0a122a5773789b8e55491e754ddabfcfc5db6"
             },
             "require": {
                 "illuminate/support": "^11.0|^12.0",
@@ -1589,7 +1589,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "2dce77906ac40d2d708aef1355b913a56e5f96b6"
+                "reference": "68de3e276ea847e73cd847124de1f844203cf6fe"
             },
             "require": {
                 "angle/chrono": "^1.0",

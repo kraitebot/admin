@@ -1,8 +1,8 @@
 <x-app-layout :activeSection="'system'" :activeHighlight="'system-dashboard'">
 
     {{-- Vitals ribbon: CPU / RAM / HDD / Dispatcher / Slow Queries.
-         Mirrors /system/heartbeat — staged here for review before
-         removing the standalone heartbeat surface. --}}
+         Live system health ribbon — was /system/heartbeat before that
+         standalone surface was retired into this dashboard. --}}
     <div x-data="heartbeat()" x-init="fetchData(); startPolling()" class="mb-4 sm:mb-6">
         <div class="ui-card p-4 sm:p-5">
             <div class="flex items-baseline justify-between mb-4 gap-3 flex-wrap">
@@ -290,9 +290,6 @@
                 </div>
 
             </div>
-
-            {{-- Scheduler Tile --}}
-            <x-dashboard.scheduler-tile />
         </div>
     </div>
 
@@ -709,7 +706,6 @@
                 loading: true,
                 stats: {},
                 exchanges: [],
-                schedule: [],
                 isCoolingDown: false,
                 togglingCoolingDown: false,
 
@@ -748,14 +744,13 @@
 
                 async fetchData() {
                     const [dashRes, coolingRes] = await Promise.all([
-                        hubUiFetch('{{ route("dashboard.data") }}', { method: 'GET' }),
+                        hubUiFetch('{{ route("system.dashboard.data") }}', { method: 'GET' }),
                         hubUiFetch('{{ route("system.step-dispatcher.cooling-down") }}', { method: 'GET' }),
                     ]);
 
                     if (dashRes.ok) {
                         this.stats = dashRes.data;
                         this.exchanges = dashRes.data.exchanges;
-                        this.schedule = dashRes.data.schedule || [];
                     }
 
                     if (coolingRes.ok) {
@@ -800,7 +795,7 @@
                 slowQueries: { last_hour_count: 0, recent: [] },
 
                 async fetchData() {
-                    const { ok, data } = await hubUiFetch('{{ route("system.heartbeat.data") }}', { method: 'GET' });
+                    const { ok, data } = await hubUiFetch('{{ route("system.dashboard.health") }}', { method: 'GET' });
 
                     if (ok) {
                         const s = data.server;

@@ -243,26 +243,35 @@ final class StepDispatcherController extends Controller
      */
     private function buildLeafTotals(): array
     {
-        $parentClasses = $this->parentClasses();
+        // Query shape matters: `GROUP BY state, is_throttled` with a class
+        // NOT IN filter can't use `idx_steps_class_state_throttled` because
+        // class is its leftmost column — MySQL falls back to a temp-table
+        // aggregation that takes 2-3s on a 700K-row table and trips the
+        // slow-query alarm on cache misses. Querying `GROUP BY class, state,
+        // is_throttled` matches the index prefix exactly (loose index scan,
+        // no temp table) and runs in <1s. The class-filter + (state,
+        // is_throttled) aggregation happens in PHP afterward — only ~50
+        // rows come back from the DB so the in-PHP work is negligible.
+        //
+        // The 30s cache TTL still applies (heartbeat / step-dispatcher dash
+        // polls every 5s; cache absorbs ~95% of polls onto a single DB
+        // hit). With the fast underlying query, the cache miss case is
+        // also safe — no slow-query alarms even when cache turns over.
+        $parentClasses = array_flip($this->parentClasses());
 
-        // Cache TTL is 30s rather than 3s: the underlying aggregation is a
-        // GROUP BY on a 700K-row table that takes ~1-2.5s under load. The
-        // dashboard polls every 5s, so a 3s cache only gave ~50% hit-rate
-        // and tripped the slow-query alarm repeatedly. 30s is well within
-        // the operational tolerance for "leaf step counts" — visibility
-        // doesn't suffer from a sub-minute lag.
-        $rows = Cache::remember('system.step-dispatcher.leaf-totals', 30, function () use ($parentClasses) {
+        $rows = Cache::remember('system.step-dispatcher.leaf-totals', 30, static function () {
             return DB::table('steps')
-                ->select('state', 'is_throttled', DB::raw('COUNT(*) as total'))
-                ->when(! empty($parentClasses), static function ($query) use ($parentClasses) {
-                    $query->whereNotIn('class', $parentClasses);
-                })
-                ->groupBy('state', 'is_throttled')
+                ->select('class', 'state', 'is_throttled', DB::raw('COUNT(*) as total'))
+                ->groupBy('class', 'state', 'is_throttled')
                 ->get();
         });
 
         $totals = [];
         foreach ($rows as $row) {
+            if (isset($parentClasses[$row->class])) {
+                continue;
+            }
+
             $state = class_basename($row->state);
 
             if ($state === 'NotRunnable') {
