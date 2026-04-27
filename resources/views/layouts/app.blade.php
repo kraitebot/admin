@@ -57,6 +57,21 @@
                 <span class="text-xs">Projections</span>
             </a>
 
+            <a
+                href="{{ route('bscs') }}" wire:navigate
+                data-nav-item="bscs"
+                @click="highlight = 'bscs'; $nextTick(() => open = null)"
+                class="flex flex-col items-center gap-1 py-2 rounded-xl cursor-pointer transition-colors relative z-10"
+                :class="highlight === 'bscs' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+            >
+                <span class="w-7 h-7">
+                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 0 1-1.043 3.296 3.745 3.745 0 0 1-3.296 1.043A3.745 3.745 0 0 1 12 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 0 1-3.296-1.043 3.745 3.745 0 0 1-1.043-3.296A3.745 3.745 0 0 1 3 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 0 1 1.043-3.296 3.746 3.746 0 0 1 3.296-1.043A3.746 3.746 0 0 1 12 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 0 1 3.296 1.043 3.746 3.746 0 0 1 1.043 3.296A3.745 3.745 0 0 1 21 12Z" />
+                    </svg>
+                </span>
+                <span class="text-xs">BSCS</span>
+            </a>
+
             <x-hub-ui::sidebar.section name="accounts" label="Accounts">
                 <x-slot:icon>
                     <x-feathericon-users class="w-full h-full" />

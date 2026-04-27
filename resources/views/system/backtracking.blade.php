@@ -151,6 +151,7 @@
                 <div class="flex items-baseline justify-between gap-2 mb-3">
                     <h2 class="text-sm font-semibold ui-text">
                         Backtest Result — <span x-text="resultPair"></span>
+                        <span x-show="resultPairName" class="ui-text-muted font-normal" x-text="resultPairName ? '(' + resultPairName + ')' : ''"></span>
                     </h2>
                     <div class="flex items-center gap-3">
                         <x-hub-ui::button variant="primary" size="sm"
@@ -220,7 +221,32 @@
                     <div class="p-2 rounded bg-red-50 text-red-900">
                         <div class="text-red-700">Stopped out</div>
                         <div class="font-mono font-semibold text-red-900"><span x-text="result?.totals?.stops ?? 0"></span> (<span x-text="pct('stops')"></span>%)</div>
-                        <div class="text-[10px] text-red-700/70 italic mt-0.5">Real losses. Lower = safer.</div>
+
+                        <template x-for="dir in ['LONG', 'SHORT']" :key="dir">
+                            <div x-show="(result?.totals?.sl_coverage?.[dir]?.count ?? 0) > 0"
+                                 class="text-[10px] font-mono text-red-700 mt-1.5">
+                                <div class="font-semibold tracking-wide">
+                                    <span x-text="dir"></span> SL coverage
+                                    <span class="opacity-60 font-normal" x-text="'(' + (result?.totals?.sl_coverage?.[dir]?.count ?? 0) + ' stops)'"></span>
+                                </div>
+                                <template x-for="tier in [
+                                    {key: 'p25', label: '25%'},
+                                    {key: 'p50', label: '50%'},
+                                    {key: 'p75', label: '75%'},
+                                    {key: 'p100', label: '100%'}
+                                ]" :key="tier.key">
+                                    <div class="flex justify-between gap-2 leading-tight">
+                                        <span class="opacity-70" x-text="tier.label + ':'"></span>
+                                        <span>
+                                            <span class="font-semibold" x-text="(result?.totals?.sl_coverage?.[dir]?.[tier.key]?.pct ?? '—') + '%'"></span>
+                                            <span class="opacity-60" x-text="'(+' + (result?.totals?.sl_coverage?.[dir]?.[tier.key]?.delta ?? '—') + '%)'"></span>
+                                        </span>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <div class="text-[10px] text-red-700/70 italic mt-1">Real losses. Lower = safer.</div>
                     </div>
                 </div>
 
@@ -389,6 +415,8 @@
                                 <th class="text-left px-2 py-1">tp</th>
                                 <th class="text-left px-2 py-1">tp_hit</th>
                                 <th class="text-left px-2 py-1">bars</th>
+                                <th class="text-left px-2 py-1">sl_price</th>
+                                <th class="text-left px-2 py-1">max_pain</th>
                                 <th class="text-left px-2 py-1">status</th>
                                 <th class="text-left px-2 py-1">note</th>
                             </tr>
@@ -404,8 +432,10 @@
                                     <td class="px-2 py-0.5" x-text="row.tp_price"></td>
                                     <td class="px-2 py-0.5" x-text="row.tp_hit_candle ?? '—'"></td>
                                     <td class="px-2 py-0.5" x-text="row.candles_to_profit ?? '—'"></td>
+                                    <td class="px-2 py-0.5" x-text="row.sl_price ?? '—'"></td>
+                                    <td class="px-2 py-0.5" x-text="row.max_pain_price ?? '—'"></td>
                                     <td class="px-2 py-0.5" x-text="row.status"></td>
-                                    <td class="px-2 py-0.5 whitespace-normal" x-text="row.message"></td>
+                                    <td class="px-2 py-0.5 whitespace-normal" x-html="row.message"></td>
                                 </tr>
                             </template>
                         </tbody>
@@ -440,6 +470,7 @@
             coverage: null,
             result: null,
             resultPair: '',
+            resultPairName: '',
             rowsTruncated: false,
             filterNotReviewed: true,
             filterOnlyApproved: false,
@@ -850,6 +881,7 @@
                     if (runRes.ok) {
                         this.result = runRes.result;
                         this.resultPair = runRes.pair;
+                        this.resultPairName = runRes.pair_name ?? '';
                         this.rowsTruncated = runRes.rows_truncated;
                         this.statusMessage = `Backtest complete — ${runRes.result.totals.candles} candles analysed. ${fetchRes.message}`;
                     } else {

@@ -253,6 +253,7 @@ final class BacktrackingController extends Controller
             return response()->json([
                 'ok' => true,
                 'pair' => $symbol->parsed_trading_pair,
+                'pair_name' => $symbol->symbol?->name,
                 'result' => $result,
                 'rows_truncated' => $truncated,
             ]);

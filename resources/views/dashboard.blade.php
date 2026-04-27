@@ -89,6 +89,23 @@
             {{-- Divider --}}
             <div class="hidden md:block self-stretch" style="width:1px;background-color:rgb(var(--ui-border))"></div>
 
+            {{-- Black Swan posture --}}
+            <div class="flex items-center gap-3" x-show="bscs">
+                <div class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center font-mono font-bold text-sm"
+                     :style="bscsTileStyle()"
+                     x-text="bscs?.score ?? '—'"></div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Regime</span>
+                        <span class="text-sm font-semibold" :style="bscsLabelStyle()" x-text="(bscs?.band ?? 'unknown').toUpperCase()"></span>
+                    </div>
+                    <div class="text-[10px] ui-text-subtle leading-tight mt-0.5" x-text="bscs?.status ?? ''"></div>
+                </div>
+            </div>
+
+            {{-- Divider --}}
+            <div class="hidden md:block self-stretch" x-show="bscs" style="width:1px;background-color:rgb(var(--ui-border))"></div>
+
             {{-- Account KPIs --}}
             <div class="flex items-center gap-5 sm:gap-7 flex-wrap">
                 <div class="flex flex-col">
@@ -382,7 +399,24 @@
                 positions: [],
                 metrics: null,
                 btc: null,
+                bscs: null,
                 _interval: null,
+
+                bscsBandColor() {
+                    return ({
+                        calm:     'rgb(16, 185, 129)',
+                        elevated: 'rgb(245, 158, 11)',
+                        fragile:  'rgb(249, 115, 22)',
+                        critical: 'rgb(239, 68, 68)',
+                    })[this.bscs?.band] ?? 'rgb(148, 163, 184)';
+                },
+                bscsTileStyle() {
+                    const c = this.bscsBandColor();
+                    return `background-color: ${c}1a; color: ${c}; border: 1px solid ${c}40`;
+                },
+                bscsLabelStyle() {
+                    return `color: ${this.bscsBandColor()}`;
+                },
 
                 init() {
                     // Sysadmin always starts blank — the dashboard is a
@@ -450,6 +484,7 @@
                         this.positions = data.positions || [];
                         this.metrics = data.metrics ?? null;
                         this.btc = data.btc ?? null;
+                        this.bscs = data.bscs ?? null;
                     }
 
                     this.loading = false;

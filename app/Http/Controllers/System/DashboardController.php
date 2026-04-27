@@ -9,6 +9,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Kraite\Core\Models\ExchangeSymbol;
+use Kraite\Core\Models\Kraite;
+use Kraite\Core\Models\MarketRegimeSnapshot;
+use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
 
 class DashboardController extends Controller
 {
@@ -43,38 +47,14 @@ class DashboardController extends Controller
             ->get()
             ->keyBy('api_system_id');
 
-        // Tradeable counts — mirrors scopeTradeable conditions including Binance cross-check
-        $correlationType = config('kraite.token_discovery.correlation_type', 'rolling');
-        $correlationColumn = 'btc_correlation_'.$correlationType;
-
-        $tradeableConditions = function ($query, string $table) use ($correlationColumn) {
-            $query->where("{$table}.api_statuses->has_taapi_data", true)
-                ->where("{$table}.has_no_indicator_data", false)
-                ->where("{$table}.is_marked_for_delisting", false)
-                ->where("{$table}.has_price_trend_misalignment", false)
-                ->where("{$table}.has_early_direction_change", false)
-                ->where("{$table}.has_invalid_indicator_direction", false)
-                ->whereNotNull("{$table}.symbol_id")
-                ->whereNotNull("{$table}.leverage_brackets")
-                ->where(fn ($q) => $q->whereNull("{$table}.is_manually_enabled")->orWhere("{$table}.is_manually_enabled", true))
-                ->whereNotNull("{$table}.direction")
-                ->where(fn ($q) => $q->whereNull("{$table}.tradeable_at")->orWhere("{$table}.tradeable_at", '<=', now()))
-                ->whereNotNull("{$table}.indicators_timeframe")
-                ->whereRaw("JSON_EXTRACT({$table}.{$correlationColumn}, CONCAT('$.\"', {$table}.indicators_timeframe, '\"')) IS NOT NULL");
-        };
-
-        $tradeableCounts = DB::table('exchange_symbols')
+        // Tradeable counts — delegated to the ExchangeSymbol::tradeable() scope
+        // so admin matches the live trader's exact "tradeable" definition. The
+        // scope handles the Binance cross-check, was_backtesting_approved,
+        // correlation-column lookup, cooldowns, and behavioral flags. Keeping
+        // this delegated avoids drift the next time the scope evolves.
+        $tradeableCounts = ExchangeSymbol::query()
+            ->tradeable()
             ->whereIn('exchange_symbols.api_system_id', $exchangeIds)
-            ->where(fn ($q) => $tradeableConditions($q, 'exchange_symbols'))
-            ->whereExists(function ($sub) use ($tradeableConditions) {
-                $sub->from('exchange_symbols as binance_es')
-                    ->join('api_systems', 'api_systems.id', '=', 'binance_es.api_system_id')
-                    ->where('api_systems.canonical', 'binance')
-                    ->whereColumn('binance_es.token', 'exchange_symbols.token')
-                    ->whereColumn('binance_es.quote', 'exchange_symbols.quote');
-
-                $tradeableConditions($sub, 'binance_es');
-            })
             ->select(
                 'exchange_symbols.api_system_id',
                 DB::raw('COUNT(*) as tradeable'),
@@ -113,7 +93,36 @@ class DashboardController extends Controller
             'total_non_tradeable' => $result->sum('non_tradeable'),
             'total_longs' => $result->sum('tradeable_longs'),
             'total_shorts' => $result->sum('tradeable_shorts'),
+            'bscs' => $this->bscsPayload(),
         ]);
+    }
+
+    /**
+     * Black Swan Composite Score payload — full lossless dump for the system
+     * dashboard widget (score, band, sub-signals, cooldown state, freshness)
+     * plus a 30-snapshot sparkline for trajectory.
+     *
+     * @return array<string, mixed>
+     */
+    private function bscsPayload(): array
+    {
+        $payload = BlackSwanIndex::current()->toArray();
+        $payload['override_reason'] = Kraite::query()->value('bscs_override_reason');
+
+        $payload['sparkline'] = MarketRegimeSnapshot::query()
+            ->orderByDesc('computed_at')
+            ->limit(30)
+            ->get(['computed_at', 'bscs_score', 'bscs_band'])
+            ->map(fn ($s) => [
+                't' => $s->computed_at?->toIso8601String(),
+                'score' => (int) $s->bscs_score,
+                'band' => $s->bscs_band,
+            ])
+            ->reverse()
+            ->values()
+            ->all();
+
+        return $payload;
     }
 
     /**

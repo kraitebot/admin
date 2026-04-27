@@ -12,6 +12,7 @@ use Illuminate\View\View;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
+use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
 
 class DashboardController extends Controller
 {
@@ -110,8 +111,41 @@ class DashboardController extends Controller
             ],
             'metrics' => $this->accountMetrics($account),
             'btc' => $this->btcStrip(),
+            'bscs' => $this->bscsBadge(),
             'positions' => $positions,
         ]);
+    }
+
+    /**
+     * Compact BSCS payload for the user dashboard — score + band + a single
+     * status line. The full sub-signal grid lives on the system dashboard;
+     * end-users just need the posture signal ("are new opens flowing or
+     * paused"). Falls back to a calm-display when no compute has landed yet.
+     *
+     * @return array<string, mixed>
+     */
+    private function bscsBadge(): array
+    {
+        $index = BlackSwanIndex::current();
+        $score = $index->score();
+        $band = $index->band()?->value;
+        $blocked = $index->shouldBlockOpens();
+
+        $statusLine = match (true) {
+            $score === null => 'Awaiting first compute…',
+            $blocked => 'New opens paused — regime fragile.',
+            $band === 'fragile' => 'Soft posture — sizing reduced on new opens.',
+            $band === 'elevated' => 'Elevated — monitoring.',
+            default => 'All systems normal.',
+        };
+
+        return [
+            'score' => $score,
+            'band' => $band,
+            'blocked' => $blocked,
+            'status' => $statusLine,
+            'is_stale' => $index->isStale(),
+        ];
     }
 
     /**

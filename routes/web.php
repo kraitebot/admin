@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\BscsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectionsController;
@@ -31,6 +32,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/projections', [ProjectionsController::class, 'index'])->name('projections');
     Route::get('/projections/data', [ProjectionsController::class, 'data'])->name('projections.data');
 
+    // BSCS — Black Swan Composite Score: regime detection feature page.
+    // Read surface is public (educational + status). Override controls
+    // are operator-only and live behind the admin middleware below.
+    Route::get('/bscs', [BscsController::class, 'index'])->name('bscs');
+    Route::get('/bscs/data', [BscsController::class, 'data'])->name('bscs.data');
+
     // Accounts
     Route::get('/accounts/positions', [PositionsController::class, 'index'])->name('accounts.positions');
     Route::get('/accounts/positions/data', [PositionsController::class, 'data'])->name('accounts.positions.data');
@@ -47,6 +54,10 @@ Route::middleware('auth')->group(function () {
         Route::get('/system/dashboard', [SystemDashboardController::class, 'index'])->name('system.dashboard');
         Route::get('/system/dashboard/data', [SystemDashboardController::class, 'data'])->name('system.dashboard.data');
         Route::get('/system/dashboard/health', [SystemDashboardController::class, 'health'])->name('system.dashboard.health');
+
+        // BSCS operator controls — manual override is sysadmin-only per spec.
+        Route::post('/system/bscs/override/engage', [BscsController::class, 'engageOverride'])->name('system.bscs.override.engage');
+        Route::post('/system/bscs/override/clear', [BscsController::class, 'clearOverride'])->name('system.bscs.override.clear');
 
         Route::get('/system/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
         Route::post('/system/sql-query', [SqlQueryController::class, 'execute'])->name('system.sql-query.execute');

@@ -253,6 +253,114 @@
                     </div>
                 </div>
 
+                {{-- Black Swan Composite Score --}}
+                <div class="dash-panel dash-panel--bscs" x-show="bscs">
+                    <div class="dash-panel__header">
+                        <span class="dash-panel__title">BLACK SWAN COMPOSITE SCORE</span>
+                        <span class="dash-panel__subtitle"
+                              x-text="bscs?.is_stale ? '⚠ stale' : ('synced ' + bscsRelativeAge())"></span>
+                    </div>
+                    <div class="bscs-grid">
+                        {{-- Score + band ring --}}
+                        <div class="bscs-score" :class="'bscs-score--' + (bscs?.band ?? 'unknown')">
+                            <div class="bscs-score__num" x-text="bscs?.score ?? '—'"></div>
+                            <div class="bscs-score__band" x-text="(bscs?.band ?? 'no data').toUpperCase()"></div>
+                            <div class="bscs-score__threshold"
+                                 x-text="'block @ ' + (bscs?.cooldown_threshold ?? bscs?.block_threshold ?? 80)"></div>
+                        </div>
+
+                        {{-- Cooldown / override pills --}}
+                        <div class="bscs-state">
+                            <div class="bscs-pill"
+                                 :class="bscs?.should_block_opens ? 'bscs-pill--danger' : 'bscs-pill--ok'">
+                                <span class="bscs-pill__dot"></span>
+                                <span x-text="bscs?.should_block_opens ? 'New opens BLOCKED' : 'Opens flowing'"></span>
+                            </div>
+                            <div x-show="bscs?.cooldown_active" class="bscs-meta">
+                                Cooldown until <span x-text="bscsFmtTime(bscs?.cooldown_until)"></span>
+                            </div>
+                            <div x-show="bscs?.override_active" class="bscs-meta">
+                                Override until <span x-text="bscsFmtTime(bscs?.override_until)"></span>
+                            </div>
+                        </div>
+
+                        {{-- 5-signal grid --}}
+                        <div class="bscs-signals">
+                            <template x-for="sig in [
+                                { key: 'vol_expansion', label: 'Vol expansion', threshold: '>1.30' },
+                                { key: 'range_blowout', label: 'Range blowout', threshold: '>1.50' },
+                                { key: 'corr_regime',   label: 'Correlation',   threshold: '>0.70' },
+                                { key: 'rejection_pct', label: 'Rejection %',   threshold: '<-5%' },
+                                { key: 'fut_vol',       label: 'Futures vol',   threshold: '>1.20' },
+                            ]" :key="sig.key">
+                                <div class="bscs-signal"
+                                     :class="bscs?.sub_signals?.[sig.key]?.fired ? 'bscs-signal--fired' : ''">
+                                    <span class="bscs-signal__label" x-text="sig.label"></span>
+                                    <span class="bscs-signal__value"
+                                          x-text="bscs?.sub_signals?.[sig.key]?.value ?? '—'"></span>
+                                    <span class="bscs-signal__threshold" x-text="sig.threshold"></span>
+                                    <span class="bscs-signal__dot"
+                                          x-text="bscs?.sub_signals?.[sig.key]?.fired ? '✓' : '·'"></span>
+                                </div>
+                            </template>
+                        </div>
+
+                        {{-- Sparkline --}}
+                        <div class="bscs-spark" x-show="(bscs?.sparkline ?? []).length > 1">
+                            <div class="bscs-spark__title">30 snapshots</div>
+                            <div class="bscs-spark__bars">
+                                <template x-for="(s, i) in (bscs?.sparkline ?? [])" :key="i">
+                                    <div class="bscs-spark__bar"
+                                         :class="'bscs-spark__bar--' + (s.band ?? 'unknown')"
+                                         :style="'height: ' + Math.max(4, s.score) + '%'"
+                                         :title="s.t + ' · score ' + s.score"></div>
+                                </template>
+                            </div>
+                        </div>
+
+                        {{-- Manual override (operator-only — this dashboard is admin-gated) --}}
+                        <div class="bscs-override">
+                            <div class="bscs-override__title">Manual override</div>
+                            <p class="bscs-override__hint">
+                                Bypass the cooldown for a time-boxed window. Reason captured for audit log; modelLog fires on engage + clear.
+                            </p>
+
+                            {{-- Active state --}}
+                            <div x-show="bscs?.override_active" class="bscs-override__active">
+                                <div>
+                                    <div class="bscs-override__active-title">Active until <span x-text="bscsFmtTime(bscs?.override_until)"></span></div>
+                                    <div x-show="bscs?.override_reason" class="bscs-override__active-reason">"<span x-text="bscs?.override_reason"></span>"</div>
+                                </div>
+                                <button type="button" class="bscs-override__btn bscs-override__btn--secondary"
+                                        @click="bscsClearOverride()"
+                                        x-bind:disabled="bscsOverrideBusy">
+                                    <span x-show="!bscsOverrideBusy">Clear now</span>
+                                    <span x-show="bscsOverrideBusy">Working…</span>
+                                </button>
+                            </div>
+
+                            {{-- Engage form --}}
+                            <div x-show="!bscs?.override_active" class="bscs-override__form">
+                                <div class="bscs-override__field">
+                                    <label>Hours</label>
+                                    <input type="number" min="0.5" max="24" step="0.5" x-model.number="bscsOverrideHours" />
+                                </div>
+                                <div class="bscs-override__field bscs-override__field--grow">
+                                    <label>Reason (required)</label>
+                                    <input type="text" maxlength="255" x-model="bscsOverrideReason" placeholder="e.g. range-bound chop despite high score" />
+                                </div>
+                                <button type="button" class="bscs-override__btn bscs-override__btn--primary"
+                                        @click="bscsEngageOverride()"
+                                        x-bind:disabled="bscsOverrideBusy || !bscsOverrideReady()">
+                                    <span x-show="!bscsOverrideBusy">Engage</span>
+                                    <span x-show="bscsOverrideBusy">Engaging…</span>
+                                </button>
+                            </div>
+                            <div x-show="bscsOverrideError" class="bscs-override__error" x-text="bscsOverrideError"></div>
+                        </div>
+                    </div>
+                </div>
+
                 {{-- Exchanges Table --}}
                 <div class="dash-panel dash-panel--exchanges">
                     <div class="dash-panel__header">
@@ -574,6 +682,88 @@
             color: rgb(var(--ui-text-subtle));
         }
 
+        /* BSCS Panel */
+        .dash-panel--bscs {
+            grid-column: span 2;
+            display: flex;
+            flex-direction: column;
+        }
+        .bscs-grid {
+            display: grid;
+            grid-template-columns: 140px 1fr 1fr;
+            grid-template-rows: auto auto;
+            gap: 14px;
+            padding: 14px;
+        }
+        .bscs-score {
+            grid-row: 1 / span 2;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 16px 12px;
+            border-radius: 12px;
+            background: rgba(16, 185, 129, 0.08);
+            border: 1px solid rgba(16, 185, 129, 0.25);
+        }
+        .bscs-score--elevated { background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.30); }
+        .bscs-score--fragile  { background: rgba(249, 115, 22, 0.10); border-color: rgba(249, 115, 22, 0.35); }
+        .bscs-score--critical { background: rgba(239, 68, 68, 0.12);  border-color: rgba(239, 68, 68, 0.40); }
+        .bscs-score--unknown  { background: rgba(148, 163, 184, 0.10); border-color: rgba(148, 163, 184, 0.30); }
+        .bscs-score__num   { font-size: 38px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+        .bscs-score__band  { font-size: 10px; letter-spacing: 0.18em; opacity: 0.75; margin-top: 6px; }
+        .bscs-score__threshold { font-size: 9px; opacity: 0.55; margin-top: 4px; font-family: monospace; }
+
+        .bscs-state { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+        .bscs-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 6px 10px; border-radius: 999px; font-size: 11px; font-weight: 600;
+        }
+        .bscs-pill__dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; }
+        .bscs-pill--ok     { background: rgba(16, 185, 129, 0.10); color: rgb(16, 185, 129); }
+        .bscs-pill--danger { background: rgba(239, 68, 68, 0.12);  color: rgb(220, 38, 38); }
+        .bscs-meta { font-size: 10px; opacity: 0.65; font-family: monospace; }
+
+        .bscs-signals { display: flex; flex-direction: column; gap: 4px; grid-column: 2 / span 2; }
+        .bscs-signal {
+            display: grid; grid-template-columns: 1fr auto auto 16px;
+            gap: 10px; align-items: center;
+            padding: 6px 10px; border-radius: 6px;
+            background: rgba(148, 163, 184, 0.06);
+            font-size: 11px;
+        }
+        .bscs-signal--fired { background: rgba(239, 68, 68, 0.10); color: rgb(220, 38, 38); }
+        .bscs-signal__label { font-weight: 500; }
+        .bscs-signal__value { font-family: monospace; font-variant-numeric: tabular-nums; }
+        .bscs-signal__threshold { font-family: monospace; font-size: 10px; opacity: 0.5; }
+        .bscs-signal__dot { font-weight: 700; text-align: center; }
+
+        .bscs-spark { grid-column: 2 / span 2; }
+        .bscs-spark__title { font-size: 9px; letter-spacing: 0.16em; opacity: 0.55; margin-bottom: 4px; text-transform: uppercase; }
+        .bscs-spark__bars { display: flex; align-items: flex-end; gap: 2px; height: 36px; }
+        .bscs-spark__bar { flex: 1; min-width: 3px; border-radius: 2px; opacity: 0.85; background: rgb(16, 185, 129); }
+        .bscs-spark__bar--elevated { background: rgb(245, 158, 11); }
+        .bscs-spark__bar--fragile  { background: rgb(249, 115, 22); }
+        .bscs-spark__bar--critical { background: rgb(239, 68, 68); }
+        .bscs-spark__bar--unknown  { background: rgb(148, 163, 184); }
+
+        .bscs-override { grid-column: 1 / -1; padding-top: 14px; border-top: 1px dashed rgba(148, 163, 184, 0.25); }
+        .bscs-override__title { font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; opacity: 0.65; font-weight: 600; }
+        .bscs-override__hint { font-size: 11px; opacity: 0.55; margin: 4px 0 10px; }
+        .bscs-override__active { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 10px 12px; border-radius: 8px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.25); }
+        .bscs-override__active-title { font-size: 12px; font-weight: 600; color: rgb(30, 64, 175); }
+        .bscs-override__active-reason { font-size: 11px; opacity: 0.7; font-style: italic; margin-top: 2px; color: rgb(30, 64, 175); }
+        .bscs-override__form { display: grid; grid-template-columns: 110px 1fr auto; gap: 10px; align-items: end; }
+        .bscs-override__field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+        .bscs-override__field--grow { min-width: 0; }
+        .bscs-override__field label { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; opacity: 0.55; }
+        .bscs-override__field input { padding: 6px 10px; border: 1px solid rgba(148, 163, 184, 0.40); border-radius: 6px; font-size: 12px; background: white; }
+        .bscs-override__btn { padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: none; }
+        .bscs-override__btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .bscs-override__btn--primary { background: rgb(16, 185, 129); color: white; }
+        .bscs-override__btn--primary:hover:not(:disabled) { background: rgb(5, 150, 105); }
+        .bscs-override__btn--secondary { background: rgba(59, 130, 246, 0.15); color: rgb(30, 64, 175); }
+        .bscs-override__btn--secondary:hover:not(:disabled) { background: rgba(59, 130, 246, 0.25); }
+        .bscs-override__error { margin-top: 8px; font-size: 11px; color: rgb(220, 38, 38); font-family: monospace; }
+
         /* Exchanges Panel */
         .dash-panel--exchanges {
             grid-column: span 2;
@@ -706,8 +896,79 @@
                 loading: true,
                 stats: {},
                 exchanges: [],
+                bscs: null,
+                bscsOverrideHours: 4,
+                bscsOverrideReason: '',
+                bscsOverrideBusy: false,
+                bscsOverrideError: '',
                 isCoolingDown: false,
                 togglingCoolingDown: false,
+
+                bscsRelativeAge() {
+                    const s = Number(this.bscs?.age_seconds);
+                    if (!Number.isFinite(s) || s < 0) return '—';
+                    if (s < 60) return s + 's ago';
+                    if (s < 3600) return Math.floor(s / 60) + 'm ago';
+                    return Math.floor(s / 3600) + 'h ago';
+                },
+
+                bscsFmtTime(iso) {
+                    if (!iso) return '—';
+                    try { return new Date(iso).toLocaleString(); } catch (_) { return iso; }
+                },
+
+                bscsOverrideReady() {
+                    const h = Number(this.bscsOverrideHours);
+                    return Number.isFinite(h) && h >= 0.5 && h <= 24
+                        && (this.bscsOverrideReason ?? '').trim().length >= 3;
+                },
+
+                async bscsEngageOverride() {
+                    this.bscsOverrideError = '';
+                    if (!this.bscsOverrideReady()) {
+                        this.bscsOverrideError = 'Hours must be 0.5–24 and reason must be at least 3 characters.';
+                        return;
+                    }
+                    this.bscsOverrideBusy = true;
+                    try {
+                        const res = await window.hubUiFetch('{{ route('system.bscs.override.engage') }}', {
+                            method: 'POST',
+                            body: JSON.stringify({
+                                hours: this.bscsOverrideHours,
+                                reason: this.bscsOverrideReason.trim(),
+                            }),
+                        });
+                        if (res.ok) {
+                            this.bscsOverrideReason = '';
+                            await this.fetchData();
+                        } else {
+                            this.bscsOverrideError = res.data?.error ?? 'Engage failed.';
+                        }
+                    } catch (e) {
+                        this.bscsOverrideError = e.message;
+                    } finally {
+                        this.bscsOverrideBusy = false;
+                    }
+                },
+
+                async bscsClearOverride() {
+                    this.bscsOverrideError = '';
+                    this.bscsOverrideBusy = true;
+                    try {
+                        const res = await window.hubUiFetch('{{ route('system.bscs.override.clear') }}', {
+                            method: 'POST',
+                        });
+                        if (res.ok) {
+                            await this.fetchData();
+                        } else {
+                            this.bscsOverrideError = res.data?.error ?? 'Clear failed.';
+                        }
+                    } catch (e) {
+                        this.bscsOverrideError = e.message;
+                    } finally {
+                        this.bscsOverrideBusy = false;
+                    }
+                },
 
                 // Floor at 1% when the numerator is positive — a non-zero
                 // count rounding to 0% hides "something is running" signals
@@ -751,6 +1012,7 @@
                     if (dashRes.ok) {
                         this.stats = dashRes.data;
                         this.exchanges = dashRes.data.exchanges;
+                        this.bscs = dashRes.data.bscs ?? null;
                     }
 
                     if (coolingRes.ok) {
