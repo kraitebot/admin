@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProjectionsController;
+use App\Http\Controllers\Accounts\AccountController;
 use App\Http\Controllers\Accounts\PositionsController;
 use App\Http\Controllers\System\BacktrackingController;
 use App\Http\Controllers\System\CommandsController;
@@ -25,10 +27,18 @@ Route::middleware('auth')->group(function () {
     // Dashboard data feed
     Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
 
+    // Projections
+    Route::get('/projections', [ProjectionsController::class, 'index'])->name('projections');
+    Route::get('/projections/data', [ProjectionsController::class, 'data'])->name('projections.data');
+
     // Accounts
     Route::get('/accounts/positions', [PositionsController::class, 'index'])->name('accounts.positions');
     Route::get('/accounts/positions/data', [PositionsController::class, 'data'])->name('accounts.positions.data');
     Route::get('/accounts/positions/history', [PositionsController::class, 'history'])->name('accounts.positions.history');
+
+    Route::get('/accounts/edit', [AccountController::class, 'edit'])->name('accounts.edit');
+    Route::get('/accounts/edit/quotes', [AccountController::class, 'quotes'])->name('accounts.quotes');
+    Route::patch('/accounts/edit', [AccountController::class, 'update'])->name('accounts.update');
 
     // System — every surface under /system/* is sysadmin-only. Server-side
     // gate via the `admin` middleware so a non-admin can't reach any of
@@ -63,6 +73,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/system/backtracking/fetch-candles', [BacktrackingController::class, 'fetchCandles'])->name('system.backtracking.fetch-candles');
         Route::post('/system/backtracking/verify-coverage', [BacktrackingController::class, 'verifyCoverage'])->name('system.backtracking.verify-coverage');
         Route::post('/system/backtracking/run', [BacktrackingController::class, 'run'])->name('system.backtracking.run');
+        Route::post('/system/backtracking/toggle-approval', [BacktrackingController::class, 'toggleApproval'])->name('system.backtracking.toggle-approval');
         Route::post('/system/backtracking/ai-insights', [BacktrackingController::class, 'aiInsights'])
             ->middleware('throttle:10,1')
             ->name('system.backtracking.ai-insights');

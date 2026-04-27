@@ -5,8 +5,9 @@
             description="Database ⇄ Exchange reconciliation. Expand a row to see field-level drift."
         />
 
-        {{-- Selector row --}}
-        <div class="mb-6 flex items-end gap-4 flex-wrap">
+        {{-- Selector row — hidden when a non-admin owns exactly one account
+             (auto-selected). Sysadmin always sees the cross-user picker. --}}
+        <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-6 flex items-end gap-4 flex-wrap">
             <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
                 <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
                 <div class="relative">
@@ -644,6 +645,7 @@
                 expandedHistory: {},
 
                 accounts: @json($accounts),
+                isAdmin: @json($isAdmin),
 
                 init() {
                     // Single-account UX: skip the manual "pick one" step

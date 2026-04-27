@@ -196,20 +196,12 @@ final class BacktrackingController extends Controller
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
             'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
-            'margin' => ['required', 'numeric', 'gt:0'],
-            'leverage' => ['required', 'integer', 'min:1', 'max:125'],
-            'total_limit_orders' => ['required', 'integer', 'min:1', 'max:12'],
-            'multipliers' => ['nullable', 'string'],
             'tp_percent' => ['required', 'numeric', 'gt:0'],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
             'sl_percent' => ['required', 'numeric', 'gt:0'],
-            'skip_stop_loss' => ['sometimes', 'boolean'],
-            'days_to_ignore' => ['sometimes', 'integer', 'min:0', 'max:365'],
             'limit_hit' => ['nullable', 'integer', 'min:1'],
-            'candle' => ['nullable', 'string'],
             'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
-            'since' => ['nullable', 'date'],
             'max_rows' => ['sometimes', 'integer', 'min:10', 'max:1000'],
         ]);
 
@@ -219,28 +211,32 @@ final class BacktrackingController extends Controller
 
             $windowSince = $this->resolveWindowSince(
                 $timeframe,
-                $validated['since'] ?? null,
+                null,
                 isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
             );
 
+            // Backtests measure price-geometry (does WAP recover to TP?), not
+            // capital allocation. Margin and leverage drive per-rung qty
+            // sizing; with anything too small, lot-step rounding silently
+            // skips sims on high-priced tokens. Hardcoding 5000 × 20 keeps
+            // the per-rung qty above min_lot for every Binance perp without
+            // affecting the rebound math.
             $simulator = new BacktestSimulator;
             $result = $simulator->simulate(
                 symbol: $symbol,
                 timeframe: $timeframe,
-                margin: (string) $validated['margin'],
-                leverage: (int) $validated['leverage'],
-                totalLimitOrders: (int) $validated['total_limit_orders'],
-                multipliers: $this->parseMultipliers($validated['multipliers'] ?? null),
+                margin: '5000',
+                leverage: 20,
+                totalLimitOrders: 4,
+                multipliers: ['2', '2', '2', '2'],
                 tpPercent: (string) $validated['tp_percent'],
                 gapLongPercent: isset($validated['gap_long_percent']) ? (string) $validated['gap_long_percent'] : null,
                 gapShortPercent: isset($validated['gap_short_percent']) ? (string) $validated['gap_short_percent'] : null,
                 slPercent: (string) $validated['sl_percent'],
-                skipStopLoss: (bool) ($validated['skip_stop_loss'] ?? false),
-                daysToIgnore: (int) ($validated['days_to_ignore'] ?? 0),
+                skipStopLoss: false,
+                daysToIgnore: 0,
                 limitHit: isset($validated['limit_hit']) ? (int) $validated['limit_hit'] : null,
-                specificCandle: isset($validated['candle']) && $validated['candle'] !== ''
-                    ? Carbon::parse($validated['candle'], config('app.timezone', 'UTC'))
-                    : null,
+                specificCandle: null,
                 since: $windowSince,
             );
 
@@ -274,6 +270,59 @@ final class BacktrackingController extends Controller
      * the `backtest-insights` AI connection, returns the raw text answer.
      * No config changes are applied — advisory only.
      */
+    /**
+     * Approve or revoke approval for a backtested symbol. On approve, also
+     * persist the gap_long / gap_short used in the form so the live trader
+     * picks them up. ExchangeSymbolObserver fans both `was_backtesting_approved`
+     * and the gap percentages out to every other ExchangeSymbol sharing the
+     * same `symbol_id` (cross-exchange propagation).
+     */
+    public function toggleApproval(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'approve' => ['required', 'boolean'],
+            'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
+            'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        try {
+            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+            $approve = (bool) $validated['approve'];
+
+            // Boolean drives the live-trader gate (observer fans cross-exchange);
+            // string column tracks admin-side review state for the dropdown filters
+            // and leaves room for future review states (shelved, needs-data, etc.).
+            $symbol->was_backtesting_approved = $approve;
+            $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';
+
+            if ($approve) {
+                if (isset($validated['gap_long_percent'])) {
+                    $symbol->percentage_gap_long = (float) $validated['gap_long_percent'];
+                }
+                if (isset($validated['gap_short_percent'])) {
+                    $symbol->percentage_gap_short = (float) $validated['gap_short_percent'];
+                }
+            }
+
+            $symbol->save();
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ], 500);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'was_backtesting_approved' => $symbol->was_backtesting_approved,
+            'backtesting_review_status' => $symbol->backtesting_review_status,
+            'percentage_gap_long' => $symbol->percentage_gap_long,
+            'percentage_gap_short' => $symbol->percentage_gap_short,
+        ]);
+    }
+
     public function aiInsights(Request $request, ChatManager $chat): JsonResponse
     {
         // Prism + streaming response parsing can push past FPM's 128M default
@@ -366,7 +415,7 @@ You are a senior quantitative analyst tuning the Kraite martingale ladder strate
 - **Default multipliers are `[2, 2, ..., 2]` of length N** — aggressive doubling is the core martingale design. This default is load-bearing: the doubling is what shifts WAP enough toward the deepest fill that a small retrace can close the trade. At N=4 cumulative = 1+2+4+8+16 = 31×; at N=3 = 1+2+4+8 = 15×; at N=2 = 1+2+4 = 7×.
 - TP is re-calculated after each rung fill (WAP-based), so a full rung-N fill only needs a small retrace to close in profit. But that's also where liquidation risk lives: leverage × cumulative qty near the rung-N anchor.
 - SL only activates AFTER rung N is touched — before that, the operator is riding out normal noise. "stopped_out" verdicts = trades that went further against after going max-deep.
-- "non-reboundable" verdicts = trades that never recovered by end-of-data (the 15-day trailing buffer already removes walker-exhaustion false positives).
+- "inconclusive" verdicts = sims whose walker ran out of forward data before TP or SL fired (typical for very recent start candles, not actionable).
 
 ## PORTFOLIO — the real risk envelope
 
@@ -463,7 +512,7 @@ SYS;
             "  rung_%d_reach_rate = %s%% (%d of %d resolved sims)\n\n".
             "BACKTEST TOTALS:\n%s\n\n".
             "REGIME BUCKETS (pass_rate per time chunk):\n%s\n\n".
-            "FAILURE ROWS (only stopped_out + non-reboundable sims are emitted — scan for time-clustering + direction patterns to classify structural vs avoidable):\n%s\n",
+            "FAILURE ROWS (only stopped_out sims are actionable — scan for time-clustering + direction patterns to classify structural vs avoidable):\n%s\n",
             $symbol->parsed_trading_pair,
             $symbol->apiSystem->canonical ?? 'unknown',
             $meta['timeframe'] ?? 'unknown',
@@ -603,15 +652,20 @@ SYS;
             ->join('api_systems as ap', 'ap.id', '=', 'es.api_system_id')
             ->where('ap.canonical', 'binance')
             ->orderByRaw('UPPER(s.token) ASC')
+            ->where('es.is_manually_enabled', true)
             ->get([
                 'es.id',
                 's.token',
+                's.cmc_ranking',
+                's.cmc_category',
                 'es.quote',
                 'ap.canonical as exchange',
                 'es.percentage_gap_long',
                 'es.percentage_gap_short',
                 'es.total_limit_orders',
                 'es.limit_quantity_multipliers',
+                'es.was_backtesting_approved',
+                'es.backtesting_review_status',
             ]);
 
         // Bucket by quote currency. USDT and USDC come first (operator's primary
@@ -625,12 +679,16 @@ SYS;
                 'id' => (int) $row->id,
                 'label' => $row->token,
                 'token' => $row->token,
+                'cmc_ranking' => $row->cmc_ranking !== null ? (int) $row->cmc_ranking : null,
+                'cmc_category' => $row->cmc_category,
                 'quote' => $row->quote,
                 'exchange' => $row->exchange,
                 'percentage_gap_long' => $row->percentage_gap_long,
                 'percentage_gap_short' => $row->percentage_gap_short,
                 'total_limit_orders' => $row->total_limit_orders,
                 'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
+                'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
+                'backtesting_review_status' => $row->backtesting_review_status,
             ];
         }
 
@@ -658,12 +716,8 @@ SYS;
         $account = Account::find(1);
 
         return [
-            'margin' => '100',
-            'leverage' => (int) ($account?->position_leverage_long ?? 20),
             'tp_percent' => (string) ($account?->profit_percentage ?? '0.36'),
             'sl_percent' => (string) ($account?->stop_market_initial_percentage ?? '2.50'),
-            'days_to_ignore' => 0,
-            'total_limit_orders' => 4,
         ];
     }
 

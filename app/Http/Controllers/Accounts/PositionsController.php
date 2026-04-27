@@ -57,6 +57,30 @@ class PositionsController extends Controller
     ];
 
     /**
+     * Cross-exchange order status equivalents. Binance's REST shape uses
+     * "NEW"; BitGet uses "LIVE"; Bybit historically used "ACTIVE". Bucket
+     * them all into the same "open and resting" bucket so the comparator
+     * doesn't flag drift purely on terminology.
+     */
+    private const STATUS_ALIASES = [
+        'NEW'              => ['LIVE', 'ACTIVE', 'OPEN'],
+        'PARTIALLY_FILLED' => ['PARTIAL_FILL', 'PARTIALLYFILLED', 'PARTIALLY-FILLED'],
+        'FILLED'           => ['CLOSED', 'EXECUTED'],
+    ];
+
+    /**
+     * Order types whose "natural" exchange-side quantity is the WHOLE
+     * position at trigger time (BitGet plan orders, etc.). They report
+     * size=0 because nothing is bound; the order will close whatever is
+     * open when the trigger fires. Suppress qty drift on these when the
+     * exchange-reported quantity is zero — comparing against the DB's
+     * intended qty would always flag false drift.
+     */
+    private const CLOSE_POSITION_TYPES = [
+        'PROFIT-LIMIT', 'PROFIT-MARKET', 'STOP-LIMIT', 'STOP-MARKET', 'TRAILING-STOP',
+    ];
+
+    /**
      * Resolve a per-exchange logo to a self-hosted asset path. Avoids
      * leaning on api_systems.logo_url, which points at the exchange's
      * own favicon — a 16×16 .ico that scales to a fuzzy mess in the
@@ -169,7 +193,10 @@ class PositionsController extends Controller
                 'can_trade' => (bool) $account->can_trade,
             ]);
 
-        return view('accounts.positions', compact('accounts'));
+        return view('accounts.positions', [
+            'accounts' => $accounts,
+            'isAdmin'  => $isAdmin,
+        ]);
     }
 
     public function data(Request $request): JsonResponse
@@ -488,8 +515,30 @@ class PositionsController extends Controller
             return ['status' => self::PAIR_STATUS_EXCHANGE_ONLY, 'db' => null, 'exchange' => $exch, 'drift_fields' => []];
         }
 
+        // Close-position plan orders (TP/SL on BitGet, certain Bybit algos):
+        //  - qty: exchange reports 0 because the order will close whatever
+        //    is open at trigger time — no bound size.
+        //  - side: BitGet hedge-mode TP/SL encodes the *position* side
+        //    (sell = short) rather than the *action* side (buy to close
+        //    short), so the literal value disagrees with the DB's
+        //    action-side convention. Same logical order, different
+        //    encoding — skip the drift check.
+        $isClosePos = $this->isClosePositionType($db['type'] ?? null);
+        $skipQty = $isClosePos
+            && $exch !== null
+            && (string) ($exch['quantity'] ?? '') !== ''
+            && is_numeric((string) $exch['quantity'])
+            && bccomp((string) $exch['quantity'], '0', 18) === 0;
+        $skipSide = $isClosePos;
+
         $driftFields = [];
         foreach (self::ORDER_DRIFT_FIELDS as $field) {
+            if ($field === 'quantity' && $skipQty) {
+                continue;
+            }
+            if ($field === 'side' && $skipSide) {
+                continue;
+            }
             if (! $this->valuesEqual($field, $db[$field] ?? null, $exch[$field] ?? null)) {
                 $driftFields[] = $field;
             }
@@ -501,6 +550,15 @@ class PositionsController extends Controller
             'exchange' => $exch,
             'drift_fields' => $driftFields,
         ];
+    }
+
+    private function isClosePositionType(?string $type): bool
+    {
+        if ($type === null) {
+            return false;
+        }
+
+        return in_array(strtoupper($type), self::CLOSE_POSITION_TYPES, true);
     }
 
     private function buildOrphanOrders(array $exchangeOrders, array $matched): array
@@ -533,29 +591,43 @@ class PositionsController extends Controller
 
     private function exchangePositionData(array $pos, ?array $symbolConfig = null): array
     {
-        // Binance's position endpoint doesn't report per-position leverage
-        // or marginType. We backfill from the symbol-config endpoint when
-        // available; otherwise preserve null so the comparator treats the
-        // field as "not reported" instead of flagging false drift.
+        // Per-exchange field name normalisation — Binance, BitGet, Bybit
+        // all report the same logical fields under different keys. Order
+        // the fallback chain so the most specific (per-exchange) name wins,
+        // then fall back to canonical-ish names. Adding a new exchange
+        // means appending its native key to each list, not branching here.
         $leverage = $pos['leverage'] ?? $symbolConfig['leverage'] ?? null;
-        $margin = $pos['isolatedMargin'] ?? $pos['positionBalance'] ?? $pos['margin'] ?? null;
-        $marginMode = $pos['marginType'] ?? $pos['marginMode'] ?? $symbolConfig['marginType'] ?? null;
+        $margin = $pos['isolatedMargin']
+            ?? $pos['positionBalance']
+            ?? $pos['marginSize']      // BitGet
+            ?? $pos['margin']
+            ?? null;
+        $marginMode = $pos['marginType']
+            ?? $pos['marginMode']
+            ?? $symbolConfig['marginType']
+            ?? null;
 
-        // Binance CROSSED positions report isolatedMargin=0, which isn't a
-        // real value to compare against — it means "no isolated margin".
-        // Null it so the comparator treats it as "not reported".
-        if ($margin !== null && bccomp((string) $margin, '0', 18) === 0) {
+        // Cross-margin positions don't have a meaningful per-position
+        // margin to compare. Binance reports isolatedMargin=0 (so the
+        // bccomp branch nulls it); BitGet reports `marginSize` = the
+        // current maintenance-margin REQUIREMENT, which is a different
+        // concept than the DB's allocated-margin column. Null both.
+        $isCross = strtoupper((string) ($marginMode ?? '')) === 'CROSSED';
+        if ($isCross
+            || ($margin !== null && is_numeric((string) $margin) && bccomp((string) $margin, '0', 18) === 0)) {
             $margin = null;
         }
 
         return [
             'id' => null,
-            'quantity' => (string) abs((float) ($pos['positionAmt'] ?? $pos['size'] ?? $pos['contracts'] ?? 0)),
-            'entry_price' => (string) ($pos['entryPrice'] ?? $pos['avgPrice'] ?? 0),
+            'quantity' => (string) abs((float) ($pos['positionAmt'] ?? $pos['size'] ?? $pos['contracts'] ?? $pos['total'] ?? 0)),
+            // Entry-price field varies: Binance entryPrice, Bybit avgPrice,
+            // BitGet openPriceAvg. Fall through in that order.
+            'entry_price' => (string) ($pos['entryPrice'] ?? $pos['avgPrice'] ?? $pos['openPriceAvg'] ?? 0),
             'leverage' => $leverage !== null ? (string) $leverage : null,
             'margin' => $margin !== null ? (string) $margin : null,
             'margin_mode' => $marginMode !== null ? strtoupper((string) $marginMode) : null,
-            'unrealized_pnl' => (string) ($pos['unRealizedProfit'] ?? $pos['unrealisedPnl'] ?? 0),
+            'unrealized_pnl' => (string) ($pos['unRealizedProfit'] ?? $pos['unrealisedPnl'] ?? $pos['unrealizedPL'] ?? 0),
         ];
     }
 
@@ -646,14 +718,23 @@ class PositionsController extends Controller
             $price = $order['triggerPrice'];
         }
 
+        // Type resolution: the mapper writes `_orderType` as the canonical
+        // upstream type (e.g. STOP_MARKET, TAKE_PROFIT) for plan/stop/algo
+        // orders; the raw `orderType` field on those rows is just the
+        // execution mode ("market" / "limit"). Read the canonical first
+        // so PROFIT-LIMIT ↔ TAKE_PROFIT alias-matching actually fires.
+        //
+        // Status resolution: BitGet plan orders return their state under
+        // `planStatus`; algo orders sometimes use `algoStatus`. Stack them
+        // all so cross-exchange status aliasing (LIVE ↔ NEW) works.
         return [
             'id' => null,
             'client_order_id' => $order['clientOrderId'] ?? $order['orderLinkId'] ?? $order['clientAlgoId'] ?? null,
             'exchange_order_id' => $order['orderId'] ?? $order['id'] ?? $order['algoId'] ?? null,
             'symbol' => $order['symbol'] ?? null,
-            'status' => strtoupper((string) ($order['status'] ?? $order['algoStatus'] ?? '')),
+            'status' => strtoupper((string) ($order['status'] ?? $order['planStatus'] ?? $order['algoStatus'] ?? '')),
             'side' => strtoupper((string) ($order['side'] ?? '')),
-            'type' => strtoupper((string) ($order['type'] ?? $order['orderType'] ?? $order['_orderType'] ?? '')),
+            'type' => strtoupper((string) ($order['_orderType'] ?? $order['type'] ?? $order['orderType'] ?? '')),
             'price' => (string) ($price ?? 0),
             'quantity' => (string) ($order['origQty'] ?? $order['qty'] ?? $order['size'] ?? $order['quantity'] ?? 0),
         ];
@@ -689,8 +770,33 @@ class PositionsController extends Controller
         if ($field === 'type') {
             return $this->typesEqual((string) $a, (string) $b);
         }
+        if ($field === 'status') {
+            return $this->statusesEqual((string) $a, (string) $b);
+        }
 
         return strtoupper((string) $a) === strtoupper((string) $b);
+    }
+
+    /**
+     * Order-status equality with cross-exchange aliasing. Same-shape
+     * resolver as typesEqual — direct uppercase match wins, else either
+     * side appears in the other's alias list.
+     */
+    private function statusesEqual(string $a, string $b): bool
+    {
+        $au = strtoupper($a);
+        $bu = strtoupper($b);
+        if ($au === $bu) {
+            return true;
+        }
+        if (isset(self::STATUS_ALIASES[$au]) && in_array($bu, self::STATUS_ALIASES[$au], true)) {
+            return true;
+        }
+        if (isset(self::STATUS_ALIASES[$bu]) && in_array($au, self::STATUS_ALIASES[$bu], true)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function typesEqual(string $a, string $b): bool

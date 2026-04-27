@@ -5,10 +5,10 @@
       • Verify Coverage  → counts, holes, contiguity %, staleness
       • Backtest         → runs BacktestSimulator and renders outcome totals + row table
 
-    Defaults pre-filled from Account #1 (TP, SL, leverage) and the selected
-    ExchangeSymbol (gap long/short, multipliers, total_limit_orders). Tune
-    the three load-bearing knobs (TP %, gap %, SL %) in the form, re-run,
-    compare non-rebound / stopped-out rates, land on per-token config.
+    Defaults pre-filled from Account #1 (TP, SL) and the selected
+    ExchangeSymbol (gap long/short). Tune the three load-bearing knobs
+    (TP %, gap %, SL %) in the form, re-run, compare stopped-out rates,
+    land on per-token config.
 --}}
 <x-app-layout :activeSection="'system'" :activeHighlight="'backtracking'" :flush="true">
     <div class="flex flex-col h-full"
@@ -29,33 +29,53 @@
             {{-- Form card --}}
             <x-hub-ui::card title="Configuration" subtitle="Ladder, rebound and filter knobs — tune per token, re-run.">
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                    <x-hub-ui::select name="exchange_symbol_id" label="Token (grouped by quote)" placeholder="— select —"
-                                       x-model="form.exchange_symbol_id" @change="onSymbolChange()">
-                        <option value="">— select —</option>
-                        <template x-for="(group, quote) in symbols" :key="quote">
-                            <optgroup :label="quote">
-                                <template x-for="sym in group" :key="sym.id">
-                                    <option :value="sym.id" x-text="sym.label"></option>
-                                </template>
-                            </optgroup>
-                        </template>
-                    </x-hub-ui::select>
+                    <div>
+                        <x-hub-ui::select name="exchange_symbol_id" label="Token (grouped by quote)" placeholder="— select —"
+                                           x-model="form.exchange_symbol_id" @change="onSymbolChange()">
+                            <option value="">— select —</option>
+                            <template x-for="(group, quote) in filteredSymbols()" :key="quote">
+                                <optgroup :label="quote">
+                                    <template x-for="sym in group" :key="sym.id">
+                                        <option :value="sym.id" x-text="formatSymbolOption(sym)"></option>
+                                    </template>
+                                </optgroup>
+                            </template>
+                        </x-hub-ui::select>
+
+                        <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-[11px] ui-text-muted">
+                                <input type="checkbox" x-model="filterNotReviewed"
+                                       @change="if (filterNotReviewed) { filterOnlyApproved = false; filterOnlyRejected = false; }"
+                                       class="rounded">
+                                <span>Not reviewed</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-[11px] ui-text-muted">
+                                <input type="checkbox" x-model="filterOnlyApproved"
+                                       @change="if (filterOnlyApproved) { filterNotReviewed = false; filterOnlyRejected = false; }"
+                                       class="rounded">
+                                <span>Only approved</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-[11px] ui-text-muted">
+                                <input type="checkbox" x-model="filterOnlyRejected"
+                                       @change="if (filterOnlyRejected) { filterNotReviewed = false; filterOnlyApproved = false; }"
+                                       class="rounded">
+                                <span>Only rejected</span>
+                            </label>
+                            <label class="inline-flex items-center gap-1.5 cursor-pointer text-[11px] ui-text-muted">
+                                <input type="checkbox" x-model="filterOnlyTop100" class="rounded">
+                                <span>Only top 100</span>
+                            </label>
+                            <span class="text-[11px] ui-text-subtle italic">
+                                <span x-text="visibleSymbolCount()"></span> shown
+                            </span>
+                        </div>
+                    </div>
 
                     <x-hub-ui::select name="timeframe" label="Timeframe" :placeholder="null" x-model="form.timeframe">
-                        <template x-for="tf in timeframes" :key="tf">
-                            <option :value="tf" x-text="tf"></option>
-                        </template>
+                        @foreach ($timeframes as $tf)
+                            <option value="{{ $tf }}">{{ $tf }}</option>
+                        @endforeach
                     </x-hub-ui::select>
-
-                    <x-hub-ui::input name="margin" label="Margin (quote)" type="number" step="0.01" x-model="form.margin" />
-
-                    <x-hub-ui::input name="leverage" label="Leverage" type="number" step="1" x-model.number="form.leverage" />
-
-                    <x-hub-ui::input name="total_limit_orders" label="Total Limit Orders (N)" type="number" step="1"
-                                      x-model.number="form.total_limit_orders" />
-
-                    <x-hub-ui::input name="multipliers" label="Multipliers (comma)" placeholder="e.g. 2,2,2,2"
-                                      x-model="form.multipliers" />
 
                     <x-hub-ui::input name="tp_percent" label="TP % (rebound knob)" type="number" step="0.01"
                                       x-model="form.tp_percent" />
@@ -69,32 +89,13 @@
                     <x-hub-ui::input name="gap_short_percent" label="Gap SHORT % (rebound knob)" type="number" step="0.01"
                                       x-model="form.gap_short_percent" />
 
-                    <x-hub-ui::input name="days_to_ignore" label="Days to Ignore (display)" type="number" step="1"
-                                      x-model.number="form.days_to_ignore" />
-
-                    <x-hub-ui::input name="candle" label="Specific Candle" placeholder="YYYY-MM-DD HH:MM"
-                                      x-model="form.candle" />
-
                     <x-hub-ui::input name="candles_back" label="Candles back"
                                       type="number" step="1" placeholder="leave empty = all history"
                                       hint="Applies to fetch AND backtest window."
                                       x-model.number="form.candles_back" />
-
-                    <x-hub-ui::input name="since" label="Since date"
-                                      placeholder="YYYY-MM-DD"
-                                      hint="Overrides “candles back” when filled."
-                                      x-model="form.since" />
                 </div>
 
-                <div class="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
-                    <x-hub-ui::checkbox name="skip_stop_loss" label="Skip SL evaluation" x-model="form.skip_stop_loss" />
-                </div>
-
-                <p class="mt-5 text-[11px] ui-text-subtle italic">
-                    Start candles inside the last <span class="font-semibold">15 days</span> are still simulated — rebounds, TP-market-only and stop-outs are counted as usual. Only their <span class="font-semibold">non-reboundable</span> verdicts get dropped, since "no rebound yet" inside that buffer just means the walker ran out of data.
-                </p>
-
-                <div class="mt-3 flex flex-wrap gap-2">
+                <div class="mt-5 flex flex-wrap gap-2">
                     <x-hub-ui::button variant="primary" size="sm"
                                        @click="runBacktest()"
                                        x-bind:disabled="!form.exchange_symbol_id || busy">
@@ -151,12 +152,34 @@
                     <h2 class="text-sm font-semibold ui-text">
                         Backtest Result — <span x-text="resultPair"></span>
                     </h2>
-                    <button type="button"
-                            @click="copyResultSummary()"
-                            class="text-[11px] font-medium ui-text-muted hover:ui-text underline-offset-2 hover:underline">
-                        <span x-show="!resultCopied">Copy full result</span>
-                        <span x-show="resultCopied">Copied ✓</span>
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <x-hub-ui::button variant="primary" size="sm"
+                                           x-show="currentSymbolStatus() !== 'approved'"
+                                           @click="setApproval(true)"
+                                           x-bind:disabled="approvalBusy || !form.exchange_symbol_id">
+                            <span x-show="!approvalBusy">Approve Backtesting</span>
+                            <span x-show="approvalBusy" class="inline-flex items-center gap-1.5">
+                                <x-hub-ui::spinner size="sm" /> Approving…
+                            </span>
+                        </x-hub-ui::button>
+
+                        <x-hub-ui::button variant="danger" size="sm"
+                                           x-show="currentSymbolStatus() !== 'rejected'"
+                                           @click="setApproval(false)"
+                                           x-bind:disabled="approvalBusy || !form.exchange_symbol_id">
+                            <span x-show="!approvalBusy">Reject Backtesting</span>
+                            <span x-show="approvalBusy" class="inline-flex items-center gap-1.5">
+                                <x-hub-ui::spinner size="sm" /> Rejecting…
+                            </span>
+                        </x-hub-ui::button>
+
+                        <button type="button"
+                                @click="copyResultSummary()"
+                                class="text-[11px] font-medium ui-text-muted hover:ui-text underline-offset-2 hover:underline">
+                            <span x-show="!resultCopied">Copy full result</span>
+                            <span x-show="resultCopied">Copied ✓</span>
+                        </button>
+                    </div>
                 </div>
 
                 {{-- Hero — single comparable score + grade + verdict --}}
@@ -178,7 +201,7 @@
                     </div>
                 </div>
 
-                <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs mb-4">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-4">
                     <div class="p-2 rounded bg-gray-50 text-gray-900">
                         <div class="text-gray-600">Candles analysed</div>
                         <div class="font-mono font-semibold text-gray-900" x-text="result?.totals?.candles ?? 0"></div>
@@ -199,15 +222,10 @@
                         <div class="font-mono font-semibold text-red-900"><span x-text="result?.totals?.stops ?? 0"></span> (<span x-text="pct('stops')"></span>%)</div>
                         <div class="text-[10px] text-red-700/70 italic mt-0.5">Real losses. Lower = safer.</div>
                     </div>
-                    <div class="p-2 rounded bg-amber-50 text-amber-900">
-                        <div class="text-amber-700">Non-reboundable</div>
-                        <div class="font-mono font-semibold text-amber-900"><span x-text="result?.totals?.non_reboundable ?? 0"></span> (<span x-text="pct('non_reboundable')"></span>%)</div>
-                        <div class="text-[10px] text-amber-700/70 italic mt-0.5">Never recovered within window. Lower = safer.</div>
-                    </div>
                 </div>
 
-                <div x-show="(result?.totals?.dropped_inconclusive ?? 0) > 0" class="text-[11px] ui-text-subtle italic mb-2">
-                    <span x-text="result?.totals?.dropped_inconclusive ?? 0"></span> sim(s) inside the 15-day buffer dropped as inconclusive (non-reboundable verdict without enough forward data).
+                <div x-show="(result?.totals?.inconclusive ?? 0) > 0" class="text-[11px] ui-text-subtle italic mb-2">
+                    <span x-text="result?.totals?.inconclusive ?? 0"></span> sim(s) inconclusive — walker ran out of forward data before TP or SL fired (typical for very recent start candles).
                 </div>
 
                 {{-- AI Insights --}}
@@ -255,7 +273,7 @@
                     <div class="p-2 rounded" :class="metricTileClass('risk_score')">
                         <div>Risk score</div>
                         <div class="font-mono font-semibold" x-text="result?.totals?.risk_score ?? '—'"></div>
-                        <div class="text-[10px] italic mt-0.5 opacity-70">Composite = stops%×3 + non-reb%×2 + avg rung. Lower = safer.</div>
+                        <div class="text-[10px] italic mt-0.5 opacity-70">Composite = stops%×3 + avg rung. Lower = safer.</div>
                     </div>
                     <div class="p-2 rounded" :class="metricTileClass('rung_depth')">
                         <div>Avg rung depth / N</div>
@@ -330,7 +348,6 @@
                                     <th class="text-left px-2 py-1">candles</th>
                                     <th class="text-left px-2 py-1">pass</th>
                                     <th class="text-left px-2 py-1">stops</th>
-                                    <th class="text-left px-2 py-1">non-reb</th>
                                     <th class="text-left px-2 py-1">pass rate</th>
                                 </tr>
                             </thead>
@@ -342,7 +359,6 @@
                                         <td class="px-2 py-0.5" x-text="r.candles"></td>
                                         <td class="px-2 py-0.5" x-text="(r.tp_market_only + r.reboundable)"></td>
                                         <td class="px-2 py-0.5" x-text="r.stops"></td>
-                                        <td class="px-2 py-0.5" x-text="r.non_reboundable"></td>
                                         <td class="px-2 py-0.5"><span x-text="r.pass_rate"></span>%</td>
                                     </tr>
                                 </template>
@@ -356,20 +372,12 @@
                 </div>
 
                 <div x-show="result?.rows?.length" class="flex flex-wrap items-center gap-4 mb-2 text-xs">
-                    <label class="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input type="checkbox" x-model="filterOnlySlHits" class="rounded">
-                        <span class="ui-text-muted">Only SL hits</span>
-                    </label>
-                    <label class="inline-flex items-center gap-1.5 cursor-pointer">
-                        <input type="checkbox" x-model="filterOnlyNonRebounds" class="rounded">
-                        <span class="ui-text-muted">Only non-rebounds</span>
-                    </label>
                     <span class="ui-text-subtle italic">
-                        Showing <span x-text="visibleRows().length"></span> of <span x-text="result?.rows?.length ?? 0"></span>
+                        <span x-text="result?.rows?.length ?? 0"></span> failure row(s)
                     </span>
                 </div>
 
-                <div x-show="visibleRows().length" class="overflow-auto max-h-[500px] border rounded bg-white text-gray-900">
+                <div x-show="(result?.rows ?? []).length" class="overflow-auto max-h-[500px] border rounded bg-white text-gray-900">
                     <table class="min-w-full text-[11px] font-mono text-gray-900">
                         <thead class="bg-gray-100 text-gray-900 sticky top-0">
                             <tr>
@@ -386,7 +394,7 @@
                             </tr>
                         </thead>
                         <tbody class="text-gray-900">
-                            <template x-for="(row, i) in visibleRows()" :key="i">
+                            <template x-for="(row, i) in (result?.rows ?? [])" :key="i">
                                 <tr class="border-t text-gray-900" :class="rowClass(row.status)">
                                     <td class="px-2 py-0.5" x-text="row.direction"></td>
                                     <td class="px-2 py-0.5" x-text="row.start_candle"></td>
@@ -402,10 +410,6 @@
                             </template>
                         </tbody>
                     </table>
-                </div>
-
-                <div x-show="result?.rows?.length && !visibleRows().length" class="text-xs ui-text-muted italic">
-                    No rows match the current filters — uncheck a box or widen the criteria.
                 </div>
 
                 <div x-show="!result?.rows?.length" class="text-xs ui-text-muted italic">
@@ -425,28 +429,23 @@
             form: {
                 exchange_symbol_id: '',
                 timeframe: '1d',
-                margin: defaults.margin,
-                leverage: defaults.leverage,
-                total_limit_orders: defaults.total_limit_orders,
-                multipliers: '',
                 tp_percent: defaults.tp_percent,
                 gap_long_percent: '',
                 gap_short_percent: '',
                 sl_percent: defaults.sl_percent,
-                skip_stop_loss: false,
-                days_to_ignore: defaults.days_to_ignore,
                 limit_hit: '',
-                candle: '',
                 candles_back: 365,
-                since: '',
             },
 
             coverage: null,
             result: null,
             resultPair: '',
             rowsTruncated: false,
-            filterOnlySlHits: false,
-            filterOnlyNonRebounds: false,
+            filterNotReviewed: true,
+            filterOnlyApproved: false,
+            filterOnlyRejected: false,
+            filterOnlyTop100: false,
+            approvalBusy: false,
             statusMessage: '',
             statusError: false,
 
@@ -474,20 +473,12 @@
                 // override so a previous token's tuning never leaks into the next
                 // test. Then layer the symbol's stored values where present.
                 const symId = this.form.exchange_symbol_id;
-                this.form.margin = defaults.margin;
-                this.form.leverage = defaults.leverage;
-                this.form.total_limit_orders = defaults.total_limit_orders;
-                this.form.multipliers = '';
                 this.form.tp_percent = defaults.tp_percent;
                 this.form.gap_long_percent = '';
                 this.form.gap_short_percent = '';
                 this.form.sl_percent = defaults.sl_percent;
-                this.form.skip_stop_loss = false;
-                this.form.days_to_ignore = defaults.days_to_ignore;
                 this.form.limit_hit = '';
-                this.form.candle = '';
                 this.form.candles_back = 365;
-                this.form.since = '';
                 this.form.timeframe = '1d';
 
                 this.coverage = null;
@@ -500,15 +491,6 @@
 
                 if (sym.percentage_gap_long != null) this.form.gap_long_percent = sym.percentage_gap_long;
                 if (sym.percentage_gap_short != null) this.form.gap_short_percent = sym.percentage_gap_short;
-                if (sym.total_limit_orders) this.form.total_limit_orders = parseInt(sym.total_limit_orders, 10);
-                if (sym.limit_quantity_multipliers) {
-                    try {
-                        const m = typeof sym.limit_quantity_multipliers === 'string'
-                            ? JSON.parse(sym.limit_quantity_multipliers)
-                            : sym.limit_quantity_multipliers;
-                        if (Array.isArray(m)) this.form.multipliers = m.join(',');
-                    } catch (e) { /* ignore */ }
-                }
             },
 
             findSymbol(id) {
@@ -520,22 +502,123 @@
                 return null;
             },
 
+            formatSymbolOption(sym) {
+                let out = sym.label;
+                if (sym.cmc_ranking != null) out += ` (${sym.cmc_ranking})`;
+                if (sym.cmc_category) out += ` (${sym.cmc_category})`;
+                if (sym.was_backtesting_approved) out += ' ✓';
+                return out;
+            },
+
+            filteredSymbols() {
+                // status null = not yet reviewed; 'approved' / 'rejected' = decided.
+                // Review-status checkboxes are mutually exclusive among themselves.
+                // Top-100 is orthogonal — it AND-combines with whichever review
+                // filter is active.
+                const passesStatus = (s) => {
+                    const status = s.backtesting_review_status;
+                    if (this.filterNotReviewed) return status === null || status === undefined;
+                    if (this.filterOnlyApproved) return status === 'approved';
+                    if (this.filterOnlyRejected) return status === 'rejected';
+                    return true;
+                };
+                const passesRank = (s) =>
+                    !this.filterOnlyTop100 || (s.cmc_ranking != null && s.cmc_ranking <= 100);
+
+                const out = {};
+                for (const [quote, group] of Object.entries(this.symbols)) {
+                    const kept = group.filter(s => passesStatus(s) && passesRank(s));
+                    if (kept.length) out[quote] = kept;
+                }
+                return out;
+            },
+
+            visibleSymbolCount() {
+                return Object.values(this.filteredSymbols()).reduce((n, g) => n + g.length, 0);
+            },
+
+            currentSymbolApproved() {
+                const s = this.findSymbol(this.form.exchange_symbol_id);
+                return !!s?.was_backtesting_approved;
+            },
+
+            currentSymbolStatus() {
+                const s = this.findSymbol(this.form.exchange_symbol_id);
+                return s?.backtesting_review_status ?? null;
+            },
+
+            async setApproval(approve) {
+                if (!this.form.exchange_symbol_id) return;
+                this.approvalBusy = true;
+                try {
+                    const payload = {
+                        exchange_symbol_id: this.form.exchange_symbol_id,
+                        approve: approve,
+                    };
+                    if (approve) {
+                        if (this.form.gap_long_percent !== '' && this.form.gap_long_percent !== null) {
+                            payload.gap_long_percent = this.form.gap_long_percent;
+                        }
+                        if (this.form.gap_short_percent !== '' && this.form.gap_short_percent !== null) {
+                            payload.gap_short_percent = this.form.gap_short_percent;
+                        }
+                    }
+                    const res = await this.post('{{ route('system.backtracking.toggle-approval') }}', payload);
+                    if (res.ok) {
+                        // Rebuild the symbols structure with the mutated row
+                        // replaced. Direct nested-property mutation ($s.x = y)
+                        // does not always re-trigger Alpine's `filteredSymbols()`
+                        // / `currentSymbolStatus()` evaluators because the
+                        // top-level `symbols` reference doesn't change. Cloning
+                        // the matching group + row guarantees the watchers
+                        // reading `this.symbols` see a fresh ref.
+                        const targetId = String(this.form.exchange_symbol_id);
+                        const next = {};
+                        for (const [quote, group] of Object.entries(this.symbols)) {
+                            next[quote] = group.map(s => {
+                                if (String(s.id) !== targetId) return s;
+                                return {
+                                    ...s,
+                                    was_backtesting_approved: !!res.was_backtesting_approved,
+                                    backtesting_review_status: res.backtesting_review_status ?? null,
+                                    percentage_gap_long: res.percentage_gap_long ?? s.percentage_gap_long,
+                                    percentage_gap_short: res.percentage_gap_short ?? s.percentage_gap_short,
+                                };
+                            });
+                        }
+                        this.symbols = next;
+
+                        // Clear form + result panel so the operator can pick the
+                        // next token without manually wiping prior knobs / output.
+                        this.form.exchange_symbol_id = '';
+                        this.onSymbolChange();
+                        this.aiInsights = '';
+                        this.aiInsightsModel = '';
+                        this.aiError = '';
+                    } else {
+                        // Surface backend errors instead of silently dropping the
+                        // failure on the floor. Operator needs to see what broke.
+                        const msg = res.error
+                            ? `${approve ? 'Approve' : 'Reject'} failed: ${res.error}${res.exception ? ' ('+res.exception+')' : ''}`
+                            : `${approve ? 'Approve' : 'Reject'} failed (no error message returned).`;
+                        this.statusMessage = msg;
+                        this.statusError = true;
+                        if (typeof window.showToast === 'function') {
+                            window.showToast(msg, 'error', 8000);
+                        } else {
+                            console.error(msg);
+                        }
+                    }
+                } finally {
+                    this.approvalBusy = false;
+                }
+            },
+
             pct(key) {
                 if (!this.result?.totals) return '0.00';
                 const sims = (this.result.totals.candles ?? 0) * 2;
                 if (!sims) return '0.00';
                 return ((this.result.totals[key] ?? 0) / sims * 100).toFixed(2);
-            },
-
-            visibleRows() {
-                const rows = this.result?.rows ?? [];
-                if (!this.filterOnlySlHits && !this.filterOnlyNonRebounds) return rows;
-
-                const allowed = new Set();
-                if (this.filterOnlySlHits) allowed.add('stopped_out');
-                if (this.filterOnlyNonRebounds) allowed.add('non-reboundable');
-
-                return rows.filter(r => allowed.has(r.status));
             },
 
             buildResultSummary() {
@@ -563,9 +646,8 @@
                 parts.push(`  TP from market-only: ${t.tp_market_only ?? 0} (${pctFmt('tp_market_only')}%)`);
                 parts.push(`  Reboundable: ${t.reboundable ?? 0} (${pctFmt('reboundable')}%)`);
                 parts.push(`  Stopped out: ${t.stops ?? 0} (${pctFmt('stops')}%)`);
-                parts.push(`  Non-reboundable: ${t.non_reboundable ?? 0} (${pctFmt('non_reboundable')}%)`);
-                if (t.dropped_inconclusive) {
-                    parts.push(`  Dropped (inside 15-day buffer): ${t.dropped_inconclusive}`);
+                if (t.inconclusive) {
+                    parts.push(`  Inconclusive (walker ran out of data): ${t.inconclusive}`);
                 }
                 parts.push('');
                 parts.push('ANALYTICS');
@@ -586,9 +668,9 @@
                 parts.push('REGIME BUCKETS');
                 const regimes = this.result.regimes ?? [];
                 if (regimes.length) {
-                    parts.push('  from                  to                    candles  pass  stops  non-reb  pass_rate');
+                    parts.push('  from                  to                    candles  pass  stops  pass_rate');
                     for (const r of regimes) {
-                        parts.push(`  ${(r.from ?? '').padEnd(20)}  ${(r.to ?? '').padEnd(20)}  ${String(r.candles).padStart(7)}  ${String((r.tp_market_only ?? 0) + (r.reboundable ?? 0)).padStart(4)}  ${String(r.stops ?? 0).padStart(5)}  ${String(r.non_reboundable ?? 0).padStart(7)}  ${r.pass_rate}%`);
+                        parts.push(`  ${(r.from ?? '').padEnd(20)}  ${(r.to ?? '').padEnd(20)}  ${String(r.candles).padStart(7)}  ${String((r.tp_market_only ?? 0) + (r.reboundable ?? 0)).padStart(4)}  ${String(r.stops ?? 0).padStart(5)}  ${r.pass_rate}%`);
                     }
                 } else {
                     parts.push('  (no buckets)');
@@ -721,7 +803,7 @@
             rowClass(status) {
                 if (status === 'tp_hit_from_market_only' || status === 'reboundable') return 'bg-emerald-50';
                 if (status === 'stopped_out') return 'bg-red-50';
-                if (status === 'non-reboundable') return 'bg-amber-50';
+                if (status === 'inconclusive') return 'bg-amber-50';
                 return 'bg-gray-50';
             },
 
@@ -745,9 +827,6 @@
                     };
                     if (this.form.candles_back !== '' && this.form.candles_back !== null) {
                         fetchPayload.candles_back = this.form.candles_back;
-                    }
-                    if (this.form.since && this.form.since.trim() !== '') {
-                        fetchPayload.since = this.form.since.trim();
                     }
 
                     const fetchRes = await this.post('{{ route('system.backtracking.fetch-candles') }}', fetchPayload);

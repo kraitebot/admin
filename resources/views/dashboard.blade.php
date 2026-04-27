@@ -1,4 +1,4 @@
-<x-app-layout>
+<x-app-layout :activeHighlight="'dashboard'">
     <div x-data="userDashboard()" x-init="init()">
 
         {{-- Header strip: title + account selector --}}

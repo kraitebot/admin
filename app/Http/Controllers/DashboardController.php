@@ -144,14 +144,21 @@ class DashboardController extends Controller
             ? number_format((float) bcmul(bcdiv($maintMargin, $marginBalance, 6), '100', 4), 2, '.', '')
             : null;
 
-        $peak = DB::table('account_balance_history')
+        // Max historical drawdown = (peak - trough) / peak. Reads as "the
+        // worst dip the account has ever taken". Peak-vs-current would
+        // show 0% when the live margin happens to match the historic high
+        // (common when the account has been monotonically growing or the
+        // latest write coincides with the previous max), masking the
+        // risk-history signal an operator wants on the dashboard.
+        $extremes = DB::table('account_balance_history')
             ->where('account_id', $account->id)
-            ->max('total_margin_balance');
+            ->selectRaw('MAX(total_margin_balance) AS peak, MIN(total_margin_balance) AS trough')
+            ->first();
 
         $drawdownPct = null;
-        if ($peak !== null && is_numeric($peak) && bccomp((string) $peak, '0', 16) > 0) {
-            $delta = bcsub((string) $peak, $marginBalance, 16);
-            $drawdownPct = number_format((float) bcmul(bcdiv($delta, (string) $peak, 6), '100', 4), 2, '.', '');
+        if ($extremes && $extremes->peak !== null && is_numeric($extremes->peak) && bccomp((string) $extremes->peak, '0', 16) > 0) {
+            $delta = bcsub((string) $extremes->peak, (string) ($extremes->trough ?? $extremes->peak), 16);
+            $drawdownPct = number_format((float) bcmul(bcdiv($delta, (string) $extremes->peak, 6), '100', 4), 2, '.', '');
         }
 
         return [
