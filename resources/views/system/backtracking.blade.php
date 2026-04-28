@@ -203,10 +203,10 @@
                 </div>
 
                 <div class="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs mb-4">
-                    <div class="p-2 rounded bg-gray-50 text-gray-900">
-                        <div class="text-gray-600">Candles analysed</div>
-                        <div class="font-mono font-semibold text-gray-900" x-text="result?.totals?.candles ?? 0"></div>
-                        <div class="text-[10px] text-gray-500 italic mt-0.5">Bigger sample — more reliable.</div>
+                    <div class="p-2 rounded" :class="candlesTileClass()">
+                        <div :class="candlesLabelClass()">Candles analysed</div>
+                        <div class="font-mono font-semibold" :class="candlesValueClass()" x-text="result?.totals?.candles ?? 0"></div>
+                        <div class="text-[10px] italic mt-0.5" :class="candlesHintClass()" x-text="candlesHintText()"></div>
                     </div>
                     <div class="p-2 rounded bg-emerald-50 text-emerald-900">
                         <div class="text-emerald-700">TP from market-only</div>
@@ -787,6 +787,36 @@
                 } finally {
                     this.aiBusy = false;
                 }
+            },
+
+            // Sample-size colouring on the "Candles analysed" tile. Threshold
+            // mirrors the simulator's sample_size_penalty knee at 180; below
+            // 90 is hard-red ("clearly not enough"), 90-179 amber ("thin"),
+            // 180+ green/normal.
+            candlesBucket() {
+                const n = Number(this.result?.totals?.candles ?? 0);
+                if (n >= 180) return 'ok';
+                if (n >= 90) return 'warn';
+                return 'bad';
+            },
+            candlesTileClass() {
+                return ({ ok: 'bg-emerald-50 text-emerald-900', warn: 'bg-amber-50 text-amber-900', bad: 'bg-red-50 text-red-900' })[this.candlesBucket()];
+            },
+            candlesLabelClass() {
+                return ({ ok: 'text-emerald-700', warn: 'text-amber-700', bad: 'text-red-700' })[this.candlesBucket()];
+            },
+            candlesValueClass() {
+                return ({ ok: 'text-emerald-900', warn: 'text-amber-900', bad: 'text-red-900' })[this.candlesBucket()];
+            },
+            candlesHintClass() {
+                return ({ ok: 'text-emerald-700/70', warn: 'text-amber-700/80', bad: 'text-red-700/80' })[this.candlesBucket()];
+            },
+            candlesHintText() {
+                const n = Number(this.result?.totals?.candles ?? 0);
+                const penalty = Number(this.result?.totals?.sample_size_penalty ?? 0);
+                if (n >= 180) return 'Bigger sample — more reliable.';
+                const target = this.result?.totals?.sample_size_threshold ?? 180;
+                return `Thin sample (${n}/${target}). Score docked −${penalty.toFixed(1)} for low evidence.`;
             },
 
             metricTileClass(metric) {

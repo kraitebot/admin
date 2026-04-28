@@ -154,12 +154,7 @@
                         </div>
                     </template>
 
-                    {{-- Inner content: greyscaled while position isn't fully
-                         active so the operator can't mistake transient
-                         numbers for live trading state. --}}
-                    <div class="flex flex-col gap-2"
-                         :class="position.status !== 'active' ? 'kraite-tile-transient' : ''"
-                    >
+                    <div class="flex flex-col gap-2">
 
                     {{-- Tile header: icon + token meta + direction badge --}}
                     <div class="flex items-center gap-2">
@@ -181,9 +176,7 @@
                             <div class="flex items-center gap-1.5 mt-1 flex-wrap">
                                 <span
                                     class="inline-flex items-center gap-0.5 text-[9px] uppercase font-semibold tracking-[0.08em] px-1 py-0.5 rounded"
-                                    :style="position.direction === 'LONG'
-                                        ? 'background-color: rgb(var(--ui-success) / 0.15); color: rgb(var(--ui-success))'
-                                        : 'background-color: rgb(var(--ui-danger) / 0.15); color: rgb(var(--ui-danger))'"
+                                    :style="directionStyle(position)"
                                 >
                                     <svg x-show="position.direction === 'LONG'" class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5">
                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M5 12l7-7 7 7" />
@@ -231,7 +224,7 @@
                             {{-- Stress fill (0% → AlphaPath%) --}}
                             <div
                                 class="absolute left-0 top-1/2 -translate-y-1/2 h-1 rounded-full transition-all duration-300"
-                                :style="`width: ${Math.min(100, parseFloat(position.alpha_path_pct))}%; background-color: ${stressColor(position.alpha_path_pct)}`"
+                                :style="`width: ${Math.min(100, parseFloat(position.alpha_path_pct))}%; background-color: ${stressColor(position.alpha_path_pct, position.status)}`"
                             ></div>
 
                             {{-- Original TP ghost marker (where TP was before any limit filled — only
@@ -252,8 +245,8 @@
                                 :style="`left: ${tickFraction(position, position.profit_price) * 100}%`"
                                 :title="'TP ' + formatPrice(position.profit_price)"
                             >
-                                <div class="absolute -top-2.5 text-[8px] font-bold uppercase tracking-wider leading-none" style="color: rgb(var(--ui-success))">TP</div>
-                                <div class="w-0.5 h-5 rounded-full" style="background-color: rgb(var(--ui-success))"></div>
+                                <div class="absolute -top-2.5 text-[8px] font-bold uppercase tracking-wider leading-none" :style="`color: ${tpColor(position)}`">TP</div>
+                                <div class="w-0.5 h-5 rounded-full" :style="`background-color: ${tpColor(position)}`"></div>
                             </div>
 
                             {{-- Unfilled limit ticks --}}
@@ -274,7 +267,7 @@
                                 :style="`left: ${currentPriceFraction(position) * 100}%`"
                                 :title="'Current ' + formatPrice(position.current_price)"
                             >
-                                <div class="w-3 h-3 rounded-full border-2" style="background-color: rgb(var(--ui-bg-card)); border-color: rgb(var(--ui-primary)); box-shadow: 0 0 0 2px rgb(var(--ui-primary) / 0.2);"></div>
+                                <div class="w-3 h-3 rounded-full border-2" :style="currentPriceMarkerStyle(position)"></div>
                             </div>
                         </div>
                     </div>
@@ -299,7 +292,7 @@
                                 <span>PnL</span>
                             </div>
                             <div class="text-sm font-bold font-mono ui-tabular mt-0.5"
-                                 :style="pnlColor(position.pnl)"
+                                 :style="pnlColor(position.pnl, position.status)"
                                  x-text="position.pnl !== null ? (parseFloat(position.pnl) >= 0 ? '+' : '') + '$' + formatPrice(position.pnl) : '—'"></div>
                         </div>
                     </div>
@@ -315,7 +308,7 @@
                             </div>
                             <div
                                 class="text-base font-bold font-mono ui-tabular mt-0.5"
-                                :style="`color: ${stressColor(position.alpha_path_pct)}`"
+                                :style="`color: ${stressColor(position.alpha_path_pct, position.status)}`"
                                 x-text="position.alpha_path_pct + '%'"
                             ></div>
                         </div>
@@ -352,13 +345,13 @@
                             <div class="text-[11px] font-mono ui-text-muted ui-tabular mt-0.5 leading-none" x-text="formatPrice(position.first_profit_price)"></div>
                         </div>
                         <div class="flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider" style="color: rgb(var(--ui-success))">
+                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider" :style="`color: ${tpColor(position)}`">
                                 <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                                     <path stroke-linecap="round" d="M12 19V5M5 12l7-7 7 7" />
                                 </svg>
                                 <span>TP</span>
                             </div>
-                            <div class="text-[11px] font-mono ui-tabular mt-0.5 leading-none" style="color: rgb(var(--ui-success))" x-text="formatPrice(position.profit_price)"></div>
+                            <div class="text-[11px] font-mono ui-tabular mt-0.5 leading-none" :style="`color: ${tpColor(position)}`" x-text="formatPrice(position.profit_price)"></div>
                         </div>
                         <div class="flex flex-col items-center">
                             <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
@@ -371,7 +364,7 @@
                         </div>
                     </div>
 
-                    </div>{{-- /transient-grayscale wrapper --}}
+                    </div>
 
                 </div>
             </template>
@@ -379,15 +372,6 @@
 
     </div>
 
-    <style>
-        /* Desaturate every coloured glyph inside the tile when the position
-           is mid-flight (opening / closing / syncing / waping / cancelling).
-           Keeps the operator from acting on transient numbers — the only
-           coloured cue is the status pill that sits OUTSIDE this wrapper. */
-        .kraite-tile-transient {
-            filter: grayscale(1);
-        }
-    </style>
 
     <script>
         function userDashboard() {
@@ -459,7 +443,7 @@
 
                 optionLabel(acc) {
                     return this.isAdmin
-                        ? acc.owner + ' · ' + acc.exchange + ' · ' + acc.name
+                        ? acc.owner + ' · ' + acc.name
                         : acc.exchange + ' · ' + acc.name;
                 },
 
@@ -522,7 +506,12 @@
                     return (position.limits || []).filter(l => !l.filled);
                 },
 
-                pnlColor(pnl) {
+                isTransient(position) {
+                    return position && position.status !== 'active';
+                },
+
+                pnlColor(pnl, status) {
+                    if (status && status !== 'active') return 'color: rgb(var(--ui-text-muted))';
                     if (pnl === null || pnl === undefined) return 'color: rgb(var(--ui-text-subtle))';
                     const v = parseFloat(pnl) || 0;
                     if (v < 0) return 'color: rgb(var(--ui-danger))';
@@ -530,12 +519,38 @@
                     return 'color: rgb(var(--ui-text-muted))';
                 },
 
-                stressColor(pct) {
+                stressColor(pct, status) {
+                    if (status && status !== 'active') return 'rgb(var(--ui-text-muted))';
                     const v = parseFloat(pct) || 0;
                     if (v >= 75) return 'rgb(var(--ui-danger))';
                     if (v >= 50) return 'rgb(var(--ui-warning))';
                     if (v >= 25) return 'rgb(var(--ui-info))';
                     return 'rgb(var(--ui-success))';
+                },
+
+                directionStyle(position) {
+                    if (this.isTransient(position)) {
+                        return 'background-color: rgb(var(--ui-bg-elevated)); color: rgb(var(--ui-text-muted))';
+                    }
+                    return position.direction === 'LONG'
+                        ? 'background-color: rgb(var(--ui-success) / 0.15); color: rgb(var(--ui-success))'
+                        : 'background-color: rgb(var(--ui-danger) / 0.15); color: rgb(var(--ui-danger))';
+                },
+
+                tpColor(position) {
+                    return this.isTransient(position)
+                        ? 'rgb(var(--ui-text-muted))'
+                        : 'rgb(var(--ui-success))';
+                },
+
+                currentPriceMarkerStyle(position) {
+                    const c = this.isTransient(position)
+                        ? 'rgb(var(--ui-text-muted))'
+                        : 'rgb(var(--ui-primary))';
+                    const ring = this.isTransient(position)
+                        ? 'rgb(var(--ui-text-muted) / 0.2)'
+                        : 'rgb(var(--ui-primary) / 0.2)';
+                    return `background-color: rgb(var(--ui-bg-card)); border-color: ${c}; box-shadow: 0 0 0 2px ${ring};`;
                 },
 
                 dotColor(direction) {

@@ -454,7 +454,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/brunocfalcao/step-dispatcher",
-                "reference": "ce2f8c48f0118f327d820070928bd199b6f715fc"
+                "reference": "7d23d8b5907edf66beb55d00a326c534fd1299d8"
             },
             "require": {
                 "illuminate/console": "^11.0|^12.0|^13.0",
@@ -1589,7 +1589,7 @@
             "dist": {
                 "type": "path",
                 "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "68de3e276ea847e73cd847124de1f844203cf6fe"
+                "reference": "78535c197ed95d74ab6ecb3b51923eecf3881c02"
             },
             "require": {
                 "angle/chrono": "^1.0",

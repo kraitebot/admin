@@ -151,18 +151,20 @@
                             :style="cellStyle(cell)"
                         >
                             {{-- Day number — top-left corner --}}
-                            <span class="absolute top-1 left-1.5 font-mono ui-tabular text-[10px] leading-none"
+                            <span class="absolute top-0.5 left-1 font-mono ui-tabular text-[9px] sm:text-[10px] leading-none"
                                   :class="cell.kind === 'spacer' ? 'opacity-0' : ''"
                                   x-text="cell.day || ''"></span>
 
                             {{-- Tags — top-right corner --}}
-                            <span x-show="cell.kind === 'projected'" class="absolute top-1 right-1.5 text-[7px] uppercase tracking-wider opacity-60 leading-none">proj</span>
-                            <span x-show="cell.kind === 'today'" class="absolute top-1 right-1.5 text-[7px] uppercase tracking-wider font-semibold leading-none" style="color: rgb(var(--ui-primary))">today</span>
+                            <span x-show="cell.kind === 'projected'" class="absolute top-0.5 right-1 text-[6px] sm:text-[7px] uppercase tracking-wider opacity-60 leading-none">proj</span>
+                            <span x-show="cell.kind === 'today'" class="absolute top-0.5 right-1 text-[6px] sm:text-[7px] uppercase tracking-wider font-semibold leading-none" style="color: rgb(var(--ui-primary))">today</span>
 
-                            {{-- Revenue — centered --}}
+                            {{-- Revenue — centered, responsive sizing so iOS portrait
+                                 cells don't overflow the cell box. Scales up on
+                                 wider viewports. --}}
                             <div x-show="cell.kind !== 'spacer' && cell.kind !== 'no-data'" class="flex items-baseline gap-0.5 leading-none">
-                                <span class="text-[11px] opacity-70">$</span>
-                                <span class="font-mono font-bold ui-tabular text-[18px]" x-text="formatRevenue(cell.revenue)"></span>
+                                <span class="text-[8px] sm:text-[10px] md:text-[11px] opacity-70">$</span>
+                                <span class="font-mono font-bold ui-tabular text-[12px] sm:text-[15px] md:text-[18px]" x-text="formatRevenue(cell.revenue)"></span>
                             </div>
 
                             <div x-show="cell.kind === 'no-data'" class="text-[10px] ui-text-subtle italic">—</div>

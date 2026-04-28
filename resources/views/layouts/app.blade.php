@@ -6,6 +6,7 @@
     };
     $activeHighlight = $activeHighlight ?: match(true) {
         request()->routeIs('projections') => 'projections',
+        request()->routeIs('billing') => 'billing',
         request()->routeIs('accounts.positions') => 'positions',
         request()->routeIs('accounts.edit') => 'edit-account',
         request()->routeIs('system.dashboard') => 'system-dashboard',
@@ -13,6 +14,7 @@
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
         request()->routeIs('system.backtracking') => 'backtracking',
+        request()->routeIs('system.users*') => 'system-users',
         request()->routeIs('system.ui-components') => 'ui-components',
         default => $activeSection,
     };
@@ -56,6 +58,23 @@
                 </span>
                 <span class="text-xs">Projections</span>
             </a>
+
+            @if(! auth()->user()?->is_admin)
+            <a
+                href="{{ route('billing') }}" wire:navigate
+                data-nav-item="billing"
+                @click="highlight = 'billing'; $nextTick(() => open = null)"
+                class="flex flex-col items-center gap-1 py-2 rounded-xl cursor-pointer transition-colors relative z-10"
+                :class="highlight === 'billing' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+            >
+                <span class="w-7 h-7">
+                    <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+                    </svg>
+                </span>
+                <span class="text-xs">Billing</span>
+            </a>
+            @endif
 
             <a
                 href="{{ route('bscs') }}" wire:navigate
@@ -130,6 +149,21 @@
                         </svg>
                     </span>
                     <span class="text-xs">Dashboard</span>
+                </a>
+
+                <a
+                    href="{{ route('system.users') }}" wire:navigate
+                    data-nav-item="system-users"
+                    @click="highlight = 'system-users'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'system-users' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Billing</span>
                 </a>
 
                 <a

@@ -12,6 +12,8 @@ use App\Http\Controllers\System\DashboardController as SystemDashboardController
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
+use App\Http\Controllers\System\UsersController as SystemUsersController;
+use App\Http\Controllers\BillingController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -89,11 +91,27 @@ Route::middleware('auth')->group(function () {
             ->middleware('throttle:10,1')
             ->name('system.backtracking.ai-insights');
 
+        // Users admin — list every user, view billing state, apply manual
+        // wallet credits/debits via the wallet_transactions ledger,
+        // change a user's subscription tier.
+        Route::get('/system/users/{user?}', [SystemUsersController::class, 'index'])->name('system.users');
+        Route::post('/system/users/{user}/credit', [SystemUsersController::class, 'adjustCredit'])->name('system.users.credit');
+        Route::post('/system/users/{user}/subscription', [SystemUsersController::class, 'changeSubscription'])->name('system.users.subscription');
+        Route::post('/system/users/{user}/start-trial', [SystemUsersController::class, 'startTrial'])->name('system.users.start-trial');
+        Route::post('/system/users/{user}/trial-days', [SystemUsersController::class, 'changeTrialDays'])->name('system.users.trial-days');
+
         // UI Components showcase — dev-only surface, never reachable in prod.
         if (! app()->isProduction()) {
             Route::get('/system/ui-components', [UiComponentsController::class, 'index'])->name('system.ui-components');
         }
     });
+
+    // User-facing billing area — own balance, plan switcher, top-up
+    // (mock pre-NOWPayments integration), wallet history, start-trading
+    // trigger.
+    Route::get('/billing', [BillingController::class, 'index'])->name('billing');
+    Route::post('/billing/start-trading', [BillingController::class, 'startTrading'])->name('billing.start-trading');
+    Route::post('/billing/subscription', [BillingController::class, 'changeSubscription'])->name('billing.subscription');
 });
 
 require __DIR__.'/auth.php';
