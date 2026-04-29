@@ -100,6 +100,32 @@ final class UsersController extends Controller
             ->with('status', 'Subscription updated.');
     }
 
+    public function changeActiveAccount(Request $request, User $user): RedirectResponse
+    {
+        $data = $request->validate([
+            'active_account_id' => 'nullable|integer|exists:accounts,id',
+        ]);
+
+        $accountId = $data['active_account_id'] ?? null;
+
+        if ($accountId !== null) {
+            $belongsToUser = $user->accounts()->where('id', $accountId)->exists();
+
+            if (! $belongsToUser) {
+                return redirect()
+                    ->route('system.users', $user)
+                    ->with('error', 'That account does not belong to this user.');
+            }
+        }
+
+        $user->active_account_id = $accountId !== null ? (int) $accountId : null;
+        $user->save();
+
+        return redirect()
+            ->route('system.users', $user)
+            ->with('status', 'Active account updated.');
+    }
+
     public function startTrial(User $user): RedirectResponse
     {
         if ($user->trial_started_at !== null) {

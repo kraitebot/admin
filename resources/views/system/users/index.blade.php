@@ -6,6 +6,8 @@
             description="Pick a user to inspect subscription state, connected accounts, wallet balance, and apply override actions."
         />
 
+        @include('system.billing._tabs', ['active' => 'users'])
+
         @if (session('status'))
             <div class="mb-4">
                 <x-hub-ui::alert type="success">{{ session('status') }}</x-hub-ui::alert>
@@ -87,12 +89,24 @@
                     <div class="text-3xl font-bold ui-text font-mono ui-tabular leading-none">
                         {{ number_format((float) $selected->wallet_balance_usdt, 4) }}
                     </div>
-                    @php $runway = $selected->walletRunwayDays(); @endphp
+                    @php
+                        $monthly = (float) ($selected->subscription?->monthly_rate_usdt ?? 0);
+                        $covered = $selected->subscriptionCoversNextRenewal();
+                        $shortfall = $selected->renewalShortfallUsdt();
+                    @endphp
                     <div class="text-xs ui-text-muted mt-3">
-                        @if ($runway === null)
-                            No daily rate set.
+                        @if ($monthly <= 0)
+                            No monthly rate set.
+                        @elseif ($covered)
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                                  style="background: rgb(var(--ui-success)); color: white">
+                                Renewal covered
+                            </span>
                         @else
-                            ~{{ $runway }} days runway @ {{ number_format((float) ($selected->subscription?->daily_rate_usdt ?? 0), 4) }}/day
+                            <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                                  style="background: rgb(var(--ui-danger)); color: white">
+                                Short {{ number_format($shortfall, 2) }} USDT
+                            </span>
                         @endif
                     </div>
                 </div>
@@ -109,10 +123,22 @@
                     @if ($selected->subscription)
                         <div class="text-xl font-semibold ui-text leading-none">{{ $selected->subscription->name }}</div>
                         <div class="text-xs ui-text-subtle font-mono mt-1">
-                            {{ number_format((float) $selected->subscription->daily_rate_usdt, 4) }} USDT/day
+                            {{ number_format((float) $selected->subscription->monthly_rate_usdt, 2) }} USDT/month
                         </div>
 
                         <div class="grid grid-cols-2 gap-2 mt-3">
+                            <div class="ui-bg-elevated rounded-lg p-2">
+                                <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Renews</div>
+                                <div class="text-xs font-mono ui-text">
+                                    {{ $selected->subscription_renews_at ? $selected->subscription_renews_at->toDateString() : '—' }}
+                                </div>
+                            </div>
+                            <div class="ui-bg-elevated rounded-lg p-2">
+                                <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Paused</div>
+                                <div class="text-xs font-mono ui-text">
+                                    {{ $selected->subscription_paused_at ? $selected->subscription_paused_at->diffForHumans() : '—' }}
+                                </div>
+                            </div>
                             <div class="ui-bg-elevated rounded-lg p-2">
                                 <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Trial days</div>
                                 <div class="text-xs font-mono ui-text">{{ $selected->subscription->trial_days }}</div>
@@ -138,13 +164,51 @@
                             <x-hub-ui::select name="subscription_id" :value="$selected->subscription_id">
                                 @foreach ($subscriptions as $sub)
                                     <option value="{{ $sub->id }}" @selected($selected->subscription_id === $sub->id)>
-                                        {{ $sub->name }} · {{ number_format((float) $sub->daily_rate_usdt, 2) }}/d
+                                        {{ $sub->name }} · {{ number_format((float) $sub->monthly_rate_usdt, 2) }}/mo
                                     </option>
                                 @endforeach
                             </x-hub-ui::select>
                         </div>
                         <x-hub-ui::button type="submit" variant="secondary" size="sm">Change</x-hub-ui::button>
                     </form>
+
+                    @php
+                        $tierIsCapped = $selected->subscription
+                            && ! $selected->subscription->hasUnlimitedAccounts()
+                            && (int) $selected->subscription->max_accounts === 1;
+                    @endphp
+
+                    @if ($tierIsCapped && $selected->accounts->count() > 1)
+                        <div class="mt-3 pt-3 border-t ui-border">
+                            <label class="text-[10px] ui-text-subtle uppercase tracking-wider block mb-1">
+                                Active account on capped tier
+                            </label>
+                            <form method="POST" action="{{ route('system.users.active-account', $selected) }}" class="flex items-end gap-2">
+                                @csrf
+                                <div class="flex-1">
+                                    <x-hub-ui::select name="active_account_id">
+                                        <option value="">— none assigned —</option>
+                                        @foreach ($selected->accounts as $acc)
+                                            <option value="{{ $acc->id }}" @selected($selected->active_account_id === $acc->id)>
+                                                {{ $acc->name }}
+                                            </option>
+                                        @endforeach
+                                    </x-hub-ui::select>
+                                </div>
+                                <x-hub-ui::button type="submit" variant="secondary" size="sm">Assign</x-hub-ui::button>
+                            </form>
+                        </div>
+                    @elseif ($tierIsCapped && $selected->accounts->count() === 1)
+                        <div class="mt-3 pt-3 border-t ui-border">
+                            <div class="text-[10px] ui-text-subtle uppercase tracking-wider mb-1">
+                                Active account
+                            </div>
+                            <div class="text-xs font-mono ui-text">
+                                {{ $selected->accounts->first()->name }}
+                                <span class="ui-text-subtle">(only one — auto-assigned)</span>
+                            </div>
+                        </div>
+                    @endif
                 </div>
 
                 {{-- Trial --}}

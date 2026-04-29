@@ -39,4 +39,13 @@ return [
         'token' => env('ADMIN_USER_PUSHOVER_APPLICATION_KEY'),
     ],
 
+    'nowpayments' => [
+        'api_key' => env('NOWPAYMENTS_API_KEY'),
+        'ipn_secret' => env('NOWPAYMENTS_IPN_SECRET'),
+        'base_url' => env('NOWPAYMENTS_BASE_URL', 'https://api.nowpayments.io/v1'),
+        'success_url' => env('NOWPAYMENTS_SUCCESS_URL'),
+        'cancel_url' => env('NOWPAYMENTS_CANCEL_URL'),
+        'ipn_callback_url' => env('NOWPAYMENTS_IPN_CALLBACK_URL'),
+    ],
+
 ];

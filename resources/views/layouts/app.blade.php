@@ -14,7 +14,7 @@
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
         request()->routeIs('system.backtracking') => 'backtracking',
-        request()->routeIs('system.users*') => 'system-users',
+        request()->routeIs('system.users*'), request()->routeIs('system.billing.*') => 'system-users',
         request()->routeIs('system.ui-components') => 'ui-components',
         default => $activeSection,
     };

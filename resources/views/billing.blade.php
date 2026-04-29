@@ -3,7 +3,7 @@
 
         <x-hub-ui::page-header
             title="Billing"
-            description="Your wallet, plan, and payment history."
+            description="Your subscription, wallet, and renewal."
         />
 
         @if (session('status'))
@@ -12,7 +12,24 @@
             </div>
         @endif
 
-        @if ($user->trial_started_at === null)
+        @if (session('error'))
+            <div class="mb-4">
+                <x-hub-ui::alert type="error">{{ session('error') }}</x-hub-ui::alert>
+            </div>
+        @endif
+
+        {{-- State banners --}}
+        @if ($user->subscription_id === null)
+            <div class="ui-card p-4 sm:p-5 mb-4">
+                <div class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+                    <h2 class="text-sm font-semibold ui-text">Pick a plan to begin</h2>
+                </div>
+                <p class="text-sm ui-text-muted">
+                    Choose a subscription tier in the "Current plan" card below, then click
+                    "Start trading" to begin your free trial.
+                </p>
+            </div>
+        @elseif ($user->trial_started_at === null)
             <div class="ui-card p-4 sm:p-5 mb-4">
                 <div class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
                     <h2 class="text-sm font-semibold ui-text">Start your free trial</h2>
@@ -20,8 +37,8 @@
                 </div>
                 <p class="text-sm ui-text-muted mb-3">
                     The trial activates the moment you click below. After {{ $tier?->trial_days ?? 7 }} days,
-                    your wallet starts being debited at
-                    {{ number_format((float) ($tier?->daily_rate_usdt ?? 0), 4) }} USDT/day.
+                    your first renewal at {{ number_format($monthlyRate, 2) }} USDT will fire — top up
+                    before then to keep the bot running.
                 </p>
                 <form method="POST" action="{{ route('billing.start-trading') }}">
                     @csrf
@@ -30,20 +47,28 @@
             </div>
         @elseif ($trialActive)
             @php
-                $end = $user->trial_started_at?->copy()->addDays((int) ($tier?->trial_days ?? 0));
-                $hoursLeft = $end ? max(0, (int) round(now()->diffInMinutes($end, false) / 60)) : 0;
+                $trialEnd = $user->trial_started_at?->copy()->addDays($user->effectiveTrialDays());
+                $hoursLeft = $trialEnd ? max(0, (int) round(now()->diffInMinutes($trialEnd, false) / 60)) : 0;
             @endphp
             <div class="mb-4">
                 <x-hub-ui::alert type="info">
-                    Trial active — ~{{ $hoursLeft }}h remaining. After that, your wallet starts being
-                    debited at {{ number_format((float) ($tier?->daily_rate_usdt ?? 0), 4) }} USDT/day.
+                    <strong>Trial active</strong> — ~{{ $hoursLeft }}h remaining. Your first renewal at
+                    {{ number_format($monthlyRate, 2) }} USDT will fire when the trial ends.
+                </x-hub-ui::alert>
+            </div>
+        @elseif ($isPaused)
+            <div class="mb-4">
+                <x-hub-ui::alert type="warning">
+                    <strong>Subscription paused.</strong> Existing positions continue normally; new opens are blocked.
+                    Resume anytime — the renewal date pushes forward by your pause duration.
                 </x-hub-ui::alert>
             </div>
         @elseif ($inClosingMode)
             <div class="mb-4">
                 <x-hub-ui::alert type="error">
-                    <strong>Closing-positions mode.</strong> Your wallet can't cover today's debit.
-                    Existing trades continue normally; new positions are paused. Top up to resume opens.
+                    <strong>Read-only mode.</strong> Renewal failed — wallet is short
+                    {{ number_format($shortfall, 2) }} USDT. Existing trades continue normally;
+                    new positions are blocked. Top up to retry the renewal immediately.
                 </x-hub-ui::alert>
             </div>
         @endif
@@ -59,18 +84,26 @@
                 <div class="text-3xl font-bold ui-text font-mono ui-tabular leading-none">
                     {{ number_format((float) $user->wallet_balance_usdt, 4) }}
                 </div>
-                <div class="text-xs ui-text-muted mt-3">
+                <div class="mt-3">
                     @if ($trialActive)
-                        Trial active — wallet untouched.
-                    @elseif ($runwayDays === null)
-                        No daily rate.
+                        <span class="text-xs ui-text-muted">Trial active — wallet untouched.</span>
+                    @elseif ($monthlyRate <= 0)
+                        <span class="text-xs ui-text-muted">No monthly rate.</span>
+                    @elseif ($rateCovered)
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                              style="background: rgb(var(--ui-success)); color: white">
+                            Renewal covered
+                        </span>
                     @else
-                        ~{{ $runwayDays }} days runway @ {{ number_format((float) ($tier?->daily_rate_usdt ?? 0), 4) }}/day
+                        <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold"
+                              style="background: rgb(var(--ui-danger)); color: white">
+                            Need {{ number_format($shortfall, 2) }} USDT more
+                        </span>
                     @endif
                 </div>
             </div>
 
-            {{-- Plan --}}
+            {{-- Plan + renewal --}}
             <div class="ui-card p-4 sm:p-5">
                 <div class="flex items-baseline justify-between mb-3">
                     <h2 class="text-sm font-semibold ui-text">Current plan</h2>
@@ -82,36 +115,85 @@
                 @if ($tier)
                     <div class="text-xl font-semibold ui-text leading-none">{{ $tier->name }}</div>
                     <div class="text-xs ui-text-subtle font-mono mt-1">
-                        {{ number_format((float) $tier->daily_rate_usdt, 4) }} USDT/day
+                        {{ number_format($monthlyRate, 2) }} USDT/month
                     </div>
+
                     <div class="grid grid-cols-2 gap-2 mt-3">
+                        <div class="ui-bg-elevated rounded-lg p-2">
+                            <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Renews</div>
+                            <div class="text-xs font-mono ui-text">
+                                {{ $renewsAt ? $renewsAt->toDateString() : '—' }}
+                            </div>
+                        </div>
                         <div class="ui-bg-elevated rounded-lg p-2">
                             <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Accounts</div>
                             <div class="text-xs font-mono ui-text">{{ $tier->max_accounts ?? '∞' }}</div>
                         </div>
-                        <div class="ui-bg-elevated rounded-lg p-2">
-                            <div class="text-[10px] ui-text-subtle uppercase tracking-wider">Cap (USDT)</div>
-                            <div class="text-xs font-mono ui-text">
-                                {{ $tier->max_balance ? number_format((float) $tier->max_balance, 0) : '∞' }}
-                            </div>
-                        </div>
                     </div>
+                @else
+                    <div class="text-xl font-semibold ui-text leading-none">No plan</div>
+                    <div class="text-xs ui-text-subtle mt-1">Pick one to begin.</div>
+                @endif
 
-                    <form method="POST" action="{{ route('billing.subscription') }}" class="mt-3 flex items-end gap-2">
+                @php
+                    $cappedSubIds = $subscriptions
+                        ->filter(fn ($s) => ! $s->hasUnlimitedAccounts() && (int) $s->max_accounts === 1)
+                        ->pluck('id')
+                        ->all();
+                    $selectableSubs = $user->subscription_id !== null
+                        ? $subscriptions->reject(fn ($s) => $s->id === $user->subscription_id)
+                        : $subscriptions;
+                    $defaultSelected = (int) ($selectableSubs->first()?->id ?? 0);
+                @endphp
+
+                @if ($selectableSubs->isNotEmpty())
+                    <form method="POST" action="{{ route('billing.subscription') }}" class="mt-3 space-y-2"
+                          x-data="{
+                              selected: {{ $defaultSelected }},
+                              cappedIds: @js($cappedSubIds),
+                              accountCount: {{ $accounts->count() }},
+                              get isCapped() { return this.cappedIds.includes(parseInt(this.selected)); },
+                              get needsAccountPick() { return this.isCapped && this.accountCount > 1; },
+                              get showSoloAccount() { return this.isCapped && this.accountCount === 1; }
+                          }">
                         @csrf
-                        <div class="flex-1">
-                            <x-hub-ui::select name="subscription_id" :value="$user->subscription_id">
-                                @foreach ($subscriptions as $sub)
-                                    <option value="{{ $sub->id }}" @selected($user->subscription_id === $sub->id)>
-                                        {{ $sub->name }} · {{ number_format((float) $sub->daily_rate_usdt, 2) }}/d
+                        <x-hub-ui::select name="subscription_id" x-model="selected">
+                            @foreach ($selectableSubs as $sub)
+                                <option value="{{ $sub->id }}">
+                                    {{ $sub->name }} · {{ number_format((float) $sub->monthly_rate_usdt, 2) }}/mo
+                                </option>
+                            @endforeach
+                        </x-hub-ui::select>
+
+                        <div x-show="needsAccountPick" x-cloak>
+                            <label class="text-[10px] ui-text-subtle uppercase tracking-wider block mb-1">
+                                Active account on capped tier
+                            </label>
+                            <x-hub-ui::select name="active_account_id">
+                                <option value="">— pick one —</option>
+                                @foreach ($accounts as $acc)
+                                    <option value="{{ $acc->id }}" @selected($user->active_account_id === $acc->id)>
+                                        {{ $acc->name }}
                                     </option>
                                 @endforeach
                             </x-hub-ui::select>
                         </div>
-                        <x-hub-ui::button type="submit" variant="secondary" size="sm">Switch</x-hub-ui::button>
+
+                        @if ($accounts->count() === 1)
+                            <div x-show="showSoloAccount" x-cloak>
+                                <div class="text-[10px] ui-text-subtle uppercase tracking-wider mb-1">
+                                    Active account
+                                </div>
+                                <div class="ui-bg-elevated rounded-lg px-3 py-2 text-xs font-mono ui-text">
+                                    {{ $accounts->first()->name }}
+                                </div>
+                            </div>
+                        @endif
+
+                        <x-hub-ui::button type="submit" variant="secondary" size="sm">
+                            {{ $tier ? 'Switch plan' : 'Select plan' }}
+                        </x-hub-ui::button>
                     </form>
-                @else
-                    <div class="ui-text-subtle text-xs">No plan assigned.</div>
                 @endif
             </div>
 
@@ -119,24 +201,66 @@
             <div class="ui-card p-4 sm:p-5">
                 <div class="flex items-baseline justify-between mb-3">
                     <h2 class="text-sm font-semibold ui-text">Top up</h2>
-                    <span class="text-[10px] ui-text-subtle uppercase tracking-wider">+ bonus credit</span>
+                    <span class="text-[10px] ui-text-subtle uppercase tracking-wider">USDT</span>
                 </div>
 
-                <ul class="text-[11px] ui-text-muted space-y-1 mb-3 font-mono">
-                    <li>50–99 USDT → +5%</li>
-                    <li>100–499 USDT → +10%</li>
-                    <li>500+ USDT → +15%</li>
-                </ul>
+                <p class="text-xs ui-text-muted mb-3 leading-snug">
+                    Any amount. Wallet accumulates until it covers the next monthly renewal.
+                    Payment is processed via NOWPayments — you can pay in any supported coin.
+                </p>
 
-                <x-hub-ui::button variant="primary" size="sm" disabled>
-                    Top up (coming soon)
-                </x-hub-ui::button>
+                <form method="POST" action="{{ route('billing.topup') }}" class="space-y-2">
+                    @csrf
+                    <x-hub-ui::input
+                        name="amount_usdt"
+                        type="number"
+                        step="0.01"
+                        min="1"
+                        placeholder="Amount in USDT"
+                        required
+                    />
+                    <x-hub-ui::button type="submit" variant="primary" size="sm" class="w-full">
+                        Continue to payment
+                    </x-hub-ui::button>
+                </form>
                 <div class="text-[10px] ui-text-subtle mt-2 leading-snug">
-                    Payment gateway integration ships next. Until then, contact admin for manual credits.
+                    You'll be redirected to NOWPayments' hosted invoice page.
                 </div>
             </div>
 
         </div>
+
+        {{-- Pause / Resume --}}
+        @if ($user->trial_started_at !== null && ! $trialActive)
+            <div class="ui-card p-4 sm:p-5 mb-4">
+                <div class="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+                    <h2 class="text-sm font-semibold ui-text">Subscription state</h2>
+                    <span class="text-[11px] ui-text-subtle uppercase tracking-wider">
+                        {{ $isPaused ? 'paused' : 'active' }}
+                    </span>
+                </div>
+
+                @if ($isPaused)
+                    <p class="text-xs ui-text-muted mb-3 leading-snug">
+                        Paused since {{ $user->subscription_paused_at?->diffForHumans() }}.
+                        Resume to push the renewal anchor forward by the pause duration and re-enable new opens.
+                    </p>
+                    <form method="POST" action="{{ route('billing.resume') }}">
+                        @csrf
+                        <x-hub-ui::button type="submit" variant="primary" size="sm">Resume subscription</x-hub-ui::button>
+                    </form>
+                @else
+                    <p class="text-xs ui-text-muted mb-3 leading-snug">
+                        Pause to stop renewals indefinitely. Existing positions continue trading; new opens block until you resume.
+                    </p>
+                    <form method="POST" action="{{ route('billing.pause') }}"
+                          onsubmit="return confirm('Pause subscription? New positions will be blocked until you resume.');">
+                        @csrf
+                        <x-hub-ui::button type="submit" variant="ghost" size="sm">Pause subscription</x-hub-ui::button>
+                    </form>
+                @endif
+            </div>
+        @endif
 
         {{-- Transaction history --}}
         <div class="ui-card p-4 sm:p-5">

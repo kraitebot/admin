@@ -12,6 +12,7 @@ use App\Http\Controllers\System\DashboardController as SystemDashboardController
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
+use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\UsersController as SystemUsersController;
 use App\Http\Controllers\BillingController;
 use Illuminate\Support\Facades\Route;
@@ -97,8 +98,15 @@ Route::middleware('auth')->group(function () {
         Route::get('/system/users/{user?}', [SystemUsersController::class, 'index'])->name('system.users');
         Route::post('/system/users/{user}/credit', [SystemUsersController::class, 'adjustCredit'])->name('system.users.credit');
         Route::post('/system/users/{user}/subscription', [SystemUsersController::class, 'changeSubscription'])->name('system.users.subscription');
+        Route::post('/system/users/{user}/active-account', [SystemUsersController::class, 'changeActiveAccount'])->name('system.users.active-account');
         Route::post('/system/users/{user}/start-trial', [SystemUsersController::class, 'startTrial'])->name('system.users.start-trial');
         Route::post('/system/users/{user}/trial-days', [SystemUsersController::class, 'changeTrialDays'])->name('system.users.trial-days');
+
+        // Billing plan management — sysadmin CRUD over subscription tiers.
+        Route::get('/system/billing/plans', [SystemBillingPlansController::class, 'index'])->name('system.billing.plans');
+        Route::post('/system/billing/plans', [SystemBillingPlansController::class, 'store'])->name('system.billing.plans.store');
+        Route::post('/system/billing/plans/{subscription}', [SystemBillingPlansController::class, 'update'])->name('system.billing.plans.update');
+        Route::post('/system/billing/plans/{subscription}/delete', [SystemBillingPlansController::class, 'destroy'])->name('system.billing.plans.delete');
 
         // UI Components showcase — dev-only surface, never reachable in prod.
         if (! app()->isProduction()) {
@@ -112,6 +120,14 @@ Route::middleware('auth')->group(function () {
     Route::get('/billing', [BillingController::class, 'index'])->name('billing');
     Route::post('/billing/start-trading', [BillingController::class, 'startTrading'])->name('billing.start-trading');
     Route::post('/billing/subscription', [BillingController::class, 'changeSubscription'])->name('billing.subscription');
+    Route::post('/billing/pause', [BillingController::class, 'pause'])->name('billing.pause');
+    Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
+    Route::post('/billing/topup', [BillingController::class, 'topUp'])->name('billing.topup');
 });
+
+// NOWPayments IPN webhook — public, signature-verified, CSRF-exempt.
+Route::post('/webhooks/nowpayments', [\App\Http\Controllers\NowPaymentsWebhookController::class, 'handle'])
+    ->middleware(\App\Http\Middleware\VerifyNowPaymentsSignature::class)
+    ->name('webhooks.nowpayments');
 
 require __DIR__.'/auth.php';
