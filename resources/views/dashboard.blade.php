@@ -110,13 +110,13 @@
             <div class="flex items-center gap-5 sm:gap-7 flex-wrap">
                 <div class="flex flex-col">
                     <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Balance</span>
-                    <span class="text-base font-mono font-semibold ui-text ui-tabular" x-text="metrics?.balance !== null ? '$' + formatPrice(metrics.balance) : '—'"></span>
+                    <span class="text-base font-mono font-semibold ui-text ui-tabular" x-text="metrics?.balance != null ? '$' + formatPrice(metrics.balance) : '—'"></span>
                 </div>
                 <div class="flex flex-col">
                     <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">PnL</span>
                     <span class="text-base font-mono font-semibold ui-tabular"
                           :style="metrics?.pnl !== null && metrics?.pnl !== undefined ? (parseFloat(metrics.pnl) < 0 ? 'color: rgb(var(--ui-danger))' : 'color: rgb(var(--ui-success))') : 'color: rgb(var(--ui-text-subtle))'"
-                          x-text="metrics?.pnl !== null && metrics?.pnl !== undefined ? (parseFloat(metrics.pnl) >= 0 ? '+' : '') + '$' + formatPrice(metrics.pnl) : '—'"
+                          x-text="metrics?.pnl != null ? (parseFloat(metrics.pnl) >= 0 ? '+' : '') + '$' + formatPrice(metrics.pnl) : '—'"
                     ></span>
                 </div>
                 <div class="flex flex-col">
@@ -340,7 +340,7 @@
                                     <circle cx="12" cy="12" r="9" />
                                     <path stroke-linecap="round" d="M12 8v4l3 3" />
                                 </svg>
-                                <span>Open</span>
+                                <span>Orig TP</span>
                             </div>
                             <div class="text-[11px] font-mono ui-text-muted ui-tabular mt-0.5 leading-none" x-text="formatPrice(position.first_profit_price)"></div>
                         </div>
@@ -499,7 +499,14 @@
                 },
 
                 currentPriceFraction(position) {
-                    return this.tickFraction(position, position.current_price);
+                    const raw = this.tickFraction(position, position.current_price);
+                    const tp  = this.tickFraction(position, position.profit_price);
+                    // Clamp at the current TP marker. Going left-of-TP means
+                    // price is on the profit side of TP (LONG: above; SHORT:
+                    // below) — visually a "TP already hit" state that can't
+                    // be a steady state. Park the dot on the TP marker so
+                    // the operator reads "TP imminent" instead.
+                    return Math.max(raw, tp);
                 },
 
                 unfilledLimits(position) {

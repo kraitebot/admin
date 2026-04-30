@@ -31,7 +31,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->validateCsrfTokens(except: [
-            'webhooks/nowpayments',
+            'webhooks/payments',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

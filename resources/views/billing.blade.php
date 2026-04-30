@@ -198,34 +198,112 @@
             </div>
 
             {{-- Top up --}}
-            <div class="ui-card p-4 sm:p-5">
+            <div
+                class="ui-card p-4 sm:p-5"
+                x-data="topUpCard({
+                    endpoint: @js(route('billing.min-amount')),
+                    coins: @js($topUpCoins->map(fn ($c) => ['canonical' => $c->canonical, 'display_name' => $c->display_name])->all()),
+                    initial: @js($topUpCoins->first()?->canonical ?? ''),
+                })"
+                x-init="refresh()"
+            >
                 <div class="flex items-baseline justify-between mb-3">
                     <h2 class="text-sm font-semibold ui-text">Top up</h2>
                     <span class="text-[10px] ui-text-subtle uppercase tracking-wider">USDT</span>
                 </div>
 
                 <p class="text-xs ui-text-muted mb-3 leading-snug">
-                    Any amount. Wallet accumulates until it covers the next monthly renewal.
-                    Payment is processed via NOWPayments — you can pay in any supported coin.
+                    Pick a coin, hit the button, and you'll be taken to a hosted payment page locked to that coin.
+                    Wallet is credited in USDT after confirmation.
                 </p>
 
-                <form method="POST" action="{{ route('billing.topup') }}" class="space-y-2">
-                    @csrf
-                    <x-hub-ui::input
-                        name="amount_usdt"
-                        type="number"
-                        step="0.01"
-                        min="1"
-                        placeholder="Amount in USDT"
-                        required
-                    />
-                    <x-hub-ui::button type="submit" variant="primary" size="sm" class="w-full">
-                        Continue to payment
-                    </x-hub-ui::button>
-                </form>
+                @if ($topUpCoins->isEmpty())
+                    <div class="text-xs ui-text-subtle">No top-up coins are configured. Contact admin.</div>
+                @else
+                    <form method="POST" action="{{ route('billing.topup') }}" class="space-y-2">
+                        @csrf
+                        <input type="hidden" name="amount_usdt" :value="state.effective_min_usdt">
+
+                        <label class="text-[10px] ui-text-subtle uppercase tracking-wider block">Pay with</label>
+                        <x-hub-ui::select name="pay_currency" x-model="selected" @change="refresh()">
+                            @foreach ($topUpCoins as $coin)
+                                <option value="{{ $coin->canonical }}">{{ $coin->display_name }}</option>
+                            @endforeach
+                        </x-hub-ui::select>
+
+                        <div class="text-[11px] ui-text-muted leading-snug" x-show="state.effective_min_usdt > 0">
+                            Minimum:
+                            <span class="font-mono ui-tabular ui-text" x-text="formatUsdt(state.effective_min_usdt)"></span>
+                            <template x-if="state.gateway_min_usdt > state.rule_min_usdt">
+                                <span class="ui-text-subtle">(gateway floor)</span>
+                            </template>
+                            <template x-if="state.gateway_min_usdt <= state.rule_min_usdt && state.rule_min_usdt > 0">
+                                <span class="ui-text-subtle">
+                                    (coverage rule —
+                                    <button
+                                        type="button"
+                                        class="underline ui-text-primary hover:opacity-80"
+                                        @click.prevent="$dispatch('open-modal', 'coverage-rule')"
+                                    >why?</button>)
+                                </span>
+                            </template>
+                        </div>
+
+                        <x-hub-ui::button
+                            type="submit"
+                            variant="primary"
+                            size="sm"
+                            class="w-full"
+                            x-bind:disabled="loading || state.effective_min_usdt <= 0"
+                        >
+                            <span x-text="loading ? 'Loading…' : (state.button_label || 'Top up')"></span>
+                        </x-hub-ui::button>
+                    </form>
+                @endif
+
                 <div class="text-[10px] ui-text-subtle mt-2 leading-snug">
-                    You'll be redirected to NOWPayments' hosted invoice page.
+                    Redirected to NOWPayments hosted invoice. Amount is locked at this minimum.
                 </div>
+
+                <script>
+                    function topUpCard(config) {
+                        return {
+                            selected: config.initial,
+                            loading: false,
+                            state: {
+                                effective_min_usdt: 0,
+                                rule_min_usdt: 0,
+                                gateway_min_usdt: 0,
+                                button_label: '',
+                            },
+                            async refresh() {
+                                if (!this.selected) return;
+                                this.loading = true;
+                                try {
+                                    const res = await fetch(config.endpoint + '?coin=' + encodeURIComponent(this.selected), {
+                                        headers: { 'Accept': 'application/json' },
+                                        credentials: 'same-origin',
+                                    });
+                                    if (!res.ok) throw new Error('lookup failed');
+                                    this.state = await res.json();
+                                } catch (e) {
+                                    console.error('[topup] min-amount lookup failed', e);
+                                    this.state = {
+                                        effective_min_usdt: 0,
+                                        rule_min_usdt: 0,
+                                        gateway_min_usdt: 0,
+                                        button_label: 'Unable to load minimum',
+                                    };
+                                } finally {
+                                    this.loading = false;
+                                }
+                            },
+                            formatUsdt(v) {
+                                return parseFloat(v || 0).toFixed(2) + ' USDT';
+                            },
+                        };
+                    }
+                </script>
             </div>
 
         </div>
@@ -303,4 +381,43 @@
         </div>
 
     </div>
+
+    {{-- Coverage rule explainer --}}
+    <x-hub-ui::modal name="coverage-rule" maxWidth="lg">
+        <div class="p-5 sm:p-6">
+            <div class="flex items-start justify-between mb-4 gap-3">
+                <h3 class="text-base font-semibold ui-text">Why this minimum?</h3>
+                <button type="button" class="ui-text-subtle hover:ui-text" @click="$dispatch('close-modal', 'coverage-rule')">×</button>
+            </div>
+
+            <div class="space-y-3 text-sm ui-text-muted leading-relaxed">
+                <p>
+                    The bot needs your wallet to always cover at least <strong class="ui-text">one full subscription month</strong>.
+                    Otherwise the next renewal would fail and your accounts would drop into read-only mode (existing
+                    positions still trade out, but no new ones open).
+                </p>
+
+                <p class="ui-text">When your wallet is short:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>Minimum top-up = <em>monthly rate − current wallet</em> (just the shortfall).</li>
+                    <li>You can chip in tiny amounts as long as they cover that gap.</li>
+                </ul>
+
+                <p class="ui-text">When your wallet already covers the next month:</p>
+                <ul class="list-disc pl-5 space-y-1">
+                    <li>A flat floor (set by admin) applies, to discourage micro top-ups.</li>
+                    <li>The floor only kicks in once you're already safe, never when you're under-funded.</li>
+                </ul>
+
+                <p>
+                    You'll never be asked for more than the minimum required to keep your subscription running —
+                    just enough to fund at least one more month.
+                </p>
+            </div>
+
+            <div class="mt-5 flex justify-end">
+                <x-hub-ui::button variant="secondary" size="sm" @click="$dispatch('close-modal', 'coverage-rule')">Got it</x-hub-ui::button>
+            </div>
+        </div>
+    </x-hub-ui::modal>
 </x-app-layout>

@@ -12,6 +12,7 @@ use App\Http\Controllers\System\DashboardController as SystemDashboardController
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
+use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsController;
 use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\UsersController as SystemUsersController;
 use App\Http\Controllers\BillingController;
@@ -108,6 +109,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/system/billing/plans/{subscription}', [SystemBillingPlansController::class, 'update'])->name('system.billing.plans.update');
         Route::post('/system/billing/plans/{subscription}/delete', [SystemBillingPlansController::class, 'destroy'])->name('system.billing.plans.delete');
 
+        // Top-up coin curated list + engine knobs.
+        Route::get('/system/billing/coins', [SystemBillingCoinsController::class, 'index'])->name('system.billing.coins');
+        Route::post('/system/billing/coins', [SystemBillingCoinsController::class, 'store'])->name('system.billing.coins.store');
+        Route::post('/system/billing/coins/engine', [SystemBillingCoinsController::class, 'updateEngine'])->name('system.billing.coins.engine');
+        Route::post('/system/billing/coins/{coin}', [SystemBillingCoinsController::class, 'update'])->name('system.billing.coins.update');
+        Route::post('/system/billing/coins/{coin}/delete', [SystemBillingCoinsController::class, 'destroy'])->name('system.billing.coins.delete');
+
         // UI Components showcase — dev-only surface, never reachable in prod.
         if (! app()->isProduction()) {
             Route::get('/system/ui-components', [UiComponentsController::class, 'index'])->name('system.ui-components');
@@ -123,11 +131,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/billing/pause', [BillingController::class, 'pause'])->name('billing.pause');
     Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
     Route::post('/billing/topup', [BillingController::class, 'topUp'])->name('billing.topup');
+    Route::get('/billing/min-amount', [BillingController::class, 'minAmount'])->name('billing.min-amount');
 });
 
 // NOWPayments IPN webhook — public, signature-verified, CSRF-exempt.
-Route::post('/webhooks/nowpayments', [\App\Http\Controllers\NowPaymentsWebhookController::class, 'handle'])
+Route::post('/webhooks/payments', [\App\Http\Controllers\NowPaymentsWebhookController::class, 'handle'])
     ->middleware(\App\Http\Middleware\VerifyNowPaymentsSignature::class)
-    ->name('webhooks.nowpayments');
+    ->name('webhooks.payments');
 
 require __DIR__.'/auth.php';

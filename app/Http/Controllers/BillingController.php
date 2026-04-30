@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
+use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Payment;
 use Kraite\Core\Models\Subscription;
+use Kraite\Core\Models\TopUpCoin;
 use Kraite\Core\Models\User as KraiteUser;
 use Kraite\Core\Models\WalletTransaction;
 use Kraite\Core\Support\Billing\InsufficientFundsException;
@@ -52,6 +57,7 @@ final class BillingController extends Controller
             'monthlyRate' => (float) ($tier?->monthly_rate_usdt ?? 0),
             'renewsAt' => $user->subscription_renews_at,
             'accounts' => $user->accounts()->orderBy('id')->get(),
+            'topUpCoins' => TopUpCoin::active(),
         ]);
     }
 
@@ -195,20 +201,100 @@ final class BillingController extends Controller
             ->with('status', 'Plan updated.');
     }
 
+    public function minAmount(Request $request): JsonResponse
+    {
+        $coinCanonical = (string) $request->query('coin', '');
+
+        $coin = TopUpCoin::query()
+            ->where('canonical', $coinCanonical)
+            ->where('is_active', true)
+            ->first();
+
+        if ($coin === null) {
+            return response()->json([
+                'error' => 'Unknown or inactive coin.',
+            ], 422);
+        }
+
+        $user = $this->kraiteUser($request);
+        $tier = $user->subscription;
+
+        $monthlyRate = (float) ($tier?->monthly_rate_usdt ?? 0);
+        $wallet = (float) $user->wallet_balance_usdt;
+        $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
+
+        $ruleMin = $wallet >= $monthlyRate
+            ? $coveredFloor
+            : max(0.0, $monthlyRate - $wallet);
+
+        $gatewayMinUsdt = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
+
+        $effectiveMin = (float) max($ruleMin, $gatewayMinUsdt);
+
+        return response()->json([
+            'coin' => [
+                'canonical' => $coin->canonical,
+                'display_name' => $coin->display_name,
+            ],
+            'wallet_balance_usdt' => $wallet,
+            'monthly_rate_usdt' => $monthlyRate,
+            'rule_min_usdt' => round($ruleMin, 4),
+            'gateway_min_usdt' => round($gatewayMinUsdt, 4),
+            'effective_min_usdt' => round($effectiveMin, 4),
+            'button_label' => sprintf('Top up %s USDT', number_format($effectiveMin, 2)),
+        ]);
+    }
+
     public function topUp(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'amount_usdt' => 'required|numeric|min:1',
+            'amount_usdt' => 'required|numeric|min:0.01',
+            'pay_currency' => 'required|string',
         ]);
 
         $user = $this->kraiteUser($request);
+
+        $coin = TopUpCoin::query()
+            ->where('canonical', $data['pay_currency'])
+            ->where('is_active', true)
+            ->first();
+
+        if ($coin === null) {
+            return redirect()
+                ->route('billing')
+                ->with('error', 'The selected coin is not available. Pick another option.');
+        }
+
+        $tier = $user->subscription;
+        $monthlyRate = (float) ($tier?->monthly_rate_usdt ?? 0);
+        $wallet = (float) $user->wallet_balance_usdt;
+        $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
+
+        $ruleMin = $wallet >= $monthlyRate
+            ? $coveredFloor
+            : max(0.0, $monthlyRate - $wallet);
+
+        $gatewayMin = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
+        $effectiveMin = max($ruleMin, $gatewayMin);
+
         $amount = (float) $data['amount_usdt'];
+
+        if ($amount + 0.0001 < $effectiveMin) {
+            return redirect()
+                ->route('billing')
+                ->with('error', sprintf(
+                    'Minimum top-up for %s is %s USDT.',
+                    $coin->display_name,
+                    number_format($effectiveMin, 2),
+                ));
+        }
 
         $payment = Payment::create([
             'user_id' => $user->id,
             'order_id' => 'pending-'.bin2hex(random_bytes(8)),
             'price_amount' => $amount,
-            'outcome_currency' => 'usdt',
+            'pay_currency' => $coin->canonical,
+            'outcome_currency' => 'usdttrc20',
             'status' => Payment::STATUS_PENDING,
         ]);
 
@@ -221,7 +307,7 @@ final class BillingController extends Controller
         $payment->save();
 
         $callbackUrl = (string) config('services.nowpayments.ipn_callback_url')
-            ?: route('webhooks.nowpayments');
+            ?: route('webhooks.payments');
         $successUrl = (string) config('services.nowpayments.success_url') ?: route('billing');
         $cancelUrl = (string) config('services.nowpayments.cancel_url') ?: route('billing');
 
@@ -232,8 +318,10 @@ final class BillingController extends Controller
                 ipnCallbackUrl: $callbackUrl,
                 successUrl: $successUrl,
                 cancelUrl: $cancelUrl,
+                priceCurrency: 'usdttrc20',
                 orderDescription: sprintf('Kraite wallet top-up · %s', $user->email),
                 customerEmail: $user->email,
+                payCurrency: $coin->canonical,
             );
         } catch (Throwable $e) {
             Log::error('[NOWPayments] invoice creation failed', [
@@ -279,6 +367,62 @@ final class BillingController extends Controller
     private function kraiteUser(Request $request): KraiteUser
     {
         return KraiteUser::with('subscription')->findOrFail($request->user()->id);
+    }
+
+    /**
+     * Resolve the gateway floor (or override) for a coin in
+     * USDT-equivalent terms. NOWPayments returns the floor in coin
+     * units; we ask /estimate to convert to USDT for like-for-like
+     * comparison against the wallet's USDT balance. Cached 5 min so
+     * AJAX dropdown changes don't hammer the gateway.
+     */
+    private function gatewayMinAmountUsdt(string $canonical, ?string $override): float
+    {
+        $apiKey = (string) config('services.nowpayments.api_key', '');
+        $baseUrl = (string) config('services.nowpayments.base_url', '');
+
+        if ($apiKey === '' || $baseUrl === '') {
+            return 0.0;
+        }
+
+        return (float) Cache::remember(
+            "nowpayments.min_amount_usdt.{$canonical}",
+            now()->addMinutes(5),
+            function () use ($canonical, $override, $apiKey, $baseUrl) {
+                try {
+                    $minInCoin = $override !== null
+                        ? (float) $override
+                        : (float) (Http::withHeaders(['x-api-key' => $apiKey])
+                            ->timeout(8)
+                            ->get(rtrim($baseUrl, '/').'/min-amount', [
+                                'currency_from' => $canonical,
+                                'currency_to' => 'usdttrc20',
+                            ])
+                            ->json('min_amount') ?? 0);
+
+                    if ($minInCoin <= 0) {
+                        return 0.0;
+                    }
+
+                    if ($canonical === 'usdttrc20') {
+                        return $minInCoin;
+                    }
+
+                    $estimate = Http::withHeaders(['x-api-key' => $apiKey])
+                        ->timeout(8)
+                        ->get(rtrim($baseUrl, '/').'/estimate', [
+                            'amount' => $minInCoin,
+                            'currency_from' => $canonical,
+                            'currency_to' => 'usdttrc20',
+                        ])
+                        ->json('estimated_amount');
+
+                    return (float) ($estimate ?? 0);
+                } catch (Throwable) {
+                    return 0.0;
+                }
+            },
+        );
     }
 
     private function maybeAssignActiveAccount(KraiteUser $user, Subscription $newTier, mixed $activeAccountId): void
