@@ -75,6 +75,10 @@ return [
             'channel' => env('MAIL_LOG_CHANNEL'),
         ],
 
+        'zeptomail' => [
+            'transport' => 'zeptomail',
+        ],
+
         'array' => [
             'transport' => 'array',
         ],

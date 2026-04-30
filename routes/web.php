@@ -132,7 +132,15 @@ Route::middleware('auth')->group(function () {
     Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
     Route::post('/billing/topup', [BillingController::class, 'topUp'])->name('billing.topup');
     Route::get('/billing/min-amount', [BillingController::class, 'minAmount'])->name('billing.min-amount');
+    Route::get('/billing/wallet-status', [BillingController::class, 'walletStatus'])->name('billing.wallet-status');
 });
+
+// Signed shortcut from email — pre-fills amount + coin from the last
+// payment so the user doesn't retype anything. Bypasses the auth gate
+// because the signed URL itself is the authentication.
+Route::get('/billing/quick-topup', [BillingController::class, 'quickTopUp'])
+    ->middleware('signed')
+    ->name('billing.quick-topup');
 
 // NOWPayments IPN webhook — public, signature-verified, CSRF-exempt.
 Route::post('/webhooks/payments', [\App\Http\Controllers\NowPaymentsWebhookController::class, 'handle'])

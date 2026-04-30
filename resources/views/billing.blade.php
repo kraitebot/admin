@@ -1,5 +1,12 @@
 <x-app-layout :activeHighlight="'billing'">
-    <div class="max-w-6xl">
+    <div
+        class="max-w-6xl"
+        x-data="walletPoller({
+            endpoint: @js(route('billing.wallet-status')),
+            initialBalance: {{ (float) $user->wallet_balance_usdt }},
+        })"
+        x-init="start()"
+    >
 
         <x-hub-ui::page-header
             title="Billing"
@@ -220,33 +227,55 @@
                 @if ($topUpCoins->isEmpty())
                     <div class="text-xs ui-text-subtle">No top-up coins are configured. Contact admin.</div>
                 @else
-                    <form method="POST" action="{{ route('billing.topup') }}" class="space-y-2">
+                    <form method="POST" action="{{ route('billing.topup') }}" target="_blank" class="space-y-3">
                         @csrf
-                        <input type="hidden" name="amount_usdt" :value="state.effective_min_usdt">
 
-                        <label class="text-[10px] ui-text-subtle uppercase tracking-wider block">Pay with</label>
-                        <x-hub-ui::select name="pay_currency" x-model="selected" @change="refresh()">
-                            @foreach ($topUpCoins as $coin)
-                                <option value="{{ $coin->canonical }}">{{ $coin->display_name }}</option>
-                            @endforeach
-                        </x-hub-ui::select>
+                        <div>
+                            <label class="text-[10px] ui-text-subtle uppercase tracking-wider block mb-1">Pay with</label>
+                            <x-hub-ui::select name="pay_currency" x-model="selected" @change="refresh()">
+                                @foreach ($topUpCoins as $coin)
+                                    <option value="{{ $coin->canonical }}">{{ $coin->display_name }}</option>
+                                @endforeach
+                            </x-hub-ui::select>
+                        </div>
 
-                        <div class="text-[11px] ui-text-muted leading-snug" x-show="state.effective_min_usdt > 0">
-                            Minimum:
-                            <span class="font-mono ui-tabular ui-text" x-text="formatUsdt(state.effective_min_usdt)"></span>
-                            <template x-if="state.gateway_min_usdt > state.rule_min_usdt">
-                                <span class="ui-text-subtle">(gateway floor)</span>
-                            </template>
-                            <template x-if="state.gateway_min_usdt <= state.rule_min_usdt && state.rule_min_usdt > 0">
-                                <span class="ui-text-subtle">
-                                    (coverage rule —
-                                    <button
-                                        type="button"
-                                        class="underline ui-text-primary hover:opacity-80"
-                                        @click.prevent="$dispatch('open-modal', 'coverage-rule')"
-                                    >why?</button>)
-                                </span>
-                            </template>
+                        <div>
+                            <label class="text-[10px] ui-text-subtle uppercase tracking-wider block mb-1">Amount (USDT)</label>
+                            <x-hub-ui::input
+                                name="amount_usdt"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                x-model.number="amount"
+                                x-bind:placeholder="formatUsdt(state.effective_min_usdt)"
+                            />
+                            <div class="text-[11px] mt-1 leading-snug" x-show="state.effective_min_usdt > 0">
+                                <template x-if="!validAmount() && amount > 0">
+                                    <span style="color: rgb(var(--ui-danger))">
+                                        Below minimum
+                                        <span class="font-mono ui-tabular" x-text="formatUsdt(state.effective_min_usdt)"></span>.
+                                    </span>
+                                </template>
+                                <template x-if="validAmount() || amount <= 0">
+                                    <span class="ui-text-muted">
+                                        Minimum:
+                                        <span class="font-mono ui-tabular ui-text" x-text="formatUsdt(state.effective_min_usdt)"></span>
+                                        <template x-if="state.gateway_min_usdt > state.rule_min_usdt">
+                                            <span class="ui-text-subtle">(gateway floor)</span>
+                                        </template>
+                                        <template x-if="state.gateway_min_usdt <= state.rule_min_usdt && state.rule_min_usdt > 0">
+                                            <span class="ui-text-subtle">
+                                                (coverage rule —
+                                                <button
+                                                    type="button"
+                                                    class="underline ui-text-primary hover:opacity-80"
+                                                    @click.prevent="$dispatch('open-modal', 'coverage-rule')"
+                                                >why?</button>)
+                                            </span>
+                                        </template>
+                                    </span>
+                                </template>
+                            </div>
                         </div>
 
                         <x-hub-ui::button
@@ -254,15 +283,15 @@
                             variant="primary"
                             size="sm"
                             class="w-full"
-                            x-bind:disabled="loading || state.effective_min_usdt <= 0"
+                            x-bind:disabled="loading || !validAmount()"
                         >
-                            <span x-text="loading ? 'Loading…' : (state.button_label || 'Top up')"></span>
+                            <span x-text="loading ? 'Loading…' : buttonLabel()"></span>
                         </x-hub-ui::button>
                     </form>
                 @endif
 
                 <div class="text-[10px] ui-text-subtle mt-2 leading-snug">
-                    Redirected to NOWPayments hosted invoice. Amount is locked at this minimum.
+                    Opens NOWPayments hosted invoice in a new tab.
                 </div>
 
                 <script>
@@ -270,15 +299,16 @@
                         return {
                             selected: config.initial,
                             loading: false,
+                            amount: 0,
                             state: {
                                 effective_min_usdt: 0,
                                 rule_min_usdt: 0,
                                 gateway_min_usdt: 0,
-                                button_label: '',
                             },
                             async refresh() {
                                 if (!this.selected) return;
                                 this.loading = true;
+                                const previousMin = parseFloat(this.state.effective_min_usdt || 0);
                                 try {
                                     const res = await fetch(config.endpoint + '?coin=' + encodeURIComponent(this.selected), {
                                         headers: { 'Accept': 'application/json' },
@@ -286,17 +316,32 @@
                                     });
                                     if (!res.ok) throw new Error('lookup failed');
                                     this.state = await res.json();
+                                    // Auto-bump the input when the user hadn't
+                                    // typed something above the prior min, OR
+                                    // when their typed value is now below the
+                                    // new coin's floor.
+                                    const newMin = parseFloat(this.state.effective_min_usdt || 0);
+                                    if (this.amount <= 0 || this.amount === previousMin || this.amount < newMin) {
+                                        this.amount = newMin;
+                                    }
                                 } catch (e) {
                                     console.error('[topup] min-amount lookup failed', e);
                                     this.state = {
                                         effective_min_usdt: 0,
                                         rule_min_usdt: 0,
                                         gateway_min_usdt: 0,
-                                        button_label: 'Unable to load minimum',
                                     };
                                 } finally {
                                     this.loading = false;
                                 }
+                            },
+                            validAmount() {
+                                const min = parseFloat(this.state.effective_min_usdt || 0);
+                                return min > 0 && parseFloat(this.amount || 0) >= min;
+                            },
+                            buttonLabel() {
+                                if (!this.validAmount()) return 'Top up';
+                                return 'Top up ' + this.formatUsdt(this.amount);
                             },
                             formatUsdt(v) {
                                 return parseFloat(v || 0).toFixed(2) + ' USDT';
@@ -380,7 +425,159 @@
             </x-hub-ui::data-table>
         </div>
 
+        {{-- Terms of Service --}}
+        <div class="ui-card p-4 sm:p-5 mt-6" x-data="{ open: false }">
+            <button
+                type="button"
+                class="w-full flex items-center justify-between text-left"
+                @click="open = ! open"
+            >
+                <div>
+                    <h2 class="text-sm font-semibold ui-text">Billing terms</h2>
+                    <p class="text-[11px] ui-text-subtle leading-snug mt-0.5">
+                        How subscriptions, top-ups, fees, and refunds work. By using Kraite you accept the terms below.
+                    </p>
+                </div>
+                <svg class="w-4 h-4 ui-text-muted transition-transform" :class="open ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+
+            <div class="text-xs ui-text-muted leading-relaxed mt-4 space-y-3" x-show="open" x-cloak>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">1. Subscription model</div>
+                    <p>
+                        Kraite is a monthly subscription. Each plan ("Starter", "Unlimited", or any future tier) carries a fixed monthly price in USDT.
+                        At each renewal date, the monthly fee is debited from your wallet balance. There is no daily debit, no prorated charge against you mid-month — just one charge per renewal.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">2. Free trial</div>
+                    <p>
+                        New users get a free trial when they activate their first plan. During the trial, no debits happen — the bot trades for free.
+                        At the end of the trial, the first renewal fires automatically. If your wallet doesn't cover the renewal at that moment, your account enters <strong>read-only mode</strong> (existing positions continue to TP/SL; no new positions open).
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">3. Wallet top-ups</div>
+                    <p>
+                        You fund your subscription by topping up a USDT wallet held by Kraite. Top-ups are processed by <a href="https://nowpayments.io" target="_blank" rel="noopener" class="ui-text-primary underline">NOWPayments</a> (a third-party crypto payment gateway). You may pay in any of the coins offered in the dropdown.
+                        Once a payment is confirmed on-chain, the equivalent USDT is credited to your Kraite wallet automatically.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">4. Fees</div>
+                    <p>
+                        <strong>You pay the gateway processing fee</strong> (currently 0.5% per top-up, charged by NOWPayments). The amount displayed at checkout already includes this fee — what NOWPayments shows you is the gross.
+                        You also pay the network/gas fee for the chain you choose (e.g. ~$1 for TRC20, much higher for ERC20). Network fees are quoted by your wallet, not by Kraite.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">5. Cross-chain conversion</div>
+                    <p>
+                        Your wallet balance is denominated in USDT. If you pay in a different coin or different chain, NOWPayments converts to USDT at their internal rate, which can be 0.1%–0.3% off the global market rate.
+                        For the cleanest 1:1 settlement, pay with the same chain Kraite settles in (USDT-TRC20). Any other coin will land in your wallet as the post-conversion USDT amount, not the amount you typed.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">6. Wallet credit is non-refundable</div>
+                    <p>
+                        Once funds are credited to your Kraite wallet, they <strong>cannot be withdrawn</strong> back to your crypto address. They can only be consumed by subscription renewals.
+                        If you stop using the service, any leftover balance stays in the wallet — you can resume anytime and use it. Kraite does not process cash refunds, KYC withdrawals, or fiat conversions.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">7. Renewal failures (read-only mode)</div>
+                    <p>
+                        If your wallet balance is below the monthly rate when renewal fires, the renewal fails and your accounts switch to read-only:
+                    </p>
+                    <ul class="list-disc pl-5 mt-1 space-y-0.5">
+                        <li>Existing positions continue trading their full lifecycle (WAP, stop-loss, take-profit, sync).</li>
+                        <li>No new positions open until the wallet covers the next renewal.</li>
+                        <li>Top up at any time — the moment your balance covers the monthly rate, the bot automatically retries the renewal and unblocks new opens.</li>
+                    </ul>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">8. Pause &amp; resume</div>
+                    <p>
+                        You can pause your subscription at any time. While paused, no debits happen and no new positions open (existing ones still trade out).
+                        When you resume, the renewal date is pushed forward by exactly the number of days you were paused — you don't lose any of the time you've already paid for.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">9. Plan changes</div>
+                    <p>
+                        You can switch plans at any time. Mid-cycle plan changes are <strong>prorated</strong>: the unused days of your current plan are credited back to your wallet, and the full new plan rate is charged from your wallet. The new renewal date is set 30 days from the change.
+                        If your wallet can't cover the new plan after the prorate, the change is rejected — top up first.
+                    </p>
+                    <p class="mt-1">
+                        Downgrading from a multi-account plan to a single-account plan requires you to designate which account stays active. Other accounts go read-only until you upgrade again.
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">10. Notifications</div>
+                    <p>
+                        We send notifications for: top-up confirmation, low balance (7 days before renewal if your wallet is short), trial ending (2 days before, if you haven't topped up), and renewal failure.
+                        Channels are based on your account preferences (email, Pushover).
+                    </p>
+                </div>
+
+                <div>
+                    <div class="text-xs font-semibold ui-text mb-1">11. Account responsibility</div>
+                    <p>
+                        You are responsible for the security of your Kraite account, your exchange API keys, and your payment wallet. Kraite stores exchange credentials encrypted, but cannot recover lost access if you lose your login or 2FA.
+                        Trading carries financial risk. Kraite makes no guarantees about returns; past performance of the bot does not predict future results.
+                    </p>
+                </div>
+
+                <div class="text-[10px] ui-text-subtle pt-3 border-t ui-border">
+                    These terms may evolve as the service grows. Material changes will be communicated via email before they take effect.
+                </div>
+
+            </div>
+        </div>
+
     </div>
+
+    <script>
+        // Polls /billing/wallet-status every 5s. When the wallet balance
+        // changes from what we rendered with, the page reloads so all
+        // dependent UI (state banners, plan card, coverage badge,
+        // top-up minimum) reflects the new state.
+        function walletPoller(config) {
+            return {
+                initial: parseFloat(config.initialBalance),
+                async start() {
+                    setInterval(async () => {
+                        try {
+                            const res = await fetch(config.endpoint, {
+                                headers: { 'Accept': 'application/json' },
+                                credentials: 'same-origin',
+                            });
+                            if (!res.ok) return;
+                            const data = await res.json();
+                            const current = parseFloat(data.wallet_balance_usdt || 0);
+                            if (Math.abs(current - this.initial) > 0.0001) {
+                                location.reload();
+                            }
+                        } catch (e) {
+                            // Silent — just retry next tick.
+                        }
+                    }, 5000);
+                },
+            };
+        }
+    </script>
 
     {{-- Coverage rule explainer --}}
     <x-hub-ui::modal name="coverage-rule" maxWidth="lg">

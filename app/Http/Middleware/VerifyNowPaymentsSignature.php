@@ -6,6 +6,7 @@ namespace App\Http\Middleware;
 
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -51,6 +52,17 @@ final class VerifyNowPaymentsSignature
         $expected = hash_hmac('sha512', $sortedJson, $secret);
 
         if (! hash_equals(strtolower($expected), strtolower($signature))) {
+            Log::warning('[NOWPayments] signature mismatch', [
+                'received_sig_prefix' => substr($signature, 0, 16),
+                'expected_sig_prefix' => substr($expected, 0, 16),
+                'secret_prefix' => substr($secret, 0, 6),
+                'body_first_500' => substr($body, 0, 500),
+                'sorted_first_500' => substr($sortedJson, 0, 500),
+                'order_id' => $data['order_id'] ?? null,
+                'payment_id' => $data['payment_id'] ?? null,
+                'payment_status' => $data['payment_status'] ?? null,
+            ]);
+
             abort(401, 'Invalid NOWPayments signature.');
         }
 

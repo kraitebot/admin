@@ -155,6 +155,11 @@ final class NowPaymentsWebhookController extends Controller
             $user->refresh();
             $user->load('subscription');
 
+            $payment = \Kraite\Core\Models\Payment::where('user_id', $user->id)
+                ->whereNotNull('credited_at')
+                ->orderByDesc('credited_at')
+                ->first();
+
             NotificationService::send(
                 user: $user,
                 canonical: 'subscription_topup_confirmed',
@@ -165,6 +170,7 @@ final class NowPaymentsWebhookController extends Controller
                     'shortfall_usdt' => $user->renewalShortfallUsdt(),
                     'source' => 'NOWPayments',
                     'renewal_ran' => $renewalRan,
+                    'pay_currency' => $payment?->pay_currency,
                 ],
             );
         } catch (Throwable $e) {

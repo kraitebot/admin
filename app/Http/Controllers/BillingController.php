@@ -201,6 +201,21 @@ final class BillingController extends Controller
             ->with('status', 'Plan updated.');
     }
 
+    public function walletStatus(Request $request): JsonResponse
+    {
+        $user = $this->kraiteUser($request);
+
+        return response()->json([
+            'wallet_balance_usdt' => (float) $user->wallet_balance_usdt,
+            'last_credit_at' => optional(
+                Payment::where('user_id', $user->id)
+                    ->whereNotNull('credited_at')
+                    ->orderByDesc('credited_at')
+                    ->first()
+            )?->credited_at?->toIso8601String(),
+        ]);
+    }
+
     public function minAmount(Request $request): JsonResponse
     {
         $coinCanonical = (string) $request->query('coin', '');
@@ -223,9 +238,11 @@ final class BillingController extends Controller
         $wallet = (float) $user->wallet_balance_usdt;
         $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
 
-        $ruleMin = $wallet >= $monthlyRate
-            ? $coveredFloor
-            : max(0.0, $monthlyRate - $wallet);
+        $enforceCoverage = (bool) config('kraite.billing.enforce_minimum_for_renewal', true);
+
+        $ruleMin = $enforceCoverage
+            ? ($wallet >= $monthlyRate ? $coveredFloor : max(0.0, $monthlyRate - $wallet))
+            : 0.0;
 
         $gatewayMinUsdt = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
 
@@ -241,6 +258,7 @@ final class BillingController extends Controller
             'rule_min_usdt' => round($ruleMin, 4),
             'gateway_min_usdt' => round($gatewayMinUsdt, 4),
             'effective_min_usdt' => round($effectiveMin, 4),
+            'enforce_coverage' => $enforceCoverage,
             'button_label' => sprintf('Top up %s USDT', number_format($effectiveMin, 2)),
         ]);
     }
@@ -270,9 +288,11 @@ final class BillingController extends Controller
         $wallet = (float) $user->wallet_balance_usdt;
         $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
 
-        $ruleMin = $wallet >= $monthlyRate
-            ? $coveredFloor
-            : max(0.0, $monthlyRate - $wallet);
+        $enforceCoverage = (bool) config('kraite.billing.enforce_minimum_for_renewal', true);
+
+        $ruleMin = $enforceCoverage
+            ? ($wallet >= $monthlyRate ? $coveredFloor : max(0.0, $monthlyRate - $wallet))
+            : 0.0;
 
         $gatewayMin = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
         $effectiveMin = max($ruleMin, $gatewayMin);
@@ -288,6 +308,40 @@ final class BillingController extends Controller
                     number_format($effectiveMin, 2),
                 ));
         }
+
+        return $this->createInvoiceAndRedirect($user, $coin, $amount);
+    }
+
+    public function quickTopUp(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'user' => 'required|integer|exists:users,id',
+            'amount' => 'required|numeric|min:0.01',
+            'coin' => 'required|string',
+        ]);
+
+        $user = KraiteUser::with('subscription')->findOrFail((int) $data['user']);
+
+        if (! $user->is_active) {
+            abort(403, 'User is not active.');
+        }
+
+        $coin = TopUpCoin::query()
+            ->where('canonical', $data['coin'])
+            ->where('is_active', true)
+            ->first();
+
+        if ($coin === null) {
+            return redirect()
+                ->route('billing')
+                ->with('error', 'The coin from your last payment is no longer available. Pick another option below.');
+        }
+
+        return $this->createInvoiceAndRedirect($user, $coin, (float) $data['amount']);
+    }
+
+    private function createInvoiceAndRedirect(KraiteUser $user, TopUpCoin $coin, float $amount): RedirectResponse
+    {
 
         $payment = Payment::create([
             'user_id' => $user->id,
