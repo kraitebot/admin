@@ -241,6 +241,26 @@
                         {{-- Expanded --}}
                         <div x-show="isPairOpen(pair)" x-collapse>
                             <div class="border-t ui-border">
+                                {{-- Sub-tabs --}}
+                                <div class="flex border-b ui-border px-5 pt-3 gap-1">
+                                    <button
+                                        type="button"
+                                        @click="setPairTab(pair, 'details')"
+                                        class="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors"
+                                        :class="pairTab(pair) === 'details' ? 'ui-text border-current' : 'ui-text-muted border-transparent hover:ui-text'"
+                                        :style="pairTab(pair) === 'details' ? 'border-color: rgb(var(--ui-primary))' : ''"
+                                    >Details</button>
+                                    <button
+                                        type="button"
+                                        @click="setPairTab(pair, 'projections')"
+                                        class="px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors"
+                                        :class="pairTab(pair) === 'projections' ? 'ui-text border-current' : 'ui-text-muted border-transparent hover:ui-text'"
+                                        :style="pairTab(pair) === 'projections' ? 'border-color: rgb(var(--ui-primary))' : ''"
+                                    >PnL projections</button>
+                                </div>
+
+                                {{-- Details tab --}}
+                                <div x-show="pairTab(pair) === 'details'">
                                 {{-- Position split --}}
                                 <div class="grid grid-cols-1 md:grid-cols-2">
                                     {{-- DB column --}}
@@ -398,6 +418,53 @@
                                         </div>
                                     </div>
                                 </template>
+                                </div> {{-- /Details tab --}}
+
+                                {{-- PnL projections tab --}}
+                                <div x-show="pairTab(pair) === 'projections'" x-cloak>
+                                    <template x-if="(pair.pnl_projections || []).length > 0">
+                                        <div class="overflow-x-auto">
+                                            <table class="w-full text-[11px] font-mono">
+                                                <thead>
+                                                    <tr class="ui-text-subtle text-[9px] uppercase tracking-[0.12em] ui-bg-elevated">
+                                                        <th class="text-left px-5 py-2 font-semibold">Order Type</th>
+                                                        <th class="text-left px-3 py-2 font-semibold">Side</th>
+                                                        <th class="text-right px-3 py-2 font-semibold">Price</th>
+                                                        <th class="text-right px-3 py-2 font-semibold">Size</th>
+                                                        <th class="text-right px-3 py-2 font-semibold">Avg Entry</th>
+                                                        <th class="text-right px-3 py-2 font-semibold">TP Price</th>
+                                                        <th class="text-right px-3 py-2 font-semibold">PnL @ Fill</th>
+                                                        <th class="text-right px-5 py-2 font-semibold">Profit @ TP</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    <template x-for="(row, idx) in (pair.pnl_projections || [])" :key="idx">
+                                                        <tr class="border-t ui-border">
+                                                            <td class="px-5 py-2 ui-text-muted" x-text="row.type"></td>
+                                                            <td class="px-3 py-2">
+                                                                <span
+                                                                    class="text-[9px] font-semibold uppercase tracking-[0.12em] px-1 py-0.5 rounded"
+                                                                    :class="row.side === 'BUY' ? 'ui-text-success' : 'ui-text-danger'"
+                                                                    :style="'background-color: rgb(var(' + (row.side === 'BUY' ? '--ui-success' : '--ui-danger') + ') / 0.1)'"
+                                                                    x-text="row.side"
+                                                                ></span>
+                                                            </td>
+                                                            <td class="px-3 py-2 text-right ui-text ui-tabular" x-text="row.price"></td>
+                                                            <td class="px-3 py-2 text-right ui-text ui-tabular" x-text="row.size"></td>
+                                                            <td class="px-3 py-2 text-right ui-text-muted ui-tabular" x-text="row.avg_entry"></td>
+                                                            <td class="px-3 py-2 text-right ui-text-muted ui-tabular" x-text="row.tp_price || '—'"></td>
+                                                            <td class="px-3 py-2 text-right ui-tabular" :class="pnlClass(row.pnl_at_fill)" x-text="fmtPnl(row.pnl_at_fill)"></td>
+                                                            <td class="px-5 py-2 text-right ui-tabular" :class="pnlClass(row.profit_at_tp)" x-text="fmtPnl(row.profit_at_tp)"></td>
+                                                        </tr>
+                                                    </template>
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </template>
+                                    <template x-if="(pair.pnl_projections || []).length === 0">
+                                        <div class="px-5 py-6 text-[11px] ui-text-subtle italic font-mono">No projections available — position has no entry-side fills yet.</div>
+                                    </template>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -493,6 +560,26 @@
                                                 <tr class="border-t ui-border ui-bg-elevated">
                                                     <td></td>
                                                     <td colspan="11" class="px-3 py-3">
+                                                        {{-- Sub-tabs --}}
+                                                        <div class="flex border-b ui-border gap-1 mb-3">
+                                                            <button
+                                                                type="button"
+                                                                @click="setHistoryTab(pos, 'details')"
+                                                                class="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors"
+                                                                :class="historyTab(pos) === 'details' ? 'ui-text border-current' : 'ui-text-muted border-transparent hover:ui-text'"
+                                                                :style="historyTab(pos) === 'details' ? 'border-color: rgb(var(--ui-primary))' : ''"
+                                                            >Details</button>
+                                                            <button
+                                                                type="button"
+                                                                @click="setHistoryTab(pos, 'projections')"
+                                                                class="px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] border-b-2 -mb-px transition-colors"
+                                                                :class="historyTab(pos) === 'projections' ? 'ui-text border-current' : 'ui-text-muted border-transparent hover:ui-text'"
+                                                                :style="historyTab(pos) === 'projections' ? 'border-color: rgb(var(--ui-primary))' : ''"
+                                                            >PnL projections</button>
+                                                        </div>
+
+                                                        {{-- Details tab --}}
+                                                        <div x-show="historyTab(pos) === 'details'">
                                                         <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
                                                             <div>
                                                                 <div class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle mb-1">Margin</div>
@@ -556,6 +643,53 @@
                                                         <template x-if="pos.orders.length === 0">
                                                             <div class="text-[11px] ui-text-subtle italic font-mono">No orders recorded for this position.</div>
                                                         </template>
+                                                        </div> {{-- /Details tab --}}
+
+                                                        {{-- PnL projections tab --}}
+                                                        <div x-show="historyTab(pos) === 'projections'" x-cloak>
+                                                            <template x-if="(pos.pnl_projections || []).length > 0">
+                                                                <div class="rounded border ui-border overflow-x-auto">
+                                                                    <table class="w-full text-[10px] font-mono">
+                                                                        <thead>
+                                                                            <tr class="ui-text-subtle text-[9px] uppercase tracking-[0.12em]">
+                                                                                <th class="text-left px-3 py-1.5 font-semibold">Order Type</th>
+                                                                                <th class="text-left px-3 py-1.5 font-semibold">Side</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">Price</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">Size</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">Avg Entry</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">TP Price</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">PnL @ Fill</th>
+                                                                                <th class="text-right px-3 py-1.5 font-semibold">Profit @ TP</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            <template x-for="(row, idx) in (pos.pnl_projections || [])" :key="idx">
+                                                                                <tr class="border-t ui-border">
+                                                                                    <td class="px-3 py-1.5 ui-text-muted" x-text="row.type"></td>
+                                                                                    <td class="px-3 py-1.5">
+                                                                                        <span
+                                                                                            class="text-[9px] font-semibold uppercase tracking-[0.12em] px-1 py-0.5 rounded"
+                                                                                            :class="row.side === 'BUY' ? 'ui-text-success' : 'ui-text-danger'"
+                                                                                            :style="'background-color: rgb(var(' + (row.side === 'BUY' ? '--ui-success' : '--ui-danger') + ') / 0.1)'"
+                                                                                            x-text="row.side"
+                                                                                        ></span>
+                                                                                    </td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-text ui-tabular" x-text="row.price"></td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-text ui-tabular" x-text="row.size"></td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-text-muted ui-tabular" x-text="row.avg_entry"></td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-text-muted ui-tabular" x-text="row.tp_price || '—'"></td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-tabular" :class="pnlClass(row.pnl_at_fill)" x-text="fmtPnl(row.pnl_at_fill)"></td>
+                                                                                    <td class="px-3 py-1.5 text-right ui-tabular" :class="pnlClass(row.profit_at_tp)" x-text="fmtPnl(row.profit_at_tp)"></td>
+                                                                                </tr>
+                                                                            </template>
+                                                                        </tbody>
+                                                                    </table>
+                                                                </div>
+                                                            </template>
+                                                            <template x-if="(pos.pnl_projections || []).length === 0">
+                                                                <div class="text-[11px] ui-text-subtle italic font-mono">No projections available — position has no entry-side fills.</div>
+                                                            </template>
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             </template>
@@ -643,6 +777,8 @@
                 historyTotal: 0,
                 loadingHistory: false,
                 expandedHistory: {},
+                pairTabs: {},
+                historyTabs: {},
 
                 accounts: @json($accounts),
                 isAdmin: @json($isAdmin),
@@ -698,6 +834,35 @@
                 pairKey(pair) { return pair.symbol + '|' + pair.direction; },
                 togglePair(pair) { const k = this.pairKey(pair); this.openPairs[k] = !this.openPairs[k]; },
                 isPairOpen(pair) { return !!this.openPairs[this.pairKey(pair)]; },
+
+                // Per-pair tab state (persists across refreshes since the
+                // map keys off symbol|direction). Defaults to 'details' so
+                // existing behaviour is preserved.
+                pairTab(pair) { return this.pairTabs[this.pairKey(pair)] || 'details'; },
+                setPairTab(pair, tab) { this.pairTabs[this.pairKey(pair)] = tab; },
+
+                // Per-history-row tab state.
+                historyTab(pos) { return this.historyTabs[pos.id] || 'details'; },
+                setHistoryTab(pos, tab) { this.historyTabs[pos.id] = tab; },
+
+                // Format a quote-currency PnL value with sign + colour. Empty
+                // dash for missing values; otherwise 4-decimal display so the
+                // operator can read sub-cent moves on small positions.
+                fmtPnl(v) {
+                    if (v === null || v === undefined || v === '') return '—';
+                    const n = parseFloat(v);
+                    if (!Number.isFinite(n)) return '—';
+                    const sign = n > 0 ? '+' : '';
+                    return sign + n.toFixed(4);
+                },
+                pnlClass(v) {
+                    if (v === null || v === undefined || v === '') return 'ui-text-subtle';
+                    const n = parseFloat(v);
+                    if (!Number.isFinite(n)) return 'ui-text-subtle';
+                    if (n > 0) return 'ui-text-success';
+                    if (n < 0) return 'ui-text-danger';
+                    return 'ui-text-muted';
+                },
 
                 railColor(status) {
                     if (status === 'synced') return 'rgb(var(--ui-success))';

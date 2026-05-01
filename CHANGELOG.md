@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.1.2] — 2026-05-02
+
+### Features
+- [NEW FEATURE] Sub-tabs inside expandable position rows on `/accounts/positions` (active pair cards + closed history). New "PnL projections" tab renders a per-stage grid: MARKET → LIMIT N → STOP-MARKET, with cumulative size, WAP'd avg entry, per-row TP price (computed via the engine's WAP formula), PnL @ fill, and projected profit @ TP.
+
 ## [0.1.1] — 2026-05-02
 
 ### Fixes

@@ -155,6 +155,7 @@ class PositionsController extends Controller
                     'client_order_id' => $o->client_order_id,
                     'exchange_order_id' => $o->exchange_order_id,
                 ])->all(),
+                'pnl_projections' => $this->computePnlProjections($p),
             ];
         })->all();
 
@@ -497,6 +498,7 @@ class PositionsController extends Controller
             'position_drift_fields' => $positionDriftFields,
             'orders' => $orders,
             'order_counts' => $this->countStatuses($orders),
+            'pnl_projections' => $this->computePnlProjections($dbPos),
         ];
     }
 
@@ -887,6 +889,142 @@ class PositionsController extends Controller
         }
 
         return $n === '' || $n === '-' ? '0' : $n;
+    }
+
+    /**
+     * Per-stage PnL grid for a position. One row per lifecycle order:
+     * MARKET → each LIMIT rung (qty asc) → STOP-MARKET, in that order.
+     *
+     * Each row carries the position's *post-fill* state at that point —
+     * cumulative qty, WAP'd avg entry, and what the unrealized PnL would
+     * be at the row's fill price plus what the profit would be at today's
+     * stored TP. SL row assumes every limit rung filled before SL hit
+     * (worst-case max size).
+     *
+     * Returns [] when no DB position is attached or the position has no
+     * entry-side fills/orders. CANCELLED + EXPIRED orders are excluded.
+     */
+    private function computePnlProjections($dbPos): array
+    {
+        if (! $dbPos) {
+            return [];
+        }
+
+        $direction = strtoupper((string) $dbPos->direction);
+        $isLong = $direction === 'LONG';
+        $sign = $isLong ? '1' : '-1';
+
+        // Per-row TP comes from the engine's WAP formula:
+        //   LONG  : avg_entry × (1 + profit_pct/100)
+        //   SHORT : avg_entry × (1 − profit_pct/100)
+        // Mirrors CalculateWapAndModifyProfitOrderJob so the projection grid
+        // matches what the position's TP would be at each ladder state.
+        $profitPct = $dbPos->profit_percentage;
+        $tpFraction = $profitPct !== null && is_numeric((string) $profitPct)
+            ? bcdiv((string) $profitPct, '100', 18)
+            : null;
+        $tpMultiplier = $tpFraction !== null
+            ? ($isLong ? bcadd('1', $tpFraction, 18) : bcsub('1', $tpFraction, 18))
+            : null;
+
+        $excludedStatuses = ['CANCELLED', 'EXPIRED'];
+
+        $orders = $dbPos->orders->reject(
+            fn ($o) => in_array(strtoupper((string) $o->status), $excludedStatuses, true)
+        );
+
+        $marketRows = $orders
+            ->where('type', 'MARKET')
+            ->sortBy('id')
+            ->values();
+
+        $limitRows = $orders
+            ->where('type', 'LIMIT')
+            ->sortBy(fn ($o) => (float) $o->quantity)
+            ->values();
+
+        $slOrder = $orders
+            ->where('type', 'STOP-MARKET')
+            ->sortByDesc('id')
+            ->first();
+        $slPrice = $slOrder?->price !== null ? (string) $slOrder->price : null;
+
+        $rows = [];
+        $cumulativeQty = '0';
+        $cumulativeCost = '0';
+
+        $appendEntryRow = function (string $label, $order) use (
+            &$rows, &$cumulativeQty, &$cumulativeCost, $tpMultiplier, $sign
+        ) {
+            $qty = (string) $order->quantity;
+            $price = (string) $order->price;
+
+            if (! is_numeric($qty) || ! is_numeric($price)) {
+                return;
+            }
+
+            $cumulativeQty = bcadd($cumulativeQty, $qty, 18);
+            $cumulativeCost = bcadd($cumulativeCost, bcmul($qty, $price, 18), 18);
+
+            if (bccomp($cumulativeQty, '0', 18) <= 0) {
+                return;
+            }
+
+            $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
+            $pnlAtFill = bcmul(bcmul(bcsub($price, $avgEntry, 18), $cumulativeQty, 18), $sign, 18);
+
+            $tpPrice = $tpMultiplier !== null
+                ? bcmul($avgEntry, $tpMultiplier, 18)
+                : null;
+            $profitAtTp = $tpPrice !== null
+                ? bcmul(bcmul(bcsub($tpPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18)
+                : null;
+
+            $rows[] = [
+                'type' => $label,
+                'side' => strtoupper((string) $order->side),
+                'price' => $this->trim($price),
+                'size' => $this->trim($cumulativeQty),
+                'avg_entry' => $this->trim($avgEntry),
+                'tp_price' => $tpPrice !== null ? $this->trim($tpPrice) : null,
+                'pnl_at_fill' => $this->trim($pnlAtFill),
+                'profit_at_tp' => $profitAtTp !== null ? $this->trim($profitAtTp) : null,
+                'status' => strtoupper((string) $order->status),
+            ];
+        };
+
+        foreach ($marketRows as $m) {
+            $appendEntryRow('MARKET', $m);
+        }
+        foreach ($limitRows as $idx => $l) {
+            $appendEntryRow('LIMIT '.($idx + 1), $l);
+        }
+
+        if ($slPrice !== null && is_numeric($slPrice) && bccomp($cumulativeQty, '0', 18) > 0) {
+            $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
+            $pnlAtSl = bcmul(bcmul(bcsub($slPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18);
+
+            $tpPrice = $tpMultiplier !== null
+                ? bcmul($avgEntry, $tpMultiplier, 18)
+                : null;
+            $profitAtTp = $tpPrice !== null
+                ? bcmul(bcmul(bcsub($tpPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18)
+                : null;
+
+            $rows[] = [
+                'type' => 'STOP-MARKET',
+                'side' => strtoupper((string) $slOrder->side),
+                'price' => $this->trim($slPrice),
+                'size' => $this->trim($cumulativeQty),
+                'avg_entry' => $this->trim($avgEntry),
+                'tp_price' => $tpPrice !== null ? $this->trim($tpPrice) : null,
+                'pnl_at_fill' => $this->trim($pnlAtSl),
+                'profit_at_tp' => $profitAtTp !== null ? $this->trim($profitAtTp) : null,
+                'status' => strtoupper((string) $slOrder->status),
+            ];
+        }
+
+        return $rows;
     }
 
     private function countStatuses(array $orders): array
