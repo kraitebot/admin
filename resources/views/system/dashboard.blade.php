@@ -112,7 +112,7 @@
             <x-hub-ui::spinner size="lg" />
         </div>
 
-        <div x-show="!loading" x-cloak class="dash-layout">
+        <div x-show="!loading" x-cloak class="space-y-4 sm:space-y-5">
             {{-- System State — cooling-down toggle --}}
             <div
                 class="ui-card flex items-center justify-between gap-4 px-5 py-4 flex-wrap"
@@ -139,122 +139,124 @@
                 />
             </div>
 
-            {{-- Dashboard Grid --}}
-            <div class="dash-grid">
-
-                {{-- Main Gauge Panel --}}
-                <div class="dash-panel dash-panel--hero">
-                    <div class="dash-panel__glow"></div>
-                    <div class="dash-panel__content">
-                        <div class="hero-gauge">
-                            <svg class="hero-gauge__ring" viewBox="0 0 120 120">
-                                <defs>
-                                    <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                        <stop offset="0%" stop-color="rgb(var(--ui-success))" />
-                                        <stop offset="100%" stop-color="rgb(var(--ui-primary))" />
-                                    </linearGradient>
-                                </defs>
-                                <circle cx="60" cy="60" r="52" class="hero-gauge__track" />
-                                <circle cx="60" cy="60" r="52" class="hero-gauge__fill" :style="'stroke-dasharray: ' + (tradeablePct * 3.27) + ' 327'" />
-                            </svg>
-                            <div class="hero-gauge__center">
-                                <span class="hero-gauge__value">
-                                    <x-hub-ui::number value="tradeablePct" />
-                                </span>
-                                <span class="hero-gauge__unit">%</span>
-                                <span class="hero-gauge__label">TRADEABLE</span>
-                            </div>
-                        </div>
-                        <div class="hero-stats">
-                            <div class="hero-stat">
-                                <span class="hero-stat__value hero-stat__value--success">
-                                    <x-hub-ui::number value="stats.total_tradeable" />
-                                </span>
-                                <span class="hero-stat__label">Active</span>
-                            </div>
-                            <div class="hero-stat__divider"></div>
-                            <div class="hero-stat">
-                                <span class="hero-stat__value hero-stat__value--muted">
-                                    <x-hub-ui::number value="stats.total_non_tradeable" />
-                                </span>
-                                <span class="hero-stat__label">Inactive</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {{-- Direction Panel --}}
-                <div class="dash-panel dash-panel--direction">
-                    <div class="dash-panel__header">
-                        <span class="dash-panel__title">DIRECTION</span>
-                        <span class="dash-panel__live"><span class="dash-panel__live-dot"></span>LIVE</span>
-                    </div>
-                    <div class="direction-display">
-                        <div class="direction-side direction-side--long">
-                            <div class="direction-side__icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path d="M12 19V5M5 12l7-7 7 7" />
+            {{-- KPI Strip: Hero gauge + Direction + Stats --}}
+            <div class="ui-card overflow-hidden">
+                <div class="kpi-strip">
+                    {{-- Hero gauge --}}
+                    <div class="kpi-strip__hero">
+                        <div class="dash-panel__glow"></div>
+                        <div class="dash-panel__content">
+                            <div class="hero-gauge">
+                                <svg class="hero-gauge__ring" viewBox="0 0 120 120">
+                                    <defs>
+                                        <linearGradient id="gaugeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                                            <stop offset="0%" stop-color="rgb(var(--ui-success))" />
+                                            <stop offset="100%" stop-color="rgb(var(--ui-primary))" />
+                                        </linearGradient>
+                                    </defs>
+                                    <circle cx="60" cy="60" r="52" class="hero-gauge__track" />
+                                    <circle cx="60" cy="60" r="52" class="hero-gauge__fill" :style="'stroke-dasharray: ' + (tradeablePct * 3.27) + ' 327'" />
                                 </svg>
+                                <div class="hero-gauge__center">
+                                    <span class="hero-gauge__value">
+                                        <x-hub-ui::number value="tradeablePct" />
+                                    </span>
+                                    <span class="hero-gauge__unit">%</span>
+                                    <span class="hero-gauge__label">TRADEABLE</span>
+                                </div>
                             </div>
-                            <div class="direction-side__data">
-                                <span class="direction-side__value">
-                                    <x-hub-ui::number value="stats.total_longs" />
-                                </span>
-                                <span class="direction-side__pct" x-text="longPct + '%'"></span>
+                            <div class="hero-stats">
+                                <div class="hero-stat">
+                                    <span class="hero-stat__value hero-stat__value--success">
+                                        <x-hub-ui::number value="stats.total_tradeable" />
+                                    </span>
+                                    <span class="hero-stat__label">Active</span>
+                                </div>
+                                <div class="hero-stat__divider"></div>
+                                <div class="hero-stat">
+                                    <span class="hero-stat__value hero-stat__value--muted">
+                                        <x-hub-ui::number value="stats.total_non_tradeable" />
+                                    </span>
+                                    <span class="hero-stat__label">Inactive</span>
+                                </div>
                             </div>
-                            <span class="direction-side__label">LONG</span>
                         </div>
-                        <div class="direction-bar">
-                            <div class="direction-bar__long" :style="'width: ' + longPct + '%'"></div>
-                            <div class="direction-bar__short" :style="'width: ' + shortPct + '%'"></div>
+                    </div>
+
+                    {{-- Direction --}}
+                    <div class="kpi-strip__direction">
+                        <div class="dash-panel__header">
+                            <span class="dash-panel__title">DIRECTION</span>
+                            <span class="dash-panel__live"><span class="dash-panel__live-dot"></span>LIVE</span>
                         </div>
-                        <div class="direction-side direction-side--short">
-                            <div class="direction-side__icon">
-                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path d="M12 5v14M5 12l7 7 7-7" />
-                                </svg>
+                        <div class="direction-display">
+                            <div class="direction-side direction-side--long">
+                                <div class="direction-side__icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M12 19V5M5 12l7-7 7 7" />
+                                    </svg>
+                                </div>
+                                <div class="direction-side__data">
+                                    <span class="direction-side__value">
+                                        <x-hub-ui::number value="stats.total_longs" />
+                                    </span>
+                                    <span class="direction-side__pct" x-text="longPct + '%'"></span>
+                                </div>
+                                <span class="direction-side__label">LONG</span>
                             </div>
-                            <div class="direction-side__data">
-                                <span class="direction-side__value">
-                                    <x-hub-ui::number value="stats.total_shorts" />
-                                </span>
-                                <span class="direction-side__pct" x-text="shortPct + '%'"></span>
+                            <div class="direction-bar">
+                                <div class="direction-bar__long" :style="'width: ' + longPct + '%'"></div>
+                                <div class="direction-bar__short" :style="'width: ' + shortPct + '%'"></div>
                             </div>
-                            <span class="direction-side__label">SHORT</span>
+                            <div class="direction-side direction-side--short">
+                                <div class="direction-side__icon">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                        <path d="M12 5v14M5 12l7 7 7-7" />
+                                    </svg>
+                                </div>
+                                <div class="direction-side__data">
+                                    <span class="direction-side__value">
+                                        <x-hub-ui::number value="stats.total_shorts" />
+                                    </span>
+                                    <span class="direction-side__pct" x-text="shortPct + '%'"></span>
+                                </div>
+                                <span class="direction-side__label">SHORT</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- Stats grid --}}
+                    <div class="kpi-strip__stats">
+                        <div class="stat-item">
+                            <span class="stat-item__value">
+                                <x-hub-ui::number value="stats.total_exchanges" />
+                            </span>
+                            <span class="stat-item__label">EXCHANGES</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-item__value">
+                                <x-hub-ui::number value="stats.total_symbols" />
+                            </span>
+                            <span class="stat-item__label">CMC SYMBOLS</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-item__value">
+                                <x-hub-ui::number value="stats.total_exchange_symbols" />
+                            </span>
+                            <span class="stat-item__label">EX. SYMBOLS</span>
+                        </div>
+                        <div class="stat-item stat-item--highlight">
+                            <span class="stat-item__value">
+                                <x-hub-ui::number value="stats.total_tradeable" />
+                            </span>
+                            <span class="stat-item__label">TRADEABLE</span>
                         </div>
                     </div>
                 </div>
+            </div>
 
-                {{-- Stats Strip --}}
-                <div class="dash-panel dash-panel--stats">
-                    <div class="stat-item">
-                        <span class="stat-item__value">
-                            <x-hub-ui::number value="stats.total_exchanges" />
-                        </span>
-                        <span class="stat-item__label">EXCHANGES</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-item__value">
-                            <x-hub-ui::number value="stats.total_symbols" />
-                        </span>
-                        <span class="stat-item__label">CMC SYMBOLS</span>
-                    </div>
-                    <div class="stat-item">
-                        <span class="stat-item__value">
-                            <x-hub-ui::number value="stats.total_exchange_symbols" />
-                        </span>
-                        <span class="stat-item__label">EX. SYMBOLS</span>
-                    </div>
-                    <div class="stat-item stat-item--highlight">
-                        <span class="stat-item__value">
-                            <x-hub-ui::number value="stats.total_tradeable" />
-                        </span>
-                        <span class="stat-item__label">TRADEABLE</span>
-                    </div>
-                </div>
-
-                {{-- Black Swan Composite Score --}}
-                <div class="dash-panel dash-panel--bscs" x-show="bscs">
+            {{-- Black Swan Composite Score --}}
+            <div class="ui-card overflow-hidden" x-show="bscs">
                     <div class="dash-panel__header">
                         <span class="dash-panel__title">BLACK SWAN COMPOSITE SCORE</span>
                         <span class="dash-panel__subtitle"
@@ -362,7 +364,7 @@
                 </div>
 
                 {{-- Exchanges Table --}}
-                <div class="dash-panel dash-panel--exchanges">
+                <div class="ui-card overflow-hidden">
                     <div class="dash-panel__header">
                         <span class="dash-panel__title">EXCHANGES</span>
                         <span class="dash-panel__subtitle" x-text="exchanges.length + ' connected'"></span>
@@ -396,29 +398,61 @@
                         </template>
                     </div>
                 </div>
-
-            </div>
         </div>
     </div>
 
     <style>
-        /* Dashboard Grid */
-        .dash-grid {
+        /* KPI Strip — Hero gauge + Direction + Stats laid out side-by-side */
+        .kpi-strip {
             display: grid;
-            grid-template-columns: 190px 1fr;
-            grid-template-rows: auto auto auto;
+            grid-template-columns: 1fr;
             gap: 1px;
             background: rgb(var(--ui-border) / 0.5);
-            border: 1px solid rgb(var(--ui-border));
-            border-radius: 10px;
-            overflow: hidden;
         }
-
-        /* Panel Base */
-        .dash-panel {
+        @media (min-width: 768px) {
+            .kpi-strip {
+                grid-template-columns: 220px 1fr;
+            }
+            .kpi-strip__hero { grid-row: span 2; }
+            .kpi-strip__direction { grid-column: 2; }
+            .kpi-strip__stats { grid-column: 2; }
+        }
+        @media (min-width: 1280px) {
+            .kpi-strip {
+                grid-template-columns: 220px minmax(0, 1.4fr) minmax(0, 1.6fr);
+            }
+            .kpi-strip__hero { grid-row: auto; }
+            .kpi-strip__direction { grid-column: 2; }
+            .kpi-strip__stats { grid-column: 3; }
+        }
+        .kpi-strip__hero,
+        .kpi-strip__direction,
+        .kpi-strip__stats {
             background: rgb(var(--ui-bg-card));
             position: relative;
+            min-width: 0;
         }
+        .kpi-strip__hero {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: linear-gradient(145deg, rgb(var(--ui-bg-card)), rgb(var(--ui-bg-elevated) / 0.5));
+        }
+        .kpi-strip__direction {
+            display: flex;
+            flex-direction: column;
+        }
+        .kpi-strip__stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+        }
+        @media (min-width: 1280px) {
+            .kpi-strip__stats { grid-template-columns: repeat(4, 1fr); }
+        }
+
+        /* Panel header (used inside KPI strip + BSCS + Exchanges cards) */
         .dash-panel__header {
             display: flex;
             align-items: center;
@@ -457,16 +491,6 @@
             50% { opacity: 0.8; box-shadow: 0 0 0 4px rgb(var(--ui-success) / 0); }
         }
 
-        /* Hero Panel */
-        .dash-panel--hero {
-            grid-row: span 2;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-            background: linear-gradient(145deg, rgb(var(--ui-bg-card)), rgb(var(--ui-bg-elevated) / 0.5));
-        }
         .dash-panel__glow {
             position: absolute;
             top: 50%;
@@ -572,16 +596,13 @@
         }
 
         /* Direction Panel */
-        .dash-panel--direction {
-            display: flex;
-            flex-direction: column;
-        }
         .direction-display {
             flex: 1;
             display: flex;
             align-items: center;
-            padding: 10px 14px;
-            gap: 12px;
+            padding: 14px 18px;
+            gap: 14px;
+            min-height: 84px;
         }
         .direction-side {
             display: flex;
@@ -648,22 +669,23 @@
             transition: width 0.8s ease-out;
         }
 
-        /* Stats Strip */
-        .dash-panel--stats {
-            grid-column: span 2;
-            display: flex;
-        }
+        /* Stats grid (inside KPI strip) */
         .stat-item {
-            flex: 1;
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 10px 12px;
-            gap: 2px;
+            padding: 14px 12px;
+            gap: 4px;
             border-right: 1px solid rgb(var(--ui-border) / 0.3);
+            border-bottom: 1px solid rgb(var(--ui-border) / 0.3);
         }
-        .stat-item:last-child { border-right: none; }
+        .stat-item:nth-child(2n) { border-right: none; }
+        @media (min-width: 1280px) {
+            .stat-item { border-bottom: none; }
+            .stat-item { border-right: 1px solid rgb(var(--ui-border) / 0.3); }
+            .stat-item:last-child { border-right: none; }
+        }
         .stat-item--highlight {
             background: linear-gradient(180deg, rgb(var(--ui-success) / 0.08) 0%, transparent 100%);
         }
@@ -683,11 +705,6 @@
         }
 
         /* BSCS Panel */
-        .dash-panel--bscs {
-            grid-column: span 2;
-            display: flex;
-            flex-direction: column;
-        }
         .bscs-grid {
             display: grid;
             grid-template-columns: 140px 1fr 1fr;
@@ -763,13 +780,6 @@
         .bscs-override__btn--secondary { background: rgba(59, 130, 246, 0.15); color: rgb(30, 64, 175); }
         .bscs-override__btn--secondary:hover:not(:disabled) { background: rgba(59, 130, 246, 0.25); }
         .bscs-override__error { margin-top: 8px; font-size: 11px; color: rgb(220, 38, 38); font-family: monospace; }
-
-        /* Exchanges Panel */
-        .dash-panel--exchanges {
-            grid-column: span 2;
-            display: flex;
-            flex-direction: column;
-        }
 
         /* Exchange Table */
         .exchange-table {
@@ -852,31 +862,8 @@
             transition: width 0.6s ease-out;
         }
 
-        /* Dashboard Layout — Mobile First */
-        .dash-layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 16px;
-        }
-
-        /* Tablet+ (3 column grid, each tile 1/3) */
-        @media (min-width: 1024px) {
-            .dash-layout {
-                grid-template-columns: repeat(3, 1fr);
-                align-items: start;
-            }
-        }
-
         /* Responsive — Small screens */
         @media (max-width: 640px) {
-            .dash-grid {
-                grid-template-columns: 1fr;
-                max-width: 100%;
-            }
-            .dash-panel--hero { grid-row: auto; }
-            .dash-panel--stats { grid-column: 1; flex-wrap: wrap; }
-            .stat-item { min-width: 50%; }
-            .dash-panel--exchanges { grid-column: 1; }
             .exchange-table__header,
             .exchange-row {
                 grid-template-columns: 1.2fr 0.8fr 0.8fr 1fr;

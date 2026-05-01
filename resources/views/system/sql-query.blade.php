@@ -349,7 +349,7 @@
                 duration: 0,
                 error: null,
                 page: 1,
-                perPage: 20,
+                perPage: 15,
                 total: 0,
                 lastPage: 1,
                 columnFilters: {},

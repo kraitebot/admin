@@ -300,16 +300,15 @@ class DashboardController extends Controller
         $alphaPathPct  = $this->computeAlphaPathPercent($firstProfit, $lastLimit, $currentPrice);
         $alphaLimitPct = $this->computeAlphaLimitPercent($currentTp, $nextLimit, $currentPrice);
 
-        // Position size + unrealised PnL — both computed against live
-        // mark_price. Same reason as alpha math: kraite-core's
-        // Position::pnl() relies on the candle-derived current_price
-        // accessor, which collapses to 0 when the 5m candle is stale.
-        $direction = strtoupper((string) $position->direction);
+        // Size = current notional (qty × live mark). PnL goes through
+        // Position::pnl() which itself reads mark_price + the
+        // cost-weighted average entry across filled orders, so the
+        // dashboard number tracks Binance's reported entryPrice
+        // semantics for WAP'd positions instead of the stale
+        // first-fill opening_price.
         $quantity = (string) ($position->quantity ?? '0');
-        $opening = $position->opening_price !== null ? (string) $position->opening_price : null;
-
         $size = $this->computeSize($quantity, $currentPrice);
-        $pnl  = $this->computePnl($direction, $quantity, $opening, $currentPrice);
+        $pnl = $position->pnl();
 
         return [
             'id' => $position->id,
@@ -472,27 +471,6 @@ class DashboardController extends Controller
         }
 
         return number_format((float) bcmul($quantity, $currentPrice, 8), 2, '.', '');
-    }
-
-    /**
-     * Unrealised PnL in USDT against the entry (opening_price). Direction-
-     * aware: LONG = (mark - entry) × qty, SHORT = (entry - mark) × qty.
-     * Matches the standard "is this position underwater right now" reading.
-     * Returns null on missing data so the tile renders an "—" placeholder
-     * instead of a misleading zero.
-     */
-    private function computePnl(string $direction, ?string $quantity, ?string $entry, ?string $currentPrice): ?string
-    {
-        if ($quantity === null || $entry === null || $currentPrice === null
-            || ! is_numeric($quantity) || ! is_numeric($entry) || ! is_numeric($currentPrice)) {
-            return null;
-        }
-
-        $diff = $direction === 'LONG'
-            ? bcsub($currentPrice, $entry, 16)
-            : bcsub($entry, $currentPrice, 16);
-
-        return number_format((float) bcmul($diff, $quantity, 16), 2, '.', '');
     }
 
     /**

@@ -221,10 +221,11 @@
                             {{-- Track --}}
                             <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full" style="background-color: rgb(var(--ui-border))"></div>
 
-                            {{-- Stress fill (0% → AlphaPath%) --}}
+                            {{-- Stress fill — spans current TP marker → current price marker.
+                                 Visualises how far price has drifted from TP into the limit ladder. --}}
                             <div
-                                class="absolute left-0 top-1/2 -translate-y-1/2 h-1 rounded-full transition-all duration-300"
-                                :style="`width: ${Math.min(100, parseFloat(position.alpha_path_pct))}%; background-color: ${stressColor(position.alpha_path_pct, position.status)}`"
+                                class="absolute top-1/2 -translate-y-1/2 h-1 rounded-full transition-all duration-300"
+                                :style="`left: ${tickFraction(position, position.profit_price) * 100}%; width: ${Math.max(0, currentPriceFraction(position) - tickFraction(position, position.profit_price)) * 100}%; background-color: ${stressColor(position.alpha_path_pct, position.status)}`"
                             ></div>
 
                             {{-- Original TP ghost marker (where TP was before any limit filled — only
@@ -531,7 +532,6 @@
                     const v = parseFloat(pct) || 0;
                     if (v >= 75) return 'rgb(var(--ui-danger))';
                     if (v >= 50) return 'rgb(var(--ui-warning))';
-                    if (v >= 25) return 'rgb(var(--ui-info))';
                     return 'rgb(var(--ui-success))';
                 },
 
