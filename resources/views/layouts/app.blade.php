@@ -13,7 +13,8 @@
         request()->routeIs('system.sql-query') => 'sql-query',
         request()->routeIs('system.commands') => 'commands',
         request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
-        request()->routeIs('system.backtracking') => 'backtracking',
+        request()->routeIs('system.backtesting') => 'backtesting',
+        request()->routeIs('system.lifecycle*') => 'lifecycle',
         request()->routeIs('system.users*'), request()->routeIs('system.billing.*') => 'system-users',
         request()->routeIs('system.ui-components') => 'ui-components',
         default => $activeSection,
@@ -192,11 +193,11 @@
 
                 @if(auth()->user()?->is_admin)
                 <a
-                    href="{{ route('system.backtracking') }}" wire:navigate
-                    data-nav-item="backtracking"
-                    @click="highlight = 'backtracking'"
+                    href="{{ route('system.backtesting') }}" wire:navigate
+                    data-nav-item="backtesting"
+                    @click="highlight = 'backtesting'"
                     class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
-                    :class="highlight === 'backtracking' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                    :class="highlight === 'backtesting' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
                 >
                     <span class="w-5 h-5">
                         <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -204,6 +205,21 @@
                         </svg>
                     </span>
                     <span class="text-xs">Backtesting</span>
+                </a>
+
+                <a
+                    href="{{ route('system.lifecycle') }}" wire:navigate
+                    data-nav-item="lifecycle"
+                    @click="highlight = 'lifecycle'"
+                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
+                    :class="highlight === 'lifecycle' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-5 h-5">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0v3.75c0 .414.336.75.75.75h6a.75.75 0 0 0 .75-.75V16.5m-7.5 0h7.5M9 11.25 12 8.25l3 3" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Lifecycle</span>
                 </a>
                 @endif
 

@@ -1,5 +1,5 @@
 {{--
-    System → Backtracking
+    System → Backtesting
     Admin-only ladder backtester. Three buttons:
       • Fetch Candles    → Binance Vision (bulk) + TAAPI (recency top-up)
       • Verify Coverage  → counts, holes, contiguity %, staleness
@@ -10,13 +10,13 @@
     (TP %, gap %, SL %) in the form, re-run, compare stopped-out rates,
     land on per-token config.
 --}}
-<x-app-layout :activeSection="'system'" :activeHighlight="'backtracking'" :flush="true">
+<x-app-layout :activeSection="'system'" :activeHighlight="'backtesting'" :flush="true">
     <div class="flex flex-col h-full"
-         x-data="backtracking(@js($symbols), @js($defaults), @js($timeframes))"
+         x-data="backtesting(@js($symbols), @js($defaults), @js($timeframes))"
          x-init="init()">
 
         <x-hub-ui::live-header
-            title="Backtracking"
+            title="Backtesting"
             description="Ladder backtest over historical candles — tune TP / gap / SL per token to find survivable config."
         >
             <x-slot:actions>
@@ -451,7 +451,7 @@
     </div>
 
     <script>
-    function backtracking(symbols, defaults, timeframes) {
+    function backtesting(symbols, defaults, timeframes) {
         return {
             symbols: symbols,
             timeframes: timeframes,
@@ -594,7 +594,7 @@
                             payload.gap_short_percent = this.form.gap_short_percent;
                         }
                     }
-                    const res = await this.post('{{ route('system.backtracking.toggle-approval') }}', payload);
+                    const res = await this.post('{{ route('system.backtesting.toggle-approval') }}', payload);
                     if (res.ok) {
                         // Rebuild the symbols structure with the mutated row
                         // replaced. Direct nested-property mutation ($s.x = y)
@@ -767,7 +767,7 @@
                     const config = Object.fromEntries(
                         Object.entries(this.form).filter(([_, v]) => v !== '' && v !== null)
                     );
-                    const res = await this.post('{{ route('system.backtracking.ai-insights') }}', {
+                    const res = await this.post('{{ route('system.backtesting.ai-insights') }}', {
                         exchange_symbol_id: this.form.exchange_symbol_id,
                         timeframe: this.form.timeframe,
                         totals: this.result.totals ?? {},
@@ -890,7 +890,7 @@
                         fetchPayload.candles_back = this.form.candles_back;
                     }
 
-                    const fetchRes = await this.post('{{ route('system.backtracking.fetch-candles') }}', fetchPayload);
+                    const fetchRes = await this.post('{{ route('system.backtesting.fetch-candles') }}', fetchPayload);
                     if (!fetchRes.ok) {
                         this.statusMessage = 'Fetch failed: ' + (fetchRes.error ?? 'unknown');
                         this.statusError = true;
@@ -906,7 +906,7 @@
                         Object.entries(this.form)
                             .filter(([_, v]) => v !== '' && v !== null)
                     );
-                    const runRes = await this.post('{{ route('system.backtracking.run') }}', runPayload);
+                    const runRes = await this.post('{{ route('system.backtesting.run') }}', runPayload);
 
                     if (runRes.ok) {
                         this.result = runRes.result;

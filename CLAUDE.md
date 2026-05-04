@@ -10,6 +10,14 @@
 
 This is a Laravel admin panel (`admin.kraite.com`) sharing a database with `ingestion.kraite.com` and `kraite.com`. All three apps MUST use the same `APP_KEY`.
 
+## NO MIGRATIONS HERE — HARD RULE
+
+**Never create or place migration files under `database/migrations/` in this repo.** Admin is a UI consumer, not a schema owner. ALL schema changes (CREATE TABLE, ALTER TABLE, DROP TABLE, seeders) belong in `kraitebot/core` at `/home/waygou/packages/kraitebot/core/database/migrations/`.
+
+The three apps share ONE `kraite` database with ONE `migrations` tracking table. Two repos issuing migrations against the same DB is a guaranteed silent-collision trap — happened once on 2026-05-04 when a stale orphan drop migration in admin destroyed a `binance_listen_keys` table that core had created weeks later.
+
+If a schema change is needed: route it through `kraitebot/core`. The only files allowed under `database/migrations/` in this repo are the Laravel scaffolding defaults (`create_users_table`, `create_cache_table`, `create_jobs_table`). Same rule applies to `database/seeders/` — seeders belong in core.
+
 ### Key Packages
 - **`brunocfalcao/hub-ui`** — UI component library at `/home/waygou/packages/brunocfalcao/hub-ui/`. Provides layout, sidebar, theme system, and reusable Blade components.
 - **`kraitebot/core`** — Trading system core at `/home/waygou/packages/kraitebot/core/`. Models, jobs, commands, step-dispatcher integration.

@@ -26,16 +26,16 @@ use Throwable;
  * Admin-only console for per-token ladder backtesting. Three actions
  * backing three buttons in the UI:
  *
- *   POST /system/backtracking/fetch-candles   — pulls historical OHLCV from
+ *   POST /system/backtesting/fetch-candles   — pulls historical OHLCV from
  *       Binance Vision (bulk) + TAAPI (recency top-up) into the `candles`
  *       table for the selected symbol + timeframe. Safe to re-run — both
  *       fetchers are idempotent.
  *
- *   POST /system/backtracking/verify-coverage — audits what's present in
+ *   POST /system/backtesting/verify-coverage — audits what's present in
  *       the candles table for a symbol + timeframe: earliest / latest /
  *       hole count / contiguity %. Feeds the UI's coverage pill.
  *
- *   POST /system/backtracking/run             — runs BacktestSimulator
+ *   POST /system/backtesting/run             — runs BacktestSimulator
  *       with the caller's overrides. Returns per-direction outcome
  *       aggregates + a paginated rows list.
  *
@@ -50,7 +50,7 @@ final class BacktrackingController extends Controller
         $symbols = $this->enabledSymbolGroups();
         $defaults = $this->pullDefaultsFromMainAccount();
 
-        return view('system.backtracking', [
+        return view('system.backtesting', [
             'symbols' => $symbols,
             'defaults' => $defaults,
             'timeframes' => $this->availableTimeframes(),
@@ -298,6 +298,8 @@ final class BacktrackingController extends Controller
             $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';
 
             if ($approve) {
+                $symbol->is_manually_enabled = true;
+
                 if (isset($validated['gap_long_percent'])) {
                     $symbol->percentage_gap_long = (float) $validated['gap_long_percent'];
                 }

@@ -1,5 +1,7 @@
 import './persist-patch';
 import './bootstrap';
+import './lifecycle/engine';
+import './lifecycle/grid';
 
 import { Livewire, Alpine } from '../../vendor/livewire/livewire/dist/livewire.esm';
 import collapse from '@alpinejs/collapse';

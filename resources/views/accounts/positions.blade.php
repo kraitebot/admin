@@ -268,6 +268,9 @@
                                         <div class="flex items-center gap-2 mb-3">
                                             <x-feathericon-database class="w-3.5 h-3.5 ui-text-muted" />
                                             <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Database</span>
+                                            <template x-if="pair.db">
+                                                <span class="text-[10px] font-mono ui-tabular ui-text-subtle" x-text="'#' + pair.db.id"></span>
+                                            </template>
                                         </div>
                                         <template x-if="pair.db">
                                             <div class="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3">
@@ -384,6 +387,7 @@
                                                             <td class="px-3 py-2.5 border-l ui-border text-right ui-tabular">
                                                                 <template x-if="order.db">
                                                                     <div class="space-y-0.5">
+                                                                        <div class="text-[10px] font-mono ui-tabular ui-text-subtle" x-text="'#' + order.db.id"></div>
                                                                         <div>
                                                                             <span :class="isOrderFieldDrift(order, 'quantity') ? 'ui-text-danger font-semibold' : 'ui-text'" x-text="order.db.quantity"></span>
                                                                             <span class="ui-text-subtle">&nbsp;@&nbsp;</span>
@@ -580,6 +584,11 @@
 
                                                         {{-- Details tab --}}
                                                         <div x-show="historyTab(pos) === 'details'">
+                                                        <div class="flex items-center gap-2 mb-3">
+                                                            <x-feathericon-database class="w-3.5 h-3.5 ui-text-muted" />
+                                                            <span class="text-[10px] font-semibold uppercase tracking-[0.18em] ui-text-muted">Database</span>
+                                                            <span class="text-[10px] font-mono ui-tabular ui-text-subtle" x-text="'#' + pos.id"></span>
+                                                        </div>
                                                         <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-3">
                                                             <div>
                                                                 <div class="text-[9px] uppercase tracking-[0.12em] ui-text-subtle mb-1">Margin</div>
@@ -608,6 +617,7 @@
                                                                 <table class="w-full text-[10px] font-mono">
                                                                     <thead>
                                                                         <tr class="ui-text-subtle text-[9px] uppercase tracking-[0.12em]">
+                                                                            <th class="text-left px-3 py-1.5 font-semibold">DB ID</th>
                                                                             <th class="text-left px-3 py-1.5 font-semibold">Type</th>
                                                                             <th class="text-left px-3 py-1.5 font-semibold">Side</th>
                                                                             <th class="text-left px-3 py-1.5 font-semibold">Status</th>
@@ -620,6 +630,7 @@
                                                                     <tbody>
                                                                         <template x-for="o in pos.orders" :key="o.id">
                                                                             <tr class="border-t ui-border">
+                                                                                <td class="px-3 py-1.5 ui-text-subtle ui-tabular" x-text="'#' + o.id"></td>
                                                                                 <td class="px-3 py-1.5 ui-text-muted" x-text="o.type"></td>
                                                                                 <td class="px-3 py-1.5">
                                                                                     <span

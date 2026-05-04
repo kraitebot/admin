@@ -9,6 +9,7 @@ use App\Http\Controllers\Accounts\PositionsController;
 use App\Http\Controllers\System\BacktrackingController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\DashboardController as SystemDashboardController;
+use App\Http\Controllers\System\LifecycleController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
@@ -83,15 +84,31 @@ Route::middleware('auth')->group(function () {
         Route::get('/system/step-dispatcher/cooling-down', [StepDispatcherController::class, 'coolingDown'])->name('system.step-dispatcher.cooling-down');
         Route::post('/system/step-dispatcher/toggle-cooling-down', [StepDispatcherController::class, 'toggleCoolingDown'])->name('system.step-dispatcher.toggle-cooling-down');
 
-        // Backtracking — historical-candle ladder backtester.
-        Route::get('/system/backtracking', [BacktrackingController::class, 'index'])->name('system.backtracking');
-        Route::post('/system/backtracking/fetch-candles', [BacktrackingController::class, 'fetchCandles'])->name('system.backtracking.fetch-candles');
-        Route::post('/system/backtracking/verify-coverage', [BacktrackingController::class, 'verifyCoverage'])->name('system.backtracking.verify-coverage');
-        Route::post('/system/backtracking/run', [BacktrackingController::class, 'run'])->name('system.backtracking.run');
-        Route::post('/system/backtracking/toggle-approval', [BacktrackingController::class, 'toggleApproval'])->name('system.backtracking.toggle-approval');
-        Route::post('/system/backtracking/ai-insights', [BacktrackingController::class, 'aiInsights'])
+        // Backtesting — historical-candle ladder backtester.
+        Route::get('/system/backtesting', [BacktrackingController::class, 'index'])->name('system.backtesting');
+        Route::post('/system/backtesting/fetch-candles', [BacktrackingController::class, 'fetchCandles'])->name('system.backtesting.fetch-candles');
+        Route::post('/system/backtesting/verify-coverage', [BacktrackingController::class, 'verifyCoverage'])->name('system.backtesting.verify-coverage');
+        Route::post('/system/backtesting/run', [BacktrackingController::class, 'run'])->name('system.backtesting.run');
+        Route::post('/system/backtesting/toggle-approval', [BacktrackingController::class, 'toggleApproval'])->name('system.backtesting.toggle-approval');
+        Route::post('/system/backtesting/ai-insights', [BacktrackingController::class, 'aiInsights'])
             ->middleware('throttle:10,1')
-            ->name('system.backtracking.ai-insights');
+            ->name('system.backtesting.ai-insights');
+
+        // Lifecycle — manual position-lifecycle configurator. Each
+        // scenario is an Excel-style spreadsheet where columns are
+        // T-frames and rows are token positions; the operator drives
+        // the cascade event by event and the JS engine recomputes
+        // WAP / TP / SL / PnL on every edit.
+        Route::get('/system/lifecycle', [LifecycleController::class, 'index'])->name('system.lifecycle');
+        Route::get('/system/lifecycle/create', [LifecycleController::class, 'create'])->name('system.lifecycle.create');
+        Route::post('/system/lifecycle', [LifecycleController::class, 'store'])->name('system.lifecycle.store');
+        Route::get('/system/lifecycle/{scenario}', [LifecycleController::class, 'show'])->name('system.lifecycle.show');
+        Route::get('/system/lifecycle/{scenario}/data', [LifecycleController::class, 'data'])->name('system.lifecycle.data');
+        Route::post('/system/lifecycle/{scenario}/frames', [LifecycleController::class, 'addFrame'])->name('system.lifecycle.frame.add');
+        Route::delete('/system/lifecycle/{scenario}/frames/{frame}', [LifecycleController::class, 'deleteFrame'])->name('system.lifecycle.frame.delete');
+        Route::put('/system/lifecycle/{scenario}/frames/{frame}/events', [LifecycleController::class, 'saveFrameEvents'])->name('system.lifecycle.frame.events');
+        Route::post('/system/lifecycle/{scenario}/branch', [LifecycleController::class, 'branch'])->name('system.lifecycle.branch');
+        Route::delete('/system/lifecycle/{scenario}', [LifecycleController::class, 'destroy'])->name('system.lifecycle.destroy');
 
         // Users admin — list every user, view billing state, apply manual
         // wallet credits/debits via the wallet_transactions ledger,
