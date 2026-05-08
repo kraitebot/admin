@@ -12,7 +12,8 @@
         request()->routeIs('system.dashboard') => 'system-dashboard',
         request()->routeIs('system.sql-query') => 'sql-query',
         request()->routeIs('system.commands') => 'commands',
-        request()->routeIs('system.step-dispatcher') => 'step-dispatcher',
+        request()->routeIs('system.steps') && request()->route('prefix') === 'trading' => 'steps-trading',
+        request()->routeIs('system.steps') => 'steps-default',
         request()->routeIs('system.backtesting') => 'backtesting',
         request()->routeIs('system.lifecycle*') => 'lifecycle',
         request()->routeIs('system.users*'), request()->routeIs('system.billing.*') => 'system-users',
@@ -176,20 +177,34 @@
                     <span class="text-xs">Commands</span>
                 </a>
 
-                <a
-                    href="{{ route('system.step-dispatcher') }}" wire:navigate
-                    data-nav-item="step-dispatcher"
-                    @click="highlight = 'step-dispatcher'"
-                    class="flex flex-col items-center gap-1 py-2 rounded-lg transition-colors relative z-10"
-                    :class="highlight === 'step-dispatcher' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
-                >
+                {{-- Steps — two prefix-isolated dispatcher fleets. The
+                     parent acts as a visual group label; navigation goes
+                     through the two sub-links below. --}}
+                <div class="flex flex-col items-center gap-1 py-2 rounded-lg relative z-10 ui-sidebar-text">
                     <span class="w-5 h-5">
                         <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
                         </svg>
                     </span>
                     <span class="text-xs">Steps</span>
-                </a>
+
+                    <div class="flex flex-col items-center gap-0.5 mt-1">
+                        <a
+                            href="{{ route('system.steps', ['prefix' => 'default']) }}" wire:navigate
+                            data-nav-item="steps-default"
+                            @click="highlight = 'steps-default'"
+                            class="px-2 py-0.5 rounded text-[10px] transition-colors"
+                            :class="highlight === 'steps-default' ? 'ui-sidebar-text-active font-semibold' : 'ui-sidebar-text hover:ui-text-muted'"
+                        >Default</a>
+                        <a
+                            href="{{ route('system.steps', ['prefix' => 'trading']) }}" wire:navigate
+                            data-nav-item="steps-trading"
+                            @click="highlight = 'steps-trading'"
+                            class="px-2 py-0.5 rounded text-[10px] transition-colors"
+                            :class="highlight === 'steps-trading' ? 'ui-sidebar-text-active font-semibold' : 'ui-sidebar-text hover:ui-text-muted'"
+                        >Trading</a>
+                    </div>
+                </div>
 
                 @if(auth()->user()?->is_admin)
                 <a

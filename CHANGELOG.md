@@ -2,6 +2,20 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.3.0] — 2026-05-08
+
+### Features
+- [NEW FEATURE] **Per-prefix Steps dashboard split.** The single `/system/step-dispatcher` page is replaced by two prefix-isolated views — `/system/steps/default` (the `steps_*` calculation fleet) and `/system/steps/trading` (the `trading_steps_*` trade-critical fleet). Sidebar gains a "Steps" parent group with Default + Trading sub-links. Each route's pivot, throughput gauge, and per-class health signals query the correct prefixed table set via `Steps::normalise()`; cache keys are suffixed `system.steps.{slug}.*` so the two fleets never collide. Old `system.step-dispatcher.*` route family removed.
+- [NEW FEATURE] **Per-fleet cooldown chips on the system dashboard.** Single cooling-down chip is replaced by two side-by-side chips (Default + Trading), each toggling its own `Kraite\Core\Support\MaintenanceMode` prefix flag independently — pausing one fleet does NOT pause the other (no mutex). Backed by `MaintenanceMode::pauseStepsDispatch / resumeStepsDispatch / isStepsDispatchPaused` so the ingestion-side `routes/console.php` per-prefix skip-gates honour the chip state per fleet. Endpoints: `GET /system/steps/cooling-down` returns both fleets' state in one payload, `POST /system/steps/{prefix}/toggle-cooling-down` flips one. The legacy `kraite.is_cooling_down` Eloquent flag is no longer admin-toggleable.
+
+### Fixes
+- [BUG FIX] **Weighted-avg entry price now credits PARTIALLY_FILLED rungs against the executed gap.** `PositionsController::computeWeightedAvgEntry()` previously summed only FILLED entry-side orders, missing the executed portion of any LIMIT mid-fill at sample time. Symptom: positions mid-ladder-fill flagged false entry-price drift. Fix walks PARTIALLY_FILLED entry-side rows in id ascending order (= ladder ascending), credits each at its limit price up to the gap between exchange-truth `posQty` and the FILLED total. Filter order also swapped to side-first / status-second so the cheaper predicate runs first.
+
+### Improvements
+- [IMPROVED] **Projections controller offloaded onto `kraitebot/core` financial helpers.** `ProjectionsController::data()` no longer carries inline daily-revenue / wallet / scenario math — it delegates to `AccountFinancials` + `Window` from core, dropping ~120 lines of controller-side BCMath and DB scans. Same JSON contract for the front-end; the calc engine now lives where every consumer (admin, ingestion, kraite.com) can reach it. `Carbon` swapped for `CarbonImmutable` in this controller for pointer-safety on the windowed math.
+- [IMPROVED] Step dispatcher view stale `isCoolingDown` Alpine state + `toggleCoolingDown()` method removed (the per-fleet toggle now lives on the system dashboard).
+- [DEPENDENCIES] Vendor bumps via `composer.lock`: nine packages incl. `nunomaduro/collision`, `phpunit/phpunit`, `pest`, `symfony` family, `nikic/php-parser`, `psr/log`, `egulias/email-validator`. Patch / minor — no API breaks observed.
+
 ## [0.2.0] — 2026-05-04
 
 ### Features

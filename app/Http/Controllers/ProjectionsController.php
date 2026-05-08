@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
-use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Support\Financial\AccountFinancials;
+use Kraite\Core\Support\Financial\Window;
 
 class ProjectionsController extends Controller
 {
@@ -57,8 +58,8 @@ class ProjectionsController extends Controller
     {
         $request->validate([
             'account_id' => ['required', 'integer'],
-            'year'       => ['required', 'integer', 'min:2000', 'max:2100'],
-            'month'      => ['required', 'integer', 'min:1', 'max:12'],
+            'year' => ['required', 'integer', 'min:2000', 'max:2100'],
+            'month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
 
         $query = Account::where('id', $request->input('account_id'));
@@ -67,168 +68,66 @@ class ProjectionsController extends Controller
         }
         $account = $query->firstOrFail();
 
-        $year  = (int) $request->input('year');
+        $year = (int) $request->input('year');
         $month = (int) $request->input('month');
 
-        $monthStart = Carbon::createFromDate($year, $month, 1)->startOfMonth();
-        $monthEnd   = (clone $monthStart)->endOfMonth();
+        $now = CarbonImmutable::now();
+        $monthAnchor = CarbonImmutable::create($year, $month, 1);
+        $monthWindow = Window::thisMonth($monthAnchor);
+        $currentMonthWindow = Window::thisMonth($now);
 
-        $actuals = $this->dailyRevenues($account->id, $monthStart, $monthEnd);
+        $financials = new AccountFinancials($account);
 
         return response()->json([
-            'account_id'         => $account->id,
-            'year'               => $year,
-            'month'              => $month,
-            'actuals'            => $actuals,
-            'current_wallet'     => $this->currentWallet($account->id),
-            'month_start_wallet' => $this->monthStartWallet($account->id, $monthStart),
-            'scenarios'          => $this->scenariosFromCurrentMonth($account->id),
-            'today'              => Carbon::now()->toDateString(),
+            'account_id' => $account->id,
+            'year' => $year,
+            'month' => $month,
+            'actuals' => $this->normalizeRevenues($financials->dailyRevenues($monthWindow)),
+            'current_wallet' => $financials->currentWallet(),
+            'month_start_wallet' => $financials->startWallet($monthWindow),
+            'scenarios' => $this->normalizeScenarios($financials->scenarios($currentMonthWindow)),
+            'today' => $now->toDateString(),
         ]);
     }
 
     /**
-     * The earliest `total_wallet_balance` snapshot recorded inside the
-     * given month — used as the "started month at" anchor on the totals
-     * strip for past / current months.
-     */
-    private function monthStartWallet(int $accountId, Carbon $monthStart): ?string
-    {
-        $val = DB::table('account_balance_history')
-            ->where('account_id', $accountId)
-            ->whereBetween('created_at', [
-                $monthStart->copy()->startOfMonth()->toDateTimeString(),
-                $monthStart->copy()->endOfMonth()->toDateTimeString(),
-            ])
-            ->orderBy('id')
-            ->value('total_wallet_balance');
-
-        return $val !== null ? (string) $val : null;
-    }
-
-    /**
-     * Last known `total_wallet_balance` for the account — the projection
-     * compound chain anchors here.
-     */
-    private function currentWallet(int $accountId): ?string
-    {
-        $val = DB::table('account_balance_history')
-            ->where('account_id', $accountId)
-            ->orderByDesc('id')
-            ->value('total_wallet_balance');
-
-        return $val !== null ? (string) $val : null;
-    }
-
-    /**
-     * Pessimistic / neutral / optimistic daily percentages derived from
-     * the current calendar month's day-by-day deltas. % per day = revenue
-     * / wallet-at-day-start, so each scenario stays compoundable.
+     * Convert the bcmath-scaled deltas returned by AccountFinancials
+     * into the 4-decimal strings the existing frontend expects.
      *
-     * Returns nulls when the month has no data — frontend will hide the
-     * scenario switcher / projected cells instead of painting noise.
-     *
-     * @return array<string, string|null>
-     */
-    private function scenariosFromCurrentMonth(int $accountId): array
-    {
-        $now = Carbon::now();
-        $start = (clone $now)->startOfMonth();
-        $end   = (clone $now)->endOfDay();
-
-        $revs = $this->dailyRevenues($accountId, $start, $end);
-        $pcts = $this->dailyPercentages($accountId, $start, $end);
-
-        if (empty($pcts)) {
-            return [
-                'pessimistic_pct' => null,
-                'neutral_pct'     => null,
-                'optimistic_pct'  => null,
-                'days_observed'   => 0,
-            ];
-        }
-
-        $values = array_values($pcts);
-        sort($values);
-
-        $worst = (float) $values[0];
-        $best  = (float) end($values);
-        $mid   = ($worst + $best) / 2.0;
-
-        return [
-            'pessimistic_pct' => number_format($worst, 6, '.', ''),
-            'neutral_pct'     => number_format($mid, 6, '.', ''),
-            'optimistic_pct'  => number_format($best, 6, '.', ''),
-            'days_observed'   => count($pcts),
-            'days_with_revenue' => count($revs),
-        ];
-    }
-
-    /**
-     * Aggregate daily wallet revenue for a date window. Revenue per day =
-     * last snapshot's `total_wallet_balance` − first snapshot's
-     * `total_wallet_balance` of the same day. Days with zero snapshots
-     * are simply absent from the map — the frontend reads "no data".
-     *
-     * @return array<string, string>  Keyed by YYYY-MM-DD → string revenue.
-     */
-    private function dailyRevenues(int $accountId, Carbon $start, Carbon $end): array
-    {
-        $rows = DB::table('account_balance_history')
-            ->select(DB::raw('DATE(created_at) AS d'))
-            ->selectRaw('SUBSTRING_INDEX(GROUP_CONCAT(total_wallet_balance ORDER BY id ASC SEPARATOR ","), ",", 1) AS first_wallet')
-            ->selectRaw('SUBSTRING_INDEX(GROUP_CONCAT(total_wallet_balance ORDER BY id DESC SEPARATOR ","), ",", 1) AS last_wallet')
-            ->where('account_id', $accountId)
-            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->groupBy(DB::raw('DATE(created_at)'))
-            ->orderBy('d')
-            ->get();
-
-        $out = [];
-        foreach ($rows as $row) {
-            $first = (string) $row->first_wallet;
-            $last  = (string) $row->last_wallet;
-            if (! is_numeric($first) || ! is_numeric($last)) {
-                continue;
-            }
-            $delta = bcsub($last, $first, 8);
-            $out[$row->d] = number_format((float) $delta, 4, '.', '');
-        }
-
-        return $out;
-    }
-
-    /**
-     * Daily percentage returns for the same window, used to derive the
-     * worst / best / midpoint scenario rates. % = revenue ÷ first-of-day
-     * wallet. A day with zero starting wallet is skipped (the % would be
-     * undefined).
-     *
+     * @param  array<string, string>  $rev
      * @return array<string, string>
      */
-    private function dailyPercentages(int $accountId, Carbon $start, Carbon $end): array
+    private function normalizeRevenues(array $rev): array
     {
-        $rows = DB::table('account_balance_history')
-            ->select(DB::raw('DATE(created_at) AS d'))
-            ->selectRaw('SUBSTRING_INDEX(GROUP_CONCAT(total_wallet_balance ORDER BY id ASC SEPARATOR ","), ",", 1) AS first_wallet')
-            ->selectRaw('SUBSTRING_INDEX(GROUP_CONCAT(total_wallet_balance ORDER BY id DESC SEPARATOR ","), ",", 1) AS last_wallet')
-            ->where('account_id', $accountId)
-            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->groupBy(DB::raw('DATE(created_at)'))
-            ->get();
-
         $out = [];
-        foreach ($rows as $row) {
-            $first = (string) $row->first_wallet;
-            $last  = (string) $row->last_wallet;
-            if (! is_numeric($first) || ! is_numeric($last) || bccomp($first, '0', 8) <= 0) {
-                continue;
-            }
-            $delta = bcsub($last, $first, 16);
-            $pct = bcdiv($delta, $first, 8);
-            $out[$row->d] = $pct;
+        foreach ($rev as $day => $delta) {
+            $out[$day] = number_format((float) $delta, 4, '.', '');
         }
 
         return $out;
+    }
+
+    /**
+     * Match the legacy payload shape consumed by `projectionsPage()`
+     * Alpine state — 6-decimal pct strings + a `days_with_revenue`
+     * companion count. AccountFinancials only emits the worst/best/mid
+     * trio, so derive the revenue-day count locally.
+     *
+     * @param  array{pessimistic_pct: ?string, neutral_pct: ?string, optimistic_pct: ?string, days_observed: int}  $scenarios
+     * @return array<string, string|int|null>
+     */
+    private function normalizeScenarios(array $scenarios): array
+    {
+        $fmt = static function (?string $v): ?string {
+            return $v === null ? null : number_format((float) $v, 6, '.', '');
+        };
+
+        return [
+            'pessimistic_pct' => $fmt($scenarios['pessimistic_pct']),
+            'neutral_pct' => $fmt($scenarios['neutral_pct']),
+            'optimistic_pct' => $fmt($scenarios['optimistic_pct']),
+            'days_observed' => $scenarios['days_observed'],
+            'days_with_revenue' => $scenarios['days_observed'],
+        ];
     }
 }

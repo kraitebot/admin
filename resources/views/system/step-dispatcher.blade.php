@@ -1,22 +1,10 @@
-<x-app-layout :activeSection="'system'" :activeHighlight="'step-dispatcher'" :flush="true">
+<x-app-layout :activeSection="'system'" :activeHighlight="'steps-' . $prefix" :flush="true">
     <div class="flex flex-col h-full" x-data="stepDispatcher()" x-init="fetchData(); startPolling()">
         <x-hub-ui::live-header
-            title="Step Dispatcher"
-            description="Class × state pivot for background step orchestration. Click any cell with activity to inspect its blocks."
+            title="Steps — {{ $prefixLabel }}"
+            description="Class × state pivot for the {{ strtolower($prefixLabel) }} dispatcher fleet. Click any cell with activity to inspect its blocks."
             last-updated-model="lastUpdated"
-        >
-            {{-- Cooling-down toggle hidden for now. Routes + controller remain wired so it can be restored later. --}}
-            {{-- <x-slot:actions>
-                <x-hub-ui::switch
-                    state="isCoolingDown"
-                    @click="toggleCoolingDown()"
-                    label="Cooling Down"
-                    onColor="warning"
-                    size="sm"
-                    x-bind:class="togglingCoolingDown ? 'opacity-50 pointer-events-none' : ''"
-                />
-            </x-slot:actions> --}}
-        </x-hub-ui::live-header>
+        />
 
         {{-- Content --}}
         <div class="flex-1 overflow-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
@@ -405,9 +393,6 @@
                 classSearch: '',
                 onlyChildren: false,
 
-                isCoolingDown: false,
-                togglingCoolingDown: false,
-
                 selectedClass: null,
                 selectedShortName: null,
                 selectedState: null,
@@ -502,44 +487,19 @@
                 },
 
                 async fetchData() {
-                    const [dataRes, coolingRes] = await Promise.all([
-                        hubUiFetch('{{ route("system.step-dispatcher.data") }}', { method: 'GET' }),
-                        hubUiFetch('{{ route("system.step-dispatcher.cooling-down") }}', { method: 'GET' }),
-                    ]);
+                    const { ok, data } = await hubUiFetch('{{ route("system.steps.data", ["prefix" => $prefix]) }}', { method: 'GET' });
 
-                    if (dataRes.ok) {
-                        this.rows = dataRes.data.rows;
-                        this.totals = dataRes.data.totals;
-                        this.leafTotals = dataRes.data.leaf_totals || {};
-                        const t = dataRes.data.throughput || { current_per_10s: 0, peak_per_10s: 0, saturation: 0 };
+                    if (ok) {
+                        this.rows = data.rows;
+                        this.totals = data.totals;
+                        this.leafTotals = data.leaf_totals || {};
+                        const t = data.throughput || { current_per_10s: 0, peak_per_10s: 0, saturation: 0 };
                         this.throughput = { ...t, has_data: (t.peak_per_10s ?? 0) > 0 };
-                        this.apiGauges = dataRes.data.api_gauges || this.apiGauges;
+                        this.apiGauges = data.api_gauges || this.apiGauges;
                         this.lastUpdated = new Date().toLocaleTimeString();
                     }
 
-                    if (coolingRes.ok) {
-                        this.isCoolingDown = coolingRes.data.is_cooling_down;
-                    }
-
                     this.loading = false;
-                },
-
-                async toggleCoolingDown() {
-                    if (this.togglingCoolingDown) return;
-                    this.togglingCoolingDown = true;
-
-                    // Optimistic update
-                    const previousState = this.isCoolingDown;
-                    this.isCoolingDown = !this.isCoolingDown;
-
-                    const { ok, data } = await hubUiFetch('{{ route("system.step-dispatcher.toggle-cooling-down") }}');
-                    if (ok) {
-                        this.isCoolingDown = data.is_cooling_down;
-                    } else {
-                        // Revert on failure
-                        this.isCoolingDown = previousState;
-                    }
-                    this.togglingCoolingDown = false;
                 },
 
                 startPolling() {
@@ -569,7 +529,7 @@
                     this.loadingBlocks = true;
 
                     const { ok, data } = await hubUiFetch(
-                        '{{ route("system.step-dispatcher.blocks") }}?class=' + encodeURIComponent(cls) + '&state=' + encodeURIComponent(state),
+                        '{{ route("system.steps.blocks", ["prefix" => $prefix]) }}?class=' + encodeURIComponent(cls) + '&state=' + encodeURIComponent(state),
                         { method: 'GET' }
                     );
 
@@ -598,7 +558,7 @@
 
                 async refreshBlockSteps(uuid) {
                     const { ok, data } = await hubUiFetch(
-                        '{{ route("system.step-dispatcher.block-steps") }}?block_uuid=' + encodeURIComponent(uuid),
+                        '{{ route("system.steps.block-steps", ["prefix" => $prefix]) }}?block_uuid=' + encodeURIComponent(uuid),
                         { method: 'GET' }
                     );
                     if (ok && this.expandedBlock === uuid) {

@@ -10,26 +10,43 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Kraite\Core\Models\Kraite;
+use Kraite\Core\Support\MaintenanceMode;
+use StepDispatcher\Support\Steps;
 
 final class StepDispatcherController extends Controller
 {
-    public function index()
+    /**
+     * Slug → MaintenanceMode prefix. `default` is the unprefixed
+     * `steps_*` fleet (calculation churn — klines, indicators,
+     * BSCS, balances). `trading` is the `trading_steps_*` fleet
+     * (trade-critical — opens, sync, close, WAP, drift heals).
+     */
+    private const PREFIX_MAP = [
+        'default' => '',
+        'trading' => 'trading',
+    ];
+
+    public function index(string $prefix)
     {
-        return view('system.step-dispatcher');
+        $this->assertPrefix($prefix);
+
+        return view('system.step-dispatcher', [
+            'prefix' => $prefix,
+            'prefixLabel' => $this->prefixLabel($prefix),
+        ]);
     }
 
-    public function data(): JsonResponse
+    public function data(string $prefix): JsonResponse
     {
-        // Short-TTL cache on the aggregate query. The dashboard polls every
-        // 10 seconds; caching the counts for 3 seconds still feels live to
-        // the operator (refresh lands within one cache window ~70% of the
-        // time) while absorbing concurrent tab/client polls onto a single
-        // DB hit. Even with the covering index on (class, state, is_throttled)
-        // the aggregate over 300K+ rows costs a few hundred ms — no reason
-        // to pay that for every client on every tick.
-        $rows = Cache::remember('system.step-dispatcher.counts', 3, static function () {
-            return DB::table('steps')
+        $this->assertPrefix($prefix);
+
+        $table = $this->stepsTable($prefix);
+
+        // Short-TTL cache on the aggregate query. Dashboard polls every
+        // 10s; 3s cache stays live for the operator while absorbing
+        // concurrent tabs onto a single DB hit.
+        $rows = Cache::remember("system.steps.{$prefix}.counts", 3, static function () use ($table) {
+            return DB::table($table)
                 ->select('class', 'state', 'is_throttled', DB::raw('COUNT(*) as total'))
                 ->groupBy('class', 'state', 'is_throttled')
                 ->get();
@@ -52,9 +69,6 @@ final class StepDispatcherController extends Controller
 
         ksort($pivot);
 
-        // Per-class health signals: max retries (spots ping-pong), oldest Running age (spots zombies).
-        // Scoped to active states only — Completed/Cancelled retries are historical noise and
-        // would require a full scan of ~640K rows. Active set is ~10K, uses idx_state_*.
         $activeStates = [
             'StepDispatcher\\States\\Pending',
             'StepDispatcher\\States\\Dispatched',
@@ -62,7 +76,7 @@ final class StepDispatcherController extends Controller
             'StepDispatcher\\States\\Failed',
         ];
 
-        $healthRows = DB::table('steps')
+        $healthRows = DB::table($table)
             ->select(
                 'class',
                 DB::raw('MAX(retries) as max_retries'),
@@ -73,7 +87,7 @@ final class StepDispatcherController extends Controller
             ->get()
             ->keyBy('class');
 
-        $parentClasses = array_flip($this->parentClasses());
+        $parentClasses = array_flip($this->parentClasses($prefix));
 
         $result = [];
         foreach ($pivot as $class => $states) {
@@ -104,14 +118,16 @@ final class StepDispatcherController extends Controller
         return response()->json([
             'rows' => $result,
             'totals' => $totals,
-            'leaf_totals' => $this->buildLeafTotals(),
-            'throughput' => $this->buildLeafThroughput(),
-            'api_gauges' => $this->buildApiGauges(),
+            'leaf_totals' => $this->buildLeafTotals($prefix),
+            'throughput' => $this->buildLeafThroughput($prefix),
+            'api_gauges' => $this->buildApiGauges($prefix),
         ]);
     }
 
-    public function blocks(Request $request): JsonResponse
+    public function blocks(string $prefix, Request $request): JsonResponse
     {
+        $this->assertPrefix($prefix);
+
         $request->validate([
             'class' => ['required', 'string'],
             'state' => ['required', 'string'],
@@ -120,7 +136,7 @@ final class StepDispatcherController extends Controller
         $class = $request->input('class');
         $stateInput = $request->input('state');
 
-        $query = DB::table('steps')
+        $query = DB::table($this->stepsTable($prefix))
             ->select('block_uuid', DB::raw('MAX(created_at) as latest'), DB::raw('COUNT(*) as step_count'))
             ->where('class', $class);
 
@@ -149,13 +165,15 @@ final class StepDispatcherController extends Controller
         return response()->json(['blocks' => $blocks]);
     }
 
-    public function blockSteps(Request $request): JsonResponse
+    public function blockSteps(string $prefix, Request $request): JsonResponse
     {
+        $this->assertPrefix($prefix);
+
         $request->validate([
             'block_uuid' => ['required', 'string'],
         ]);
 
-        $steps = DB::table('steps')
+        $steps = DB::table($this->stepsTable($prefix))
             ->where('block_uuid', $request->input('block_uuid'))
             ->orderBy('index')
             ->orderBy('id')
@@ -186,44 +204,91 @@ final class StepDispatcherController extends Controller
         return response()->json(['steps' => $steps]);
     }
 
+    /**
+     * Both fleets' MaintenanceMode pause state in one payload, keyed
+     * by slug (`default` / `trading`). Dashboard renders one chip
+     * per slug; toggles are independent (no mutex). The all-scope
+     * blanket flag (set by OPTIMIZE TABLE callers) shows up on both
+     * chips automatically because `isStepsDispatchPaused` ORs it in.
+     */
     public function coolingDown(): JsonResponse
     {
-        $kraite = Kraite::first();
+        $payload = [];
+
+        foreach (self::PREFIX_MAP as $slug => $packagePrefix) {
+            $info = MaintenanceMode::stepsDispatchPauseInfo($packagePrefix);
+
+            $payload[$slug] = [
+                'is_paused' => MaintenanceMode::isStepsDispatchPaused($packagePrefix),
+                'reason' => $info['reason'] ?? null,
+                'paused_at' => $info['paused_at'] ?? null,
+                'expires_in_seconds' => $info['expires_in_seconds'] ?? null,
+            ];
+        }
+
+        return response()->json($payload);
+    }
+
+    public function toggleCoolingDown(string $prefix): JsonResponse
+    {
+        $this->assertPrefix($prefix);
+
+        $packagePrefix = self::PREFIX_MAP[$prefix];
+
+        if (MaintenanceMode::isStepsDispatchPaused($packagePrefix)) {
+            MaintenanceMode::resumeStepsDispatch($packagePrefix);
+            $isPaused = false;
+        } else {
+            MaintenanceMode::pauseStepsDispatch(
+                reason: 'admin toggle ('.$prefix.')',
+                ttlSeconds: null,
+                prefix: $packagePrefix,
+            );
+            $isPaused = true;
+        }
+
+        $info = MaintenanceMode::stepsDispatchPauseInfo($packagePrefix);
 
         return response()->json([
-            'is_cooling_down' => $kraite?->is_cooling_down ?? false,
+            'prefix' => $prefix,
+            'is_paused' => $isPaused,
+            'reason' => $info['reason'] ?? null,
+            'paused_at' => $info['paused_at'] ?? null,
+            'expires_in_seconds' => $info['expires_in_seconds'] ?? null,
         ]);
     }
 
-    public function toggleCoolingDown(): JsonResponse
+    private function assertPrefix(string $prefix): void
     {
-        $kraite = Kraite::first();
-
-        if (! $kraite) {
-            return response()->json(['error' => 'Kraite record not found.'], 404);
+        if (! array_key_exists($prefix, self::PREFIX_MAP)) {
+            abort(404);
         }
+    }
 
-        $kraite->is_cooling_down = ! $kraite->is_cooling_down;
-        $kraite->save();
+    private function stepsTable(string $prefix): string
+    {
+        return Steps::normalise(self::PREFIX_MAP[$prefix]).'steps';
+    }
 
-        return response()->json([
-            'is_cooling_down' => $kraite->is_cooling_down,
-        ]);
+    private function prefixLabel(string $prefix): string
+    {
+        return $prefix === 'trading' ? 'Trading' : 'Default';
     }
 
     /**
-     * Classes that have ever spawned children, detected from the steps table
-     * itself. A class is "parent" if ANY of its rows has `child_block_uuid`
-     * set — this catches runtime-parents (CheckKLines, ConcludeSymbol…) that
-     * only declare their child_block_uuid when they execute and would
-     * otherwise look like leaves while Pending.
+     * Classes that have ever spawned children, detected from the
+     * prefix-scoped steps table itself. A class is "parent" if ANY
+     * of its rows has `child_block_uuid` set — catches runtime
+     * parents that only declare their child block at execution time.
      *
      * @return array<int, string>
      */
-    private function parentClasses(): array
+    private function parentClasses(string $prefix): array
     {
-        return Cache::remember('system.step-dispatcher.parent-classes', 15, static function (): array {
-            return DB::table('steps')
+        $table = $this->stepsTable($prefix);
+
+        return Cache::remember("system.steps.{$prefix}.parent-classes", 15, static function () use ($table): array {
+            return DB::table($table)
                 ->whereNotNull('child_block_uuid')
                 ->distinct()
                 ->pluck('class')
@@ -232,35 +297,18 @@ final class StepDispatcherController extends Controller
     }
 
     /**
-     * Per-state counts restricted to leaf steps — classes that never spawn
-     * children. Detecting parents via observed data (see parentClasses)
-     * rather than via the current row's child_block_uuid means a runtime-
-     * parent still counts as parent while Pending, before it has declared
-     * its children. NotRunnable is dropped because it's a structural
-     * marker, not activity.
+     * Per-state counts restricted to leaf steps. NotRunnable dropped
+     * (structural marker, not activity).
      *
      * @return array<string, int>
      */
-    private function buildLeafTotals(): array
+    private function buildLeafTotals(string $prefix): array
     {
-        // Query shape matters: `GROUP BY state, is_throttled` with a class
-        // NOT IN filter can't use `idx_steps_class_state_throttled` because
-        // class is its leftmost column — MySQL falls back to a temp-table
-        // aggregation that takes 2-3s on a 700K-row table and trips the
-        // slow-query alarm on cache misses. Querying `GROUP BY class, state,
-        // is_throttled` matches the index prefix exactly (loose index scan,
-        // no temp table) and runs in <1s. The class-filter + (state,
-        // is_throttled) aggregation happens in PHP afterward — only ~50
-        // rows come back from the DB so the in-PHP work is negligible.
-        //
-        // The 30s cache TTL still applies (heartbeat / step-dispatcher dash
-        // polls every 5s; cache absorbs ~95% of polls onto a single DB
-        // hit). With the fast underlying query, the cache miss case is
-        // also safe — no slow-query alarms even when cache turns over.
-        $parentClasses = array_flip($this->parentClasses());
+        $table = $this->stepsTable($prefix);
+        $parentClasses = array_flip($this->parentClasses($prefix));
 
-        $rows = Cache::remember('system.step-dispatcher.leaf-totals', 30, static function () {
-            return DB::table('steps')
+        $rows = Cache::remember("system.steps.{$prefix}.leaf-totals", 30, static function () use ($table) {
+            return DB::table($table)
                 ->select('class', 'state', 'is_throttled', DB::raw('COUNT(*) as total'))
                 ->groupBy('class', 'state', 'is_throttled')
                 ->get();
@@ -289,26 +337,18 @@ final class StepDispatcherController extends Controller
     }
 
     /**
-     * Leaf-step throughput gauge: current 10-second completion rate vs the
-     * peak 10-second bucket seen over the last 5 minutes. Saturation is
-     * current / peak so the operator can spot when the system drops below
-     * its own recent high-water mark.
-     *
-     * Only leaves are counted — parent-close transitions happen at a
-     * different cadence and don't reflect useful throughput.
+     * Leaf-step throughput gauge: current 10s completion rate vs the
+     * peak 10s bucket seen over the last 5 minutes.
      *
      * @return array<string, int|float|null>
      */
-    private function buildLeafThroughput(): array
+    private function buildLeafThroughput(string $prefix): array
     {
-        $parentClasses = $this->parentClasses();
+        $table = $this->stepsTable($prefix);
+        $parentClasses = $this->parentClasses($prefix);
 
-        return Cache::remember('system.step-dispatcher.leaf-throughput', 3, static function () use ($parentClasses): array {
-            // Use MySQL's own NOW() rather than PHP-side now(). Admin runs in
-            // UTC while ingestion writes timestamps in the app timezone, so
-            // a PHP-generated cutoff would drift by the timezone delta and
-            // match every row.
-            $current = (int) DB::table('steps')
+        return Cache::remember("system.steps.{$prefix}.leaf-throughput", 3, static function () use ($table, $parentClasses): array {
+            $current = (int) DB::table($table)
                 ->when(! empty($parentClasses), static function ($query) use ($parentClasses) {
                     $query->whereNotIn('class', $parentClasses);
                 })
@@ -316,7 +356,7 @@ final class StepDispatcherController extends Controller
                 ->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 10 SECOND)')
                 ->count();
 
-            $peakRow = DB::table('steps')
+            $peakRow = DB::table($table)
                 ->selectRaw('FLOOR(UNIX_TIMESTAMP(completed_at) / 10) AS bucket, COUNT(*) AS bucket_count')
                 ->when(! empty($parentClasses), static function ($query) use ($parentClasses) {
                     $query->whereNotIn('class', $parentClasses);
@@ -339,24 +379,14 @@ final class StepDispatcherController extends Controller
     }
 
     /**
-     * Compute saturation gauges per API system.
-     *
-     * For each tracked API we look at the most recent non-429 sample and
-     * count how many non-429 responses landed in the trailing
-     * `window_seconds` ending at that sample. This anchors the rate to the
-     * latest burst, so long idle gaps don't dilute the metric.
-     *
-     * We deliberately count every dispatch that actually hit the remote API
-     * (HTTP 200 + business errors like 400 "unknown symbol") because those
-     * all consume the throttler's budget; only 429 responses are excluded
-     * since those are external rate-limit rejections, not real dispatches.
-     *
-     * Fully-idle APIs keep their last observed burst rate — the lookback
-     * always ends at the newest sample, not at now().
+     * Per-API saturation gauges. Identical across both prefixes
+     * (api_request_logs is shared infrastructure, not prefix-scoped),
+     * but cache keys are still suffixed so a refactor that scopes
+     * the gauges per fleet later doesn't need a cache-key migration.
      *
      * @return array<int, array<string, mixed>>
      */
-    private function buildApiGauges(): array
+    private function buildApiGauges(string $prefix): array
     {
         $apis = [
             'taapi' => 'TAAPI',
@@ -367,7 +397,7 @@ final class StepDispatcherController extends Controller
             'bitget' => 'Bitget',
         ];
 
-        return Cache::remember('system.step-dispatcher.api-gauges', 3, function () use ($apis) {
+        return Cache::remember("system.steps.{$prefix}.api-gauges", 3, function () use ($apis) {
             $gauges = [];
             foreach ($apis as $canonical => $label) {
                 $gauges[] = $this->gaugeFor($canonical, $label);
@@ -378,8 +408,6 @@ final class StepDispatcherController extends Controller
     }
 
     /**
-     * Build a single gauge payload.
-     *
      * @return array<string, mixed>
      */
     private function gaugeFor(string $canonical, string $label): array
@@ -404,10 +432,6 @@ final class StepDispatcherController extends Controller
             return $empty;
         }
 
-        // Resolve newest + age in a single DB round-trip. Using MySQL's own
-        // NOW() avoids a timezone mismatch — admin runs in UTC while
-        // ingestion writes timestamps in the app timezone, so PHP-side age
-        // math would be off by the timezone delta.
         $meta = DB::table('api_request_logs')
             ->where('api_system_id', $apiSystemId)
             ->whereNotNull('http_response_code')
@@ -436,10 +460,6 @@ final class StepDispatcherController extends Controller
         $observedRps = $count / $windowSeconds;
         $saturation = min(100.0, ($observedRps / $capRps) * 100);
 
-        // Staleness flag: once the newest real dispatch is older than the
-        // inactivity threshold we keep the last reading on screen so the
-        // operator still sees where the API peaked, and let the frontend
-        // repaint it in a muted color to signal "no longer measuring".
         $isStale = (int) $meta->age_seconds > 60;
 
         return [
@@ -455,11 +475,6 @@ final class StepDispatcherController extends Controller
         ];
     }
 
-    /**
-     * Resolve the lookback window for an API. Uses the throttler's declared
-     * window_seconds when available; falls back to 60 for APIs with only a
-     * min_delay-based config (currently just binance).
-     */
     private function lookbackWindowSeconds(string $canonical): int
     {
         $config = config("kraite.throttlers.{$canonical}");
@@ -471,15 +486,6 @@ final class StepDispatcherController extends Controller
         return 60;
     }
 
-    /**
-     * Resolve the effective requests-per-second cap for an API canonical.
-     *
-     * For APIs with `requests_per_window`/`window_seconds` we multiply by the
-     * safety threshold (bybit's threshold is a remaining-percentage, not a
-     * cap reducer, so we skip it there). For binance we fall back to
-     * `min_delay_ms` since the config tracks weight-based limits instead of
-     * request counts.
-     */
     private function capRequestsPerSecond(string $canonical): ?float
     {
         $config = config("kraite.throttlers.{$canonical}");

@@ -63,9 +63,9 @@ class PositionsController extends Controller
      * doesn't flag drift purely on terminology.
      */
     private const STATUS_ALIASES = [
-        'NEW'              => ['LIVE', 'ACTIVE', 'OPEN'],
+        'NEW' => ['LIVE', 'ACTIVE', 'OPEN'],
         'PARTIALLY_FILLED' => ['PARTIAL_FILL', 'PARTIALLYFILLED', 'PARTIALLY-FILLED'],
-        'FILLED'           => ['CLOSED', 'EXECUTED'],
+        'FILLED' => ['CLOSED', 'EXECUTED'],
     ];
 
     /**
@@ -196,7 +196,7 @@ class PositionsController extends Controller
 
         return view('accounts.positions', [
             'accounts' => $accounts,
-            'isAdmin'  => $isAdmin,
+            'isAdmin' => $isAdmin,
         ]);
     }
 
@@ -634,11 +634,21 @@ class PositionsController extends Controller
     }
 
     /**
-     * Weighted-average entry price across a position's FILLED entry-side
-     * orders (BUY for LONG, SELL for SHORT). Mirrors what Binance reports
-     * as the running position entryPrice, so the comparator has a fair
-     * DB-side value to check against. Null when there are no filled
-     * entry orders (callers should fall back to the stored snapshot).
+     * Weighted-average entry price across a position's executed entry-side
+     * orders (BUY for LONG, SELL for SHORT). Mirrors what the exchange
+     * reports as the running position entry price so the comparator has a
+     * fair DB-side value to check against.
+     *
+     * FILLED rows carry their executed qty/price directly. PARTIALLY_FILLED
+     * rows are trickier — only the original ladder qty is persisted, not
+     * the executed portion. The gap between the position's total quantity
+     * (exchange-truth) and the sum of FILLED entry rows IS the executed
+     * portion of the partial rungs; credit it back at each rung's limit
+     * price, in id order (creation order = ladder ascending). Otherwise
+     * positions mid-ladder-fill flag false entry-price drift.
+     *
+     * Null when there are no executed entry orders (callers should fall
+     * back to the stored opening_price snapshot).
      */
     private function computeWeightedAvgEntry($dbPos, string $direction): ?string
     {
@@ -647,10 +657,10 @@ class PositionsController extends Controller
         $weightedCost = '0';
 
         foreach ($dbPos->orders as $o) {
-            if (strtoupper((string) $o->status) !== 'FILLED') {
+            if (strtoupper((string) $o->side) !== $entrySide) {
                 continue;
             }
-            if (strtoupper((string) $o->side) !== $entrySide) {
+            if (strtoupper((string) $o->status) !== 'FILLED') {
                 continue;
             }
             $q = (string) $o->quantity;
@@ -660,6 +670,33 @@ class PositionsController extends Controller
             }
             $totalQty = bcadd($totalQty, $q, 18);
             $weightedCost = bcadd($weightedCost, bcmul($q, $p, 18), 18);
+        }
+
+        $posQty = (string) ($dbPos->quantity ?? '0');
+        if (is_numeric($posQty) && bccomp($posQty, $totalQty, 18) > 0) {
+            $remaining = bcsub($posQty, $totalQty, 18);
+
+            $partials = $dbPos->orders
+                ->filter(function ($o) use ($entrySide) {
+                    return strtoupper((string) $o->status) === 'PARTIALLY_FILLED'
+                        && strtoupper((string) $o->side) === $entrySide;
+                })
+                ->sortBy('id');
+
+            foreach ($partials as $o) {
+                if (bccomp($remaining, '0', 18) <= 0) {
+                    break;
+                }
+                $rungQty = (string) $o->quantity;
+                $rungPrice = (string) $o->price;
+                if (! is_numeric($rungQty) || ! is_numeric($rungPrice)) {
+                    continue;
+                }
+                $take = bccomp($remaining, $rungQty, 18) <= 0 ? $remaining : $rungQty;
+                $totalQty = bcadd($totalQty, $take, 18);
+                $weightedCost = bcadd($weightedCost, bcmul($take, $rungPrice, 18), 18);
+                $remaining = bcsub($remaining, $take, 18);
+            }
         }
 
         if (bccomp($totalQty, '0', 18) <= 0) {

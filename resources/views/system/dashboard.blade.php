@@ -70,7 +70,7 @@
 
                     <div class="flex items-center justify-between mt-2 text-[10px] ui-text-subtle font-mono">
                         <span class="truncate" x-text="stepDispatcher.last_tick ? ('last ' + stepDispatcher.last_tick) : '—'"></span>
-                        <a href="{{ route('system.step-dispatcher') }}" wire:navigate class="flex items-center gap-0.5 hover:opacity-80 transition-opacity" style="color: rgb(var(--ui-primary))">
+                        <a href="{{ route('system.steps', ['prefix' => 'default']) }}" wire:navigate class="flex items-center gap-0.5 hover:opacity-80 transition-opacity" style="color: rgb(var(--ui-primary))">
                             <span>details</span>
                             <x-feathericon-chevron-right class="w-3 h-3" />
                         </a>
@@ -113,30 +113,47 @@
         </div>
 
         <div x-show="!loading" x-cloak class="space-y-4 sm:space-y-5">
-            {{-- System State — cooling-down toggle --}}
-            <div
-                class="ui-card flex items-center justify-between gap-4 px-5 py-4 flex-wrap"
-                :style="isCoolingDown ? 'border-color: rgb(var(--ui-warning) / 0.5); background-color: rgb(var(--ui-warning) / 0.08)' : ''"
-            >
-                <div class="flex items-center gap-3 min-w-0">
-                    <template x-if="isCoolingDown">
-                        <x-hub-ui::pulse-dot type="warning" :pulse="true" size="md" />
-                    </template>
-                    <template x-if="!isCoolingDown">
-                        <x-hub-ui::pulse-dot type="success" size="md" />
-                    </template>
-                    <div class="min-w-0">
-                        <div class="text-sm font-semibold ui-text">Cooling Down</div>
-                        <p class="text-xs ui-text-subtle mt-0.5" x-text="isCoolingDown ? 'Scheduled commands are paused — cron-gated jobs will skip until disabled.' : 'Scheduled commands are active and running on cadence.'"></p>
+            {{-- System State — per-fleet cooldown chips (Default + Trading).
+                 Each chip toggles its own MaintenanceMode prefix flag
+                 independently — pausing one fleet does NOT pause the
+                 other. Backed by `MaintenanceMode::isStepsDispatchPaused`
+                 / `pauseStepsDispatch` / `resumeStepsDispatch` so the
+                 ingestion-side `routes/console.php` skip-gates honour
+                 the chip state per fleet. --}}
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <template x-for="fleet in cooldownFleets" :key="fleet.slug">
+                    <div
+                        class="ui-card flex items-center justify-between gap-4 px-5 py-4 flex-wrap"
+                        :style="cooldown[fleet.slug]?.is_paused ? 'border-color: rgb(var(--ui-warning) / 0.5); background-color: rgb(var(--ui-warning) / 0.08)' : ''"
+                    >
+                        <div class="flex items-center gap-3 min-w-0">
+                            <template x-if="cooldown[fleet.slug]?.is_paused">
+                                <x-hub-ui::pulse-dot type="warning" :pulse="true" size="md" />
+                            </template>
+                            <template x-if="!cooldown[fleet.slug]?.is_paused">
+                                <x-hub-ui::pulse-dot type="success" size="md" />
+                            </template>
+                            <div class="min-w-0">
+                                <div class="text-sm font-semibold ui-text">
+                                    Cooling Down — <span x-text="fleet.label"></span>
+                                </div>
+                                <p
+                                    class="text-xs ui-text-subtle mt-0.5"
+                                    x-text="cooldown[fleet.slug]?.is_paused
+                                        ? (fleet.label + ' fleet paused' + (cooldown[fleet.slug]?.reason ? ' — ' + cooldown[fleet.slug].reason : '') + '.')
+                                        : (fleet.label + ' fleet dispatching on cadence.')"
+                                ></p>
+                            </div>
+                        </div>
+                        <x-hub-ui::switch
+                            state="cooldown[fleet.slug]?.is_paused"
+                            @click="toggleCoolingDown(fleet.slug)"
+                            onColor="warning"
+                            size="md"
+                            x-bind:class="togglingCoolingDown[fleet.slug] ? 'opacity-50 pointer-events-none' : ''"
+                        />
                     </div>
-                </div>
-                <x-hub-ui::switch
-                    state="isCoolingDown"
-                    @click="toggleCoolingDown()"
-                    onColor="warning"
-                    size="md"
-                    x-bind:class="togglingCoolingDown ? 'opacity-50 pointer-events-none' : ''"
-                />
+                </template>
             </div>
 
             {{-- KPI Strip: Hero gauge + Direction + Stats --}}
@@ -888,8 +905,15 @@
                 bscsOverrideReason: '',
                 bscsOverrideBusy: false,
                 bscsOverrideError: '',
-                isCoolingDown: false,
-                togglingCoolingDown: false,
+                cooldownFleets: [
+                    { slug: 'default', label: 'Default' },
+                    { slug: 'trading', label: 'Trading' },
+                ],
+                cooldown: {
+                    default: { is_paused: false, reason: null, paused_at: null, expires_in_seconds: null },
+                    trading: { is_paused: false, reason: null, paused_at: null, expires_in_seconds: null },
+                },
+                togglingCoolingDown: { default: false, trading: false },
 
                 bscsRelativeAge() {
                     const s = Number(this.bscs?.age_seconds);
@@ -993,7 +1017,7 @@
                 async fetchData() {
                     const [dashRes, coolingRes] = await Promise.all([
                         hubUiFetch('{{ route("system.dashboard.data") }}', { method: 'GET' }),
-                        hubUiFetch('{{ route("system.step-dispatcher.cooling-down") }}', { method: 'GET' }),
+                        hubUiFetch('{{ route("system.steps.cooling-down") }}', { method: 'GET' }),
                     ]);
 
                     if (dashRes.ok) {
@@ -1002,27 +1026,36 @@
                         this.bscs = dashRes.data.bscs ?? null;
                     }
 
-                    if (coolingRes.ok) {
-                        this.isCoolingDown = coolingRes.data.is_cooling_down;
+                    if (coolingRes.ok && coolingRes.data) {
+                        this.cooldown = {
+                            default: coolingRes.data.default ?? this.cooldown.default,
+                            trading: coolingRes.data.trading ?? this.cooldown.trading,
+                        };
                     }
 
                     this.loading = false;
                 },
 
-                async toggleCoolingDown() {
-                    if (this.togglingCoolingDown) return;
-                    this.togglingCoolingDown = true;
+                async toggleCoolingDown(slug) {
+                    if (this.togglingCoolingDown[slug]) return;
+                    this.togglingCoolingDown[slug] = true;
 
-                    const previous = this.isCoolingDown;
-                    this.isCoolingDown = !this.isCoolingDown;
+                    const previous = { ...this.cooldown[slug] };
+                    this.cooldown[slug] = { ...previous, is_paused: !previous.is_paused };
 
-                    const { ok, data } = await hubUiFetch('{{ route("system.step-dispatcher.toggle-cooling-down") }}');
-                    if (ok) {
-                        this.isCoolingDown = data.is_cooling_down;
+                    const url = '{{ route("system.steps.toggle-cooling-down", ["prefix" => "__SLUG__"]) }}'.replace('__SLUG__', slug);
+                    const { ok, data } = await hubUiFetch(url, { method: 'POST' });
+                    if (ok && data) {
+                        this.cooldown[slug] = {
+                            is_paused: data.is_paused,
+                            reason: data.reason ?? null,
+                            paused_at: data.paused_at ?? null,
+                            expires_in_seconds: data.expires_in_seconds ?? null,
+                        };
                     } else {
-                        this.isCoolingDown = previous;
+                        this.cooldown[slug] = previous;
                     }
-                    this.togglingCoolingDown = false;
+                    this.togglingCoolingDown[slug] = false;
                 },
             };
         }

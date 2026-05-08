@@ -76,13 +76,30 @@ Route::middleware('auth')->group(function () {
         Route::get('/system/commands/details', [CommandsController::class, 'details'])->name('system.commands.details');
         Route::post('/system/commands/execute', [CommandsController::class, 'execute'])->name('system.commands.execute');
 
-        // Step Dispatcher
-        Route::get('/system/step-dispatcher', [StepDispatcherController::class, 'index'])->name('system.step-dispatcher');
-        Route::get('/system/step-dispatcher/data', [StepDispatcherController::class, 'data'])->name('system.step-dispatcher.data');
-        Route::get('/system/step-dispatcher/blocks', [StepDispatcherController::class, 'blocks'])->name('system.step-dispatcher.blocks');
-        Route::get('/system/step-dispatcher/block-steps', [StepDispatcherController::class, 'blockSteps'])->name('system.step-dispatcher.block-steps');
-        Route::get('/system/step-dispatcher/cooling-down', [StepDispatcherController::class, 'coolingDown'])->name('system.step-dispatcher.cooling-down');
-        Route::post('/system/step-dispatcher/toggle-cooling-down', [StepDispatcherController::class, 'toggleCoolingDown'])->name('system.step-dispatcher.toggle-cooling-down');
+        // Steps — two prefix-isolated dispatcher fleets share one
+        // controller. `default` = `steps_*` tables (calculation churn);
+        // `trading` = `trading_steps_*` (trade-critical workflow).
+        // Cooling-down endpoint returns BOTH fleets' MaintenanceMode
+        // pause state in one payload; toggle is per-fleet (independent,
+        // no mutex). The cooling-down route is declared BEFORE the
+        // catch-all `{prefix}` so the `whereIn` constraint is enough
+        // to keep them disjoint.
+        Route::get('/system/steps/cooling-down', [StepDispatcherController::class, 'coolingDown'])->name('system.steps.cooling-down');
+        Route::post('/system/steps/{prefix}/toggle-cooling-down', [StepDispatcherController::class, 'toggleCoolingDown'])
+            ->whereIn('prefix', ['default', 'trading'])
+            ->name('system.steps.toggle-cooling-down');
+        Route::get('/system/steps/{prefix}', [StepDispatcherController::class, 'index'])
+            ->whereIn('prefix', ['default', 'trading'])
+            ->name('system.steps');
+        Route::get('/system/steps/{prefix}/data', [StepDispatcherController::class, 'data'])
+            ->whereIn('prefix', ['default', 'trading'])
+            ->name('system.steps.data');
+        Route::get('/system/steps/{prefix}/blocks', [StepDispatcherController::class, 'blocks'])
+            ->whereIn('prefix', ['default', 'trading'])
+            ->name('system.steps.blocks');
+        Route::get('/system/steps/{prefix}/block-steps', [StepDispatcherController::class, 'blockSteps'])
+            ->whereIn('prefix', ['default', 'trading'])
+            ->name('system.steps.block-steps');
 
         // Backtesting — historical-candle ladder backtester.
         Route::get('/system/backtesting', [BacktrackingController::class, 'index'])->name('system.backtesting');
