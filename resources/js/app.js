@@ -5,7 +5,7 @@ import './lifecycle/grid';
 
 import { Livewire, Alpine } from '../../vendor/livewire/livewire/dist/livewire.esm';
 import collapse from '@alpinejs/collapse';
-import { initToast, initConfirmation, registerCounter, registerSidebarStore } from '/home/waygou/packages/brunocfalcao/hub-ui/resources/js/hub-ui.js';
+import { initToast, initConfirmation, registerCounter, registerSidebarStore } from '../../vendor/brunocfalcao/hub-ui/resources/js/hub-ui.js';
 
 Alpine.plugin(collapse);
 

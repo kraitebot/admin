@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "92de9a02eff744d6965ac174e587882a",
+    "content-hash": "042319be2c885e440a268c3309846c2c",
     "packages": [
         {
             "name": "angle/chrono",
@@ -246,7 +246,7 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/brunocfalcao/ai-bridge",
+                "url": "../packages/brunocfalcao/ai-bridge",
                 "reference": "e415acac1e58ff4548369a747563222516a25e49"
             },
             "require": {
@@ -284,7 +284,7 @@
             "description": "Reusable AI bridge for Laravel: multi-provider connectivity, chat streaming, knowledge/MCP server, and agent tools.",
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -354,7 +354,7 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/brunocfalcao/hub-ui",
+                "url": "../packages/brunocfalcao/hub-ui",
                 "reference": "f5c5a550224070e97591404bb429a45ba2f519e1"
             },
             "require": {
@@ -397,7 +397,7 @@
             ],
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -405,7 +405,7 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/brunocfalcao/laravel-helpers",
+                "url": "../packages/brunocfalcao/laravel-helpers",
                 "reference": "6574e733a0fc5b631e5e8ce00b83158556b73737"
             },
             "require": {
@@ -445,7 +445,7 @@
             ],
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -453,7 +453,7 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/brunocfalcao/laravel-zepto-mail-api-driver",
+                "url": "../packages/brunocfalcao/laravel-zepto-mail-api-driver",
                 "reference": "47ae73410edf7d570a76ce10f49b3e047ad2b3d0"
             },
             "require": {
@@ -490,7 +490,7 @@
             ],
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -498,8 +498,8 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/brunocfalcao/step-dispatcher",
-                "reference": "7bbdb33468ff77cfa004b955b457091dc67cbc33"
+                "url": "../packages/brunocfalcao/step-dispatcher",
+                "reference": "1446ce63d6c36eab525c78c5443dc93593cb1be3"
             },
             "require": {
                 "illuminate/console": "^11.0|^12.0|^13.0",
@@ -538,7 +538,7 @@
             "description": "Step-based job execution system with state machines for reliable, sequential task processing",
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -1633,14 +1633,14 @@
             "version": "dev-master",
             "dist": {
                 "type": "path",
-                "url": "/home/waygou/packages/kraitebot/core",
-                "reference": "1aa25869aaf81039bc89824a04959b5db839a83f"
+                "url": "../packages/kraitebot/core",
+                "reference": "2a418567d951ecd770e9d1a8646ebdc8ce02c649"
             },
             "require": {
                 "angle/chrono": "^1.0",
                 "binance/binance-connector-php": "^1.6",
-                "brunocfalcao/laravel-helpers": "dev-master",
-                "brunocfalcao/step-dispatcher": "dev-master",
+                "brunocfalcao/laravel-helpers": "dev-master || ^1.0",
+                "brunocfalcao/step-dispatcher": "dev-master || ^1.12",
                 "laravel-notification-channels/pushover": "^4.0",
                 "laravel/framework": "^12.0",
                 "php": "^8.4",
@@ -1659,6 +1659,9 @@
             },
             "type": "project",
             "extra": {
+                "branch-alias": {
+                    "dev-master": "1.x-dev"
+                },
                 "laravel": {
                     "providers": [
                         "Kraite\\Core\\CoreServiceProvider"
@@ -1685,7 +1688,7 @@
             ],
             "transport-options": {
                 "symlink": true,
-                "relative": false
+                "relative": true
             }
         },
         {
@@ -4986,6 +4989,63 @@
                 }
             ],
             "time": "2024-06-11T12:45:25+00:00"
+        },
+        {
+            "name": "resend/resend-php",
+            "version": "v1.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/resend/resend-php.git",
+                "reference": "87d29d98271a0ab1c09cdbee102daa2f9b3419db"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/resend/resend-php/zipball/87d29d98271a0ab1c09cdbee102daa2f9b3419db",
+                "reference": "87d29d98271a0ab1c09cdbee102daa2f9b3419db",
+                "shasum": ""
+            },
+            "require": {
+                "guzzlehttp/guzzle": "^7.5",
+                "php": "^8.1.0"
+            },
+            "require-dev": {
+                "friendsofphp/php-cs-fixer": "^3.13",
+                "mockery/mockery": "^1.6",
+                "pestphp/pest": "^1.0|^2.0|^3.0|^4.0"
+            },
+            "type": "library",
+            "autoload": {
+                "files": [
+                    "src/Resend.php"
+                ],
+                "psr-4": {
+                    "Resend\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Resend and contributors",
+                    "homepage": "https://github.com/resend/resend-php/contributors"
+                }
+            ],
+            "description": "Resend PHP library.",
+            "homepage": "https://resend.com/",
+            "keywords": [
+                "api",
+                "client",
+                "php",
+                "resend",
+                "sdk"
+            ],
+            "support": {
+                "issues": "https://github.com/resend/resend-php/issues",
+                "source": "https://github.com/resend/resend-php/tree/v1.3.0"
+            },
+            "time": "2026-04-11T10:48:32+00:00"
         },
         {
             "name": "spatie/laravel-model-states",
