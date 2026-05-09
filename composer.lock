@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "042319be2c885e440a268c3309846c2c",
+    "content-hash": "26551b661237acd3b4f62161e48452c2",
     "packages": [
         {
             "name": "angle/chrono",
@@ -440,51 +440,6 @@
             ],
             "description": "Laravel Helpers - Swiss army knife to complement your web apps",
             "homepage": "https://github.com/brunocfalcao/brunocfalcao/laravel-helpers",
-            "keywords": [
-                "brunocfalcao"
-            ],
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
-        },
-        {
-            "name": "brunocfalcao/laravel-zepto-mail-api-driver",
-            "version": "dev-master",
-            "dist": {
-                "type": "path",
-                "url": "../packages/brunocfalcao/laravel-zepto-mail-api-driver",
-                "reference": "47ae73410edf7d570a76ce10f49b3e047ad2b3d0"
-            },
-            "require": {
-                "illuminate/contracts": "^10.0||^11.0||^12.0",
-                "php": "^8.1"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "Brunocfalcao\\ZeptoMailApiDriver\\ZeptoMailApiDriverServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "Brunocfalcao\\ZeptoMailApiDriver\\": "src/"
-                }
-            },
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Bruno Falcão",
-                    "email": "bruno.c.falcao@brunofalcao.me",
-                    "role": "Developer"
-                }
-            ],
-            "description": "Zeptomail api mail driver for Laravel",
-            "homepage": "https://github.com/brunocfalcao/brunocfalcao/laravel-zepto-mail-api-driver",
             "keywords": [
                 "brunocfalcao"
             ],
@@ -1634,7 +1589,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/kraitebot/core",
-                "reference": "2a418567d951ecd770e9d1a8646ebdc8ce02c649"
+                "reference": "d6bc2a6486b325bc966cf8eb2e8a92c331540561"
             },
             "require": {
                 "angle/chrono": "^1.0",
@@ -10240,7 +10195,6 @@
     "stability-flags": {
         "brunocfalcao/ai-bridge": 20,
         "brunocfalcao/hub-ui": 20,
-        "brunocfalcao/laravel-zepto-mail-api-driver": 20,
         "kraitebot/core": 20
     },
     "prefer-stable": true,
