@@ -16,6 +16,37 @@ class CommandsController extends Controller
         return config('kraite.ingestion_path', '/home/waygou/ingestion.kraite.com');
     }
 
+    private static function isRemote(): bool
+    {
+        return ! is_dir(self::ingestionPath());
+    }
+
+    private function runOnIngestion(array $command, int $timeout = 60): \Illuminate\Contracts\Process\ProcessResult
+    {
+        if (! self::isRemote()) {
+            return Process::path(self::ingestionPath())->timeout($timeout)->run($command);
+        }
+
+        $host = config('kraite.ingestion_ssh_host');
+        $user = config('kraite.ingestion_ssh_user');
+        $key = config('kraite.ingestion_ssh_key');
+        $remotePath = config('kraite.ingestion_remote_path');
+
+        if (! $host || ! $user || ! $key || ! $remotePath) {
+            throw new \RuntimeException('Ingestion SSH config missing. Set KRAITE_INGESTION_SSH_HOST, _USER, _KEY, _REMOTE_PATH in .env.');
+        }
+
+        $escaped = implode(' ', array_map('escapeshellarg', $command));
+
+        return Process::timeout($timeout)->run([
+            'ssh', '-i', $key,
+            '-o', 'StrictHostKeyChecking=no',
+            '-o', 'BatchMode=yes',
+            "{$user}@{$host}",
+            "cd {$remotePath} && {$escaped}",
+        ]);
+    }
+
     public function index()
     {
         $commands = $this->getCommandList();
@@ -32,8 +63,7 @@ class CommandsController extends Controller
      */
     private function getSchedule(): array
     {
-        $result = Process::path(self::ingestionPath())
-            ->run(['php', 'artisan', 'schedule:list', '--no-ansi']);
+        $result = $this->runOnIngestion(['php', 'artisan', 'schedule:list', '--no-ansi']);
 
         if (! $result->successful()) {
             return [];
@@ -118,8 +148,7 @@ class CommandsController extends Controller
             return response()->json(['error' => 'Only kraite commands are available.'], 422);
         }
 
-        $result = Process::path(self::ingestionPath())
-            ->run(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
+        $result = $this->runOnIngestion(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
 
         if (! $result->successful()) {
             return response()->json(['error' => 'Command not found.'], 404);
@@ -204,7 +233,7 @@ class CommandsController extends Controller
 
         try {
             $startTime = microtime(true);
-            $result = Process::path(self::ingestionPath())->timeout(300)->run($cmd);
+            $result = $this->runOnIngestion($cmd, 300);
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             return response()->json([

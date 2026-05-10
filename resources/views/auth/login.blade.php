@@ -32,6 +32,12 @@
         <div class="mb-6 flex flex-col items-center gap-3">
             <img src="{{ asset('logos/snake-green.svg') }}" alt="Kraite" class="w-12 h-12" />
             <span class="text-[0.68rem] font-semibold tracking-[0.18em] uppercase ui-text-subtle">Kraite Admin Console</span>
+            @if(! app()->isProduction())
+            <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest"
+                  style="background-color: rgb(var(--ui-warning) / 0.15); color: rgb(var(--ui-warning)); border: 1px solid rgb(var(--ui-warning) / 0.3);">
+                {{ config('app.env') }}
+            </span>
+            @endif
         </div>
 
         <div class="sm:relative" x-data="{ devPanelOpen: true }">
