@@ -1,58 +1,52 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://kraite.com/logo.png" alt="Kraite" width="200">
 </p>
 
-## About Laravel
+<h1 align="center">Kraite Admin</h1>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+<p align="center">
+  The administration panel for Kraite — monitor, configure, and control the trading system.
+</p>
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## About
 
-## Learning Laravel
+Kraite Admin is the back-office interface for managing the Kraite trading infrastructure. It provides:
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- **Exchange Symbol Management** — view, configure, and override trading parameters per symbol
+- **Position Monitoring** — real-time position tracking, P&L, ladder state across all exchanges
+- **Account Management** — multi-exchange account configuration and balance overview
+- **Backtesting Review** — approve/reject backtesting results, manage symbol eligibility
+- **System Diagnostics** — step dispatcher status, queue health, API error logs
+- **Indicator Overrides** — per-symbol TP/SL, gap percentages, direction overrides
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## Architecture
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+Shares the `kraite` database with `ingestion.kraite.com`. All schema changes live in `kraitebot/core` — this repo has no migrations. Built with `brunocfalcao/hub-ui` for the component library and theme system.
 
-## Agentic Development
+## Requirements
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+- PHP 8.4+
+- Laravel 12
+- Node.js (for frontend build)
+- Shared MySQL access (via Zeus)
 
-```bash
-composer require laravel/boost --dev
+## Disclaimer
 
-php artisan boost:install
-```
-
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
-
-## Contributing
-
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
-
-## Code of Conduct
-
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
-
-## Security Vulnerabilities
-
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+> **This software is provided for educational and informational purposes only.**
+>
+> Cryptocurrency trading involves substantial risk of financial loss. Algorithmic trading amplifies this risk through automated execution at speeds that prevent human intervention. Past performance does not guarantee future results.
+>
+> **By using, forking, or referencing this code, you acknowledge that:**
+> - You may lose some or all of your invested capital
+> - The authors accept no responsibility for financial losses
+> - This software is not financial advice
+> - You are solely responsible for your trading decisions
+> - Bugs, network failures, exchange outages, or market conditions can cause unexpected losses
+>
+> **Do not trade with money you cannot afford to lose.**
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Proprietary. All rights reserved.

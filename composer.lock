@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "26551b661237acd3b4f62161e48452c2",
+    "content-hash": "b1b8e3e9b4b77692622cdd412b975b6d",
     "packages": [
         {
             "name": "angle/chrono",
@@ -1589,7 +1589,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/kraitebot/core",
-                "reference": "d6bc2a6486b325bc966cf8eb2e8a92c331540561"
+                "reference": "9adfde7a2603c999f6a2d28133f2dc5a02e69c9f"
             },
             "require": {
                 "angle/chrono": "^1.0",

@@ -11,7 +11,10 @@ use Illuminate\Support\Facades\Process;
 
 class CommandsController extends Controller
 {
-    private const INGESTION_PATH = '/home/waygou/ingestion.kraite.com';
+    private static function ingestionPath(): string
+    {
+        return config('kraite.ingestion_path', '/home/waygou/ingestion.kraite.com');
+    }
 
     public function index()
     {
@@ -29,7 +32,7 @@ class CommandsController extends Controller
      */
     private function getSchedule(): array
     {
-        $result = Process::path(self::INGESTION_PATH)
+        $result = Process::path(self::ingestionPath())
             ->run(['php', 'artisan', 'schedule:list', '--no-ansi']);
 
         if (! $result->successful()) {
@@ -115,7 +118,7 @@ class CommandsController extends Controller
             return response()->json(['error' => 'Only kraite commands are available.'], 422);
         }
 
-        $result = Process::path(self::INGESTION_PATH)
+        $result = Process::path(self::ingestionPath())
             ->run(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
 
         if (! $result->successful()) {
@@ -201,7 +204,7 @@ class CommandsController extends Controller
 
         try {
             $startTime = microtime(true);
-            $result = Process::path(self::INGESTION_PATH)->timeout(300)->run($cmd);
+            $result = Process::path(self::ingestionPath())->timeout(300)->run($cmd);
             $duration = round((microtime(true) - $startTime) * 1000, 2);
 
             return response()->json([
@@ -216,7 +219,7 @@ class CommandsController extends Controller
 
     private function getCommandList(): array
     {
-        $result = Process::path(self::INGESTION_PATH)
+        $result = Process::path(self::ingestionPath())
             ->run(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
 
         if (! $result->successful()) {
