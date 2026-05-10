@@ -285,15 +285,14 @@ final class BacktrackingController extends Controller
             'approve' => ['required', 'boolean'],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
+            'tp_percent' => ['nullable', 'numeric', 'gt:0'],
+            'sl_percent' => ['nullable', 'numeric', 'gt:0'],
         ]);
 
         try {
             $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
             $approve = (bool) $validated['approve'];
 
-            // Boolean drives the live-trader gate (observer fans cross-exchange);
-            // string column tracks admin-side review state for the dropdown filters
-            // and leaves room for future review states (shelved, needs-data, etc.).
             $symbol->was_backtesting_approved = $approve;
             $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';
 
@@ -305,6 +304,12 @@ final class BacktrackingController extends Controller
                 }
                 if (isset($validated['gap_short_percent'])) {
                     $symbol->percentage_gap_short = (float) $validated['gap_short_percent'];
+                }
+                if (isset($validated['tp_percent'])) {
+                    $symbol->profit_percentage = (float) $validated['tp_percent'];
+                }
+                if (isset($validated['sl_percent'])) {
+                    $symbol->stop_market_percentage = (float) $validated['sl_percent'];
                 }
             }
 
@@ -323,6 +328,8 @@ final class BacktrackingController extends Controller
             'backtesting_review_status' => $symbol->backtesting_review_status,
             'percentage_gap_long' => $symbol->percentage_gap_long,
             'percentage_gap_short' => $symbol->percentage_gap_short,
+            'profit_percentage' => $symbol->profit_percentage,
+            'stop_market_percentage' => $symbol->stop_market_percentage,
         ]);
     }
 

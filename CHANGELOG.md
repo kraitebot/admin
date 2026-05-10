@@ -2,6 +2,12 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.4.1] — 2026-05-10
+
+### Fixes
+- [BUG FIX] **Backtesting approval now saves TP% and SL% to exchange symbol.** Previously only gap percentages were persisted on approve — profit_percentage and stop_market_percentage were silently dropped.
+- [BUG FIX] **"Not reviewed" filter now shows symbols with `pending` status.** Filter only matched `null` — symbols reverted to pending were invisible in the dropdown.
+
 ## [0.4.0] — 2026-05-10
 
 ### Features

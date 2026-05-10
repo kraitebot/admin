@@ -548,7 +548,7 @@
                 // filter is active.
                 const passesStatus = (s) => {
                     const status = s.backtesting_review_status;
-                    if (this.filterNotReviewed) return status === null || status === undefined;
+                    if (this.filterNotReviewed) return status === null || status === undefined || status === 'pending';
                     if (this.filterOnlyApproved) return status === 'approved';
                     if (this.filterOnlyRejected) return status === 'rejected';
                     return true;
@@ -592,6 +592,12 @@
                         }
                         if (this.form.gap_short_percent !== '' && this.form.gap_short_percent !== null) {
                             payload.gap_short_percent = this.form.gap_short_percent;
+                        }
+                        if (this.form.tp_percent !== '' && this.form.tp_percent !== null) {
+                            payload.tp_percent = this.form.tp_percent;
+                        }
+                        if (this.form.sl_percent !== '' && this.form.sl_percent !== null) {
+                            payload.sl_percent = this.form.sl_percent;
                         }
                     }
                     const res = await this.post('{{ route('system.backtesting.toggle-approval') }}', payload);
