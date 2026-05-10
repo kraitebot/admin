@@ -248,6 +248,7 @@
                 </a>
                 @endif
 
+                @if(! app()->isProduction())
                 <a
                     href="{{ route('system.ui-components') }}" wire:navigate
                     data-nav-item="ui-components"
@@ -263,6 +264,7 @@
                     </span>
                     <span class="text-xs">UI Kit</span>
                 </a>
+                @endif
             </x-hub-ui::sidebar.section>
             @endif
 

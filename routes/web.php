@@ -67,14 +67,14 @@ Route::middleware('auth')->group(function () {
         Route::get('/system/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
         Route::post('/system/sql-query', [SqlQueryController::class, 'execute'])->name('system.sql-query.execute');
         Route::get('/system/sql-query/tables', [SqlQueryController::class, 'tables'])->name('system.sql-query.tables');
-        Route::post('/system/sql-query/truncate', [SqlQueryController::class, 'truncate'])->name('system.sql-query.truncate');
+        Route::post('/system/sql-query/truncate', [SqlQueryController::class, 'truncate'])->middleware('throttle:3,1')->name('system.sql-query.truncate');
         Route::get('/system/sql-query/primary-key', [SqlQueryController::class, 'primaryKey'])->name('system.sql-query.primary-key');
         Route::post('/system/sql-query/update', [SqlQueryController::class, 'update'])->name('system.sql-query.update');
 
         // Commands
         Route::get('/system/commands', [CommandsController::class, 'index'])->name('system.commands');
         Route::get('/system/commands/details', [CommandsController::class, 'details'])->name('system.commands.details');
-        Route::post('/system/commands/execute', [CommandsController::class, 'execute'])->name('system.commands.execute');
+        Route::post('/system/commands/execute', [CommandsController::class, 'execute'])->middleware('throttle:10,1')->name('system.commands.execute');
 
         // Steps — two prefix-isolated dispatcher fleets share one
         // controller. `default` = `steps_*` tables (calculation churn);

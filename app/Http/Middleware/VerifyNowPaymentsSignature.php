@@ -55,9 +55,6 @@ final class VerifyNowPaymentsSignature
             Log::warning('[NOWPayments] signature mismatch', [
                 'received_sig_prefix' => substr($signature, 0, 16),
                 'expected_sig_prefix' => substr($expected, 0, 16),
-                'secret_prefix' => substr($secret, 0, 6),
-                'body_first_500' => substr($body, 0, 500),
-                'sorted_first_500' => substr($sortedJson, 0, 500),
                 'order_id' => $data['order_id'] ?? null,
                 'payment_id' => $data['payment_id'] ?? null,
                 'payment_status' => $data['payment_status'] ?? null,

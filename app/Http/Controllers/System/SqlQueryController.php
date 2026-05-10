@@ -141,6 +141,16 @@ class SqlQueryController extends Controller
             return response()->json(['error' => "Table \"{$table}\" does not exist."], 422);
         }
 
+        $columns = \Illuminate\Support\Facades\Schema::getColumnListing($table);
+
+        if (! in_array($pkColumn, $columns, true)) {
+            return response()->json(['error' => "Column \"{$pkColumn}\" does not exist on \"{$table}\"."], 422);
+        }
+
+        if (! in_array($column, $columns, true)) {
+            return response()->json(['error' => "Column \"{$column}\" does not exist on \"{$table}\"."], 422);
+        }
+
         $resolvedValue = (is_string($value) && strtoupper($value) === 'NULL') ? null : $value;
 
         try {

@@ -158,7 +158,7 @@
                         </div>
                         <p class="text-sm ui-text-muted mt-2" x-text="commandDetails?.description"></p>
                         <p x-show="commandDetails?.help && commandDetails?.help !== commandDetails?.description"
-                           class="text-xs ui-text-subtle mt-2 font-mono" x-html="commandDetails?.help"></p>
+                           class="text-xs ui-text-subtle mt-2 font-mono whitespace-pre-wrap" x-text="commandDetails?.help"></p>
                     </div>
 
                     {{-- Args + Options in 2-col on lg+ when both exist --}}
