@@ -2,6 +2,18 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.4.0] — 2026-05-10
+
+### Features
+- [NEW FEATURE] **System dashboard redesign — two-column ops layout.** Main column shows KPI strip, per-prefix step dispatcher cards (Default + Trading fleet with Pending/Dispatched/Running/Throttled/Failed/Completed state grid + throughput saturation bar), and exchanges table. Sticky sidebar shows vitals gauges, compact BSCS tile, fleet cooldown toggles, and slow query count. Max-width 1600px container. Both columns auto-stretch to equal height.
+- [NEW FEATURE] **Per-prefix step dispatcher cards on dashboard.** Each fleet card fetches `/system/steps/{prefix}/data` independently, showing leaf-step state counts and throughput saturation. Unavailable fleets (missing table) show "No data" gracefully instead of an infinite spinner.
+
+### Fixes
+- [BUG FIX] **CommandsController ingestion path hardcoded to VPS.** Replaced hardcoded `/home/waygou/ingestion.kraite.com` with `config('kraite.ingestion_path')` which auto-detects local dev via `is_dir` fallback.
+
+### Dependencies
+- kraitebot/core bumped to v1.37.3 (updateOrCreate api_systems seeder + ingestion_path config)
+
 ## [0.3.0] — 2026-05-08
 
 ### Features
