@@ -2,6 +2,18 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.5.1] — 2026-05-13
+
+### Features
+- [NEW FEATURE] **"Send password reset email" action on system user detail.** Admin-only action that dispatches a password-reset link to the selected user via the standard `Password::broker()` flow. Used as the explicit "you're in" gate for private-beta approvals coming through the kraite.com waitlist — admin clicks the button, the user receives the branded Resend email, sets a password, and signs in.
+
+### Tests
+- [NEW FEATURE] **Feature test for the new admin password-reset dispatch.** Covers the happy path (admin acting-as → notification sent to target user, redirect with status flash) and the guest case (unauthenticated POST redirects to login, no mail sent).
+
+### Dependencies
+- symfony/console v7.4.9 → v7.4.11 (security/patch)
+- symfony/http-kernel v7.4.10 → v7.4.11 (security/patch)
+
 ## [0.5.0] — 2026-05-13
 
 ### Features

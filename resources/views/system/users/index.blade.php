@@ -76,6 +76,22 @@
                         @endif
                     </div>
                 </div>
+
+                {{-- Beta-onboarding action: dispatch a password-reset link to the user.
+                     Used as the "you're in" approval step for private-beta signups
+                     coming in via the kraite.com waitlist. --}}
+                <form method="POST"
+                      action="{{ route('system.users.password-reset', $selected) }}"
+                      class="mt-3"
+                      onsubmit="return confirm('Send a password-reset email to {{ $selected->email }}?');">
+                    @csrf
+                    <x-hub-ui::button type="submit" variant="secondary" size="sm">
+                        Send password reset email
+                    </x-hub-ui::button>
+                    <span class="ml-2 text-[11px] ui-text-subtle">
+                        Beta approval — lets the user set a password and sign in.
+                    </span>
+                </form>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">

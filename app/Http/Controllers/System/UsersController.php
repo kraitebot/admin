@@ -7,6 +7,7 @@ namespace App\Http\Controllers\System;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Password;
 use Illuminate\View\View;
 use Kraite\Core\Models\Subscription;
 use Kraite\Core\Models\User;
@@ -158,5 +159,27 @@ final class UsersController extends Controller
         return redirect()
             ->route('system.users', $user)
             ->with('status', $msg);
+    }
+
+    /**
+     * Manually send a password-reset link to a user. Used to onboard
+     * private-beta users approved one-by-one from this admin: the
+     * waitlist flow only verifies the email; clicking this button is
+     * the explicit "they're in" gate that lets them set a password and
+     * sign in to admin.kraite.com.
+     */
+    public function sendPasswordResetLink(User $user): RedirectResponse
+    {
+        $status = Password::broker()->sendResetLink(['email' => $user->email]);
+
+        if ($status === Password::RESET_LINK_SENT) {
+            return redirect()
+                ->route('system.users', $user)
+                ->with('status', "Password reset link sent to {$user->email}.");
+        }
+
+        return redirect()
+            ->route('system.users', $user)
+            ->with('error', 'Failed to send reset link: '.__($status));
     }
 }

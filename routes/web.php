@@ -1,22 +1,24 @@
 <?php
 
-use App\Http\Controllers\BscsController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\ProjectionsController;
 use App\Http\Controllers\Accounts\AccountController;
 use App\Http\Controllers\Accounts\PositionsController;
+use App\Http\Controllers\BillingController;
+use App\Http\Controllers\BscsController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\NowPaymentsWebhookController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ProjectionsController;
 use App\Http\Controllers\System\BacktrackingController;
+use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsController;
+use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\DashboardController as SystemDashboardController;
 use App\Http\Controllers\System\LifecycleController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
-use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsController;
-use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\UsersController as SystemUsersController;
-use App\Http\Controllers\BillingController;
+use App\Http\Middleware\VerifyNowPaymentsSignature;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -136,6 +138,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/system/users/{user}/active-account', [SystemUsersController::class, 'changeActiveAccount'])->name('system.users.active-account');
         Route::post('/system/users/{user}/start-trial', [SystemUsersController::class, 'startTrial'])->name('system.users.start-trial');
         Route::post('/system/users/{user}/trial-days', [SystemUsersController::class, 'changeTrialDays'])->name('system.users.trial-days');
+        Route::post('/system/users/{user}/password-reset', [SystemUsersController::class, 'sendPasswordResetLink'])->name('system.users.password-reset');
 
         // Billing plan management — sysadmin CRUD over subscription tiers.
         Route::get('/system/billing/plans', [SystemBillingPlansController::class, 'index'])->name('system.billing.plans');
@@ -177,8 +180,8 @@ Route::get('/billing/quick-topup', [BillingController::class, 'quickTopUp'])
     ->name('billing.quick-topup');
 
 // NOWPayments IPN webhook — public, signature-verified, CSRF-exempt.
-Route::post('/webhooks/payments', [\App\Http\Controllers\NowPaymentsWebhookController::class, 'handle'])
-    ->middleware(\App\Http\Middleware\VerifyNowPaymentsSignature::class)
+Route::post('/webhooks/payments', [NowPaymentsWebhookController::class, 'handle'])
+    ->middleware(VerifyNowPaymentsSignature::class)
     ->name('webhooks.payments');
 
 require __DIR__.'/auth.php';
