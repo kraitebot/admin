@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Process;
@@ -21,9 +22,12 @@ class CommandsController extends Controller
         return ! is_dir(self::ingestionPath());
     }
 
-    private function runOnIngestion(array $command, int $timeout = 60): \Illuminate\Contracts\Process\ProcessResult
+    private function runOnIngestion(array $command, int $timeout = 60): ProcessResult
     {
         if (! self::isRemote()) {
+            $binary = config('kraite.php_binary', 'php');
+            $command = array_map(fn ($arg) => $arg === 'php' ? $binary : $arg, $command);
+
             return Process::path(self::ingestionPath())->timeout($timeout)->run($command);
         }
 
@@ -248,8 +252,7 @@ class CommandsController extends Controller
 
     private function getCommandList(): array
     {
-        $result = Process::path(self::ingestionPath())
-            ->run(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
+        $result = $this->runOnIngestion(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
 
         if (! $result->successful()) {
             return [];

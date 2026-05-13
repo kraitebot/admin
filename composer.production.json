@@ -96,39 +96,24 @@
     "prefer-stable": true,
     "repositories": [
         {
-            "type": "path",
-            "url": "../packages/kraitebot/core",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/kraitebot/core.git"
         },
         {
-            "type": "path",
-            "url": "../packages/brunocfalcao/ai-bridge",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/brunocfalcao/ai-bridge.git"
         },
         {
-            "type": "path",
-            "url": "../packages/brunocfalcao/hub-ui",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/brunocfalcao/hub-ui.git"
         },
         {
-            "type": "path",
-            "url": "../packages/brunocfalcao/step-dispatcher",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/brunocfalcao/step-dispatcher.git"
         },
         {
-            "type": "path",
-            "url": "../packages/brunocfalcao/laravel-helpers",
-            "options": {
-                "symlink": true
-            }
+            "type": "vcs",
+            "url": "https://github.com/brunocfalcao/laravel-helpers.git"
         }
     ]
 }

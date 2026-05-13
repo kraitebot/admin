@@ -12,23 +12,19 @@
         <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-5 flex items-end gap-4 flex-wrap">
             <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
                 <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
-                <div class="relative">
-                    <select
-                        x-model="selectedAccountId"
-                        @change="reloadMonth()"
-                        class="w-full px-4 py-2.5 text-sm rounded-lg border ui-input appearance-none cursor-pointer font-medium"
-                    >
-                        <option value="">— Select an account —</option>
-                        @foreach($accounts as $account)
-                            <option value="{{ $account['id'] }}">
-                                {{ $account['name'] }} · {{ $account['exchange'] }} · {{ $account['owner'] }}
-                            </option>
-                        @endforeach
-                    </select>
-                    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                        <x-feathericon-chevron-down class="w-4 h-4 ui-text-subtle" />
-                    </div>
-                </div>
+                <x-hub-ui::select
+                    name="account_id"
+                    x-model="selectedAccountId"
+                    @change="reloadMonth()"
+                    class="w-full"
+                >
+                    <option value="">— Select an account —</option>
+                    @foreach($accounts as $account)
+                        <option value="{{ $account['id'] }}">
+                            {{ $account['name'] }} · {{ $account['exchange'] }} · {{ $account['owner'] }}
+                        </option>
+                    @endforeach
+                </x-hub-ui::select>
             </div>
         </div>
 

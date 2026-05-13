@@ -1,19 +1,17 @@
 <x-app-layout :activeSection="'system'" :activeHighlight="'lifecycle'" :flush="false">
     <div class="px-4 sm:px-6 lg:px-12 py-6">
-        <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
-            <div>
-                <h1 class="text-2xl font-semibold ui-text">Lifecycle</h1>
-                <p class="text-sm ui-text-muted mt-1">
-                    Position-lifecycle configurator. Walk a portfolio of up to 6 ladders frame-by-frame, manually
-                    advancing time to study cascades, kill-switches, and rescue exits.
-                </p>
-            </div>
-            <a href="{{ route('system.lifecycle.create') }}"
-               wire:navigate
-               class="ui-btn ui-btn-primary ui-btn-sm">
-                New scenario
-            </a>
-        </div>
+        <x-hub-ui::page-header
+            title="Lifecycle"
+            description="Position-lifecycle configurator. Walk a portfolio of up to 6 ladders frame-by-frame, manually advancing time to study cascades, kill-switches, and rescue exits."
+        >
+            <x-slot:actions>
+                <a href="{{ route('system.lifecycle.create') }}"
+                   wire:navigate
+                   class="ui-btn ui-btn-primary ui-btn-sm">
+                    New scenario
+                </a>
+            </x-slot:actions>
+        </x-hub-ui::page-header>
 
         @if($scenarios->isEmpty())
             <div class="ui-card p-10 text-center">

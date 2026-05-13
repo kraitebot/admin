@@ -1,22 +1,20 @@
 <x-app-layout :activeHighlight="'dashboard'">
     <div x-data="userDashboard()" x-init="init()">
 
-        {{-- Header strip: title + account selector --}}
-        <div class="flex items-end justify-between gap-4 flex-wrap mb-6">
-            <div>
-                <h1 class="text-2xl font-semibold ui-text">Dashboard</h1>
-                <p class="text-sm ui-text-subtle mt-1">Open positions across the lifecycle.</p>
-            </div>
+        <x-hub-ui::page-header
+            title="Dashboard"
+            description="Open positions across the lifecycle."
+        />
 
-            {{-- Account selector: admin always sees the dropdown (cross-user
-                 picker); regular users only see it when they own multiple
-                 accounts, otherwise the auto-selected one is shown as a label. --}}
-            <div x-show="isAdmin || accounts.length > 1" x-cloak>
+        {{-- Account selector --}}
+        <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-6 flex items-end gap-4 flex-wrap">
+            <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
+                <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
                 <x-hub-ui::select
                     name="account_id"
                     x-model="selectedAccountId"
                     @change="fetchData()"
-                    class="w-80 sm:w-96"
+                    class="w-full"
                 >
                     <option value="">Select account…</option>
                     <template x-for="acc in accounts" :key="acc.id">
@@ -24,10 +22,10 @@
                     </template>
                 </x-hub-ui::select>
             </div>
+        </div>
 
-            <div x-show="!isAdmin && accounts.length === 1" x-cloak class="text-xs ui-text-subtle">
-                <span x-text="accounts[0]?.exchange + ' · ' + accounts[0]?.name"></span>
-            </div>
+        <div x-show="!isAdmin && accounts.length === 1" x-cloak class="mb-6 text-xs ui-text-subtle">
+            <span x-text="accounts[0]?.exchange + ' · ' + accounts[0]?.name"></span>
         </div>
 
         {{-- Empty: no accounts --}}

@@ -1,27 +1,32 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
 {
-    /**
-     * Display the password reset link request view.
-     */
+    private const NEUTRAL_STATUS = 'If your email is part of our system, you will receive a reset link shortly.';
+
+    private const PER_EMAIL_LIMIT = 5;
+
+    private const PER_EMAIL_WINDOW_SECONDS = 60;
+
     public function create(): View
     {
         return view('auth.forgot-password');
     }
 
     /**
-     * Handle an incoming password reset link request.
-     *
      * @throws ValidationException
      */
     public function store(Request $request): RedirectResponse
@@ -30,16 +35,17 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
-        // We will send the password reset link to this user. Once we have attempted
-        // to send the link, we will examine the response then see the message we
-        // need to show to the user. Finally, we'll send out a proper response.
-        $status = Password::sendResetLink(
-            $request->only('email')
-        );
+        $email = Str::lower((string) $request->input('email'));
+        $key = 'password-reset-link:'.sha1($email);
 
-        return $status == Password::RESET_LINK_SENT
-                    ? back()->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        if (RateLimiter::tooManyAttempts($key, self::PER_EMAIL_LIMIT)) {
+            return back()->with('status', self::NEUTRAL_STATUS);
+        }
+
+        RateLimiter::hit($key, self::PER_EMAIL_WINDOW_SECONDS);
+
+        Password::sendResetLink(['email' => $email]);
+
+        return back()->with('status', self::NEUTRAL_STATUS);
     }
 }

@@ -886,6 +886,13 @@ class PositionsController extends Controller
      */
     private function computePnl($p): array
     {
+        $isClosed = in_array(strtolower((string) $p->status), ['closed', 'cancelled', 'failed'], true);
+
+        // Prefer exchange-reported PnL when available (backfilled by cron)
+        if ($isClosed && $p->pnl !== null) {
+            return [$this->trim((string) $p->pnl), 'realized'];
+        }
+
         $open = $p->opening_price;
         $qty = $p->quantity;
         $direction = strtoupper((string) $p->direction);
@@ -894,8 +901,8 @@ class PositionsController extends Controller
             return [null, null];
         }
 
+        // Fallback for closed positions without exchange PnL yet
         $close = $p->closing_price ?? null;
-        $isClosed = in_array(strtolower((string) $p->status), ['closed', 'cancelled', 'failed'], true);
 
         if ($close !== null && (string) $close !== '' && $isClosed) {
             $diff = $direction === 'LONG'

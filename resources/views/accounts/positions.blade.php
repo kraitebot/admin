@@ -10,40 +10,38 @@
         <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-6 flex items-end gap-4 flex-wrap">
             <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
                 <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
-                <div class="relative">
-                    <select
-                        x-model="selectedAccountId"
-                        @change="fetchAccountData()"
-                        class="w-full px-4 py-2.5 text-sm rounded-lg border ui-input appearance-none cursor-pointer font-medium"
-                    >
-                        <option value="">— Select an account —</option>
-                        @foreach($accounts as $account)
-                            <option value="{{ $account['id'] }}">
-                                {{ $account['name'] }} · {{ $account['exchange'] }} · {{ $account['user'] }}
-                            </option>
-                        @endforeach
-                    </select>
-                    <div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
-                        <x-feathericon-chevron-down class="w-4 h-4 ui-text-subtle" />
-                    </div>
-                </div>
+                <x-hub-ui::select
+                    name="account_id"
+                    x-model="selectedAccountId"
+                    @change="fetchAccountData()"
+                    class="w-full"
+                >
+                    <option value="">— Select an account —</option>
+                    @foreach($accounts as $account)
+                        <option value="{{ $account['id'] }}">
+                            {{ $account['name'] }} · {{ $account['exchange'] }} · {{ $account['user'] }}
+                        </option>
+                    @endforeach
+                </x-hub-ui::select>
             </div>
             <div x-show="selectedAccountId" x-cloak class="flex items-center gap-3">
+                @if($isAdmin)
                 <span class="text-[11px] ui-text-subtle font-mono">
                     ID <span class="ui-text-muted" x-text="selectedAccountId"></span>
                 </span>
+                @endif
                 <button
                     type="button"
                     @click="fetchAccountData()"
-                    :disabled="loading"
-                    class="ui-btn ui-btn-secondary ui-btn-sm"
-                    :class="loading ? 'opacity-60 cursor-not-allowed' : ''"
+                    :disabled="loading || refreshing"
+                    class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg border border-gray-300 bg-white text-gray-700 transition-colors hover:bg-gray-50"
+                    :class="(loading || refreshing) ? 'opacity-60 cursor-not-allowed' : ''"
                     title="Refresh"
                 >
-                    <svg class="w-4 h-4" :class="loading ? 'animate-spin ui-text-subtle' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                    <svg class="w-4 h-4" :class="(loading || refreshing) ? 'animate-spin ui-text-subtle' : ''" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182M21.015 4.356v4.992" />
                     </svg>
-                    <span :class="loading ? 'ui-text-subtle' : ''" x-text="loading ? 'Refreshing' : 'Refresh'"></span>
+                    <span :class="(loading || refreshing) ? 'ui-text-subtle' : ''" x-text="(loading || refreshing) ? 'Refreshing' : 'Refresh'"></span>
                 </button>
             </div>
         </div>
@@ -774,11 +772,13 @@
             return {
                 selectedAccountId: '',
                 loading: false,
+                refreshing: false,
                 accountData: null,
                 apiError: null,
                 openPairs: {},
                 onlyDrifts: false,
                 _loadedAccountId: null,
+                _autoRefreshTimer: null,
 
                 // History (paginated)
                 historyPositions: [],
@@ -795,12 +795,85 @@
                 isAdmin: @json($isAdmin),
 
                 init() {
-                    // Single-account UX: skip the manual "pick one" step
-                    // and load straight into the operator's view.
                     if (this.accounts.length === 1) {
                         this.selectedAccountId = String(this.accounts[0].id);
                         this.fetchAccountData();
                     }
+                },
+
+                destroy() {
+                    this._stopAutoRefresh();
+                },
+
+                _startAutoRefresh() {
+                    this._stopAutoRefresh();
+                    this._autoRefreshTimer = setInterval(() => this._autoRefreshTick(), 10000);
+                },
+
+                _stopAutoRefresh() {
+                    if (this._autoRefreshTimer) {
+                        clearInterval(this._autoRefreshTimer);
+                        this._autoRefreshTimer = null;
+                    }
+                },
+
+                async _autoRefreshTick() {
+                    if (!this.selectedAccountId || this.loading || this.refreshing) return;
+                    this.refreshing = true;
+
+                    const dataPromise = hubUiFetch(
+                        '{{ route("accounts.positions.data") }}?account_id=' + this.selectedAccountId,
+                        { method: 'GET' }
+                    );
+
+                    const historyPerPage = this._autoRefreshHistoryCount();
+                    const historyPromise = historyPerPage > 0
+                        ? hubUiFetch(
+                            '{{ route("accounts.positions.history") }}'
+                                + '?account_id=' + this.selectedAccountId
+                                + '&page=1&per_page=' + historyPerPage,
+                            { method: 'GET' }
+                        )
+                        : null;
+
+                    const [dataResult, historyResult] = await Promise.all([
+                        dataPromise,
+                        historyPromise || Promise.resolve(null),
+                    ]);
+
+                    if (dataResult.ok) {
+                        this.accountData = dataResult.data;
+                        this.apiError = dataResult.data.api_error || null;
+                    }
+
+                    if (historyResult?.ok && this.historyPage === 1) {
+                        const fresh = historyResult.data.positions;
+                        const existingById = {};
+                        this.historyPositions.forEach(p => existingById[p.id] = p);
+                        const merged = fresh.map(p => existingById[p.id] ? { ...p } : p);
+                        const freshIds = new Set(fresh.map(p => p.id));
+                        this.historyPositions.forEach(p => {
+                            if (!freshIds.has(p.id)) merged.push(p);
+                        });
+                        this.historyPositions = merged.slice(0, this.historyPerPage);
+                        this.historyTotal = historyResult.data.total;
+                        this.historyLastPage = historyResult.data.last_page;
+                    }
+
+                    this.refreshing = false;
+                },
+
+                _autoRefreshHistoryCount() {
+                    const pairs = this.accountData?.pairs || [];
+                    if (pairs.length === 0) return 0;
+                    let longs = 0, shorts = 0;
+                    pairs.forEach(p => {
+                        if (p.db) {
+                            if (p.direction === 'LONG') longs++;
+                            else shorts++;
+                        }
+                    });
+                    return Math.max(longs, shorts) * 2 || 12;
                 },
 
                 exchangeColors: {
@@ -951,6 +1024,8 @@
                 },
 
                 async fetchAccountData() {
+                    this._stopAutoRefresh();
+
                     if (!this.selectedAccountId) {
                         this.accountData = null;
                         this.historyPositions = [];
@@ -963,9 +1038,6 @@
                         return;
                     }
 
-                    // Reset expansion + pagination state only when we're
-                    // loading a different account. On a refresh of the same
-                    // account, preserve what the operator had open.
                     const accountChanged = this._loadedAccountId !== this.selectedAccountId;
                     if (accountChanged) {
                         this.openPairs = {};
@@ -989,6 +1061,7 @@
                     this._loadedAccountId = this.selectedAccountId;
 
                     this.fetchHistory();
+                    this._startAutoRefresh();
                 },
             };
         }

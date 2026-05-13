@@ -12,6 +12,7 @@ use Illuminate\View\View;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
+use Kraite\Core\Models\Position;
 use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
 
 class DashboardController extends Controller
@@ -172,7 +173,7 @@ class DashboardController extends Controller
         }
 
         $marginBalance = (string) ($latest->total_margin_balance ?? '0');
-        $maintMargin   = (string) ($latest->total_maintenance_margin ?? '0');
+        $maintMargin = (string) ($latest->total_maintenance_margin ?? '0');
 
         $marginRatio = (is_numeric($marginBalance) && bccomp($marginBalance, '0', 16) > 0)
             ? number_format((float) bcmul(bcdiv($maintMargin, $marginBalance, 6), '100', 4), 2, '.', '')
@@ -197,11 +198,11 @@ class DashboardController extends Controller
 
         return [
             // USDT amounts → 2 decimals to match exchange convention.
-            'balance'      => number_format((float) $latest->total_wallet_balance, 2, '.', ''),
-            'pnl'          => number_format((float) $latest->total_unrealized_profit, 2, '.', ''),
+            'balance' => number_format((float) $latest->total_wallet_balance, 2, '.', ''),
+            'pnl' => number_format((float) $latest->total_unrealized_profit, 2, '.', ''),
             'drawdown_pct' => $drawdownPct,
             'margin_ratio' => $marginRatio,
-            'is_stub'      => false,
+            'is_stub' => false,
         ];
     }
 
@@ -249,7 +250,7 @@ class DashboardController extends Controller
      * (candle-table lookups) but kept in the payload so the visual layer
      * can render against real shapes today.
      *
-     * @param  \Kraite\Core\Models\Position  $position
+     * @param  Position  $position
      * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol  Keyed by exchange_symbol_id → [tf => current_candle_open]
      */
     private function serializePosition($position, array $candleOpensByExchangeSymbol = []): array
@@ -297,18 +298,12 @@ class DashboardController extends Controller
         // accessor reads exchange_symbols.current_price, which is itself
         // a candle-derived accessor with a 15-min freshness gate; on the
         // dashboard we want the live mark from the exchange feed).
-        $alphaPathPct  = $this->computeAlphaPathPercent($firstProfit, $lastLimit, $currentPrice);
+        $alphaPathPct = $this->computeAlphaPathPercent($firstProfit, $lastLimit, $currentPrice);
         $alphaLimitPct = $this->computeAlphaLimitPercent($currentTp, $nextLimit, $currentPrice);
 
-        // Size = current notional (qty × live mark). PnL goes through
-        // Position::pnl() which itself reads mark_price + the
-        // cost-weighted average entry across filled orders, so the
-        // dashboard number tracks Binance's reported entryPrice
-        // semantics for WAP'd positions instead of the stale
-        // first-fill opening_price.
         $quantity = (string) ($position->quantity ?? '0');
         $size = $this->computeSize($quantity, $currentPrice);
-        $pnl = $position->pnl();
+        $pnl = $position->unrealizedPnl();
 
         return [
             'id' => $position->id,

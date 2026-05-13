@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.5.0] — 2026-05-13
+
+### Features
+- [NEW FEATURE] **Self-service password reset on admin login.** "Forgot password?" link on `/login` → email entry → neutral status (no enumeration leak) → 15-min single-use reset link → set new password (live strength meter + checklist) → redirect to login with success toast. First-time captures the user's full name when the record has none on file. Email sent via Resend, branded "Kraite", from `no-reply@kraite.com`. Per-email rate limit 5/60s on top of the route's IP throttle.
+- [NEW FEATURE] **Resend mail integration on admin.** `MAIL_MAILER=resend` enabled; `services.resend.key` is auto-injected by `kraitebot/core` `CoreServiceProvider` from the encrypted `kraite` singleton column — no API key in `.env`.
+- [NEW FEATURE] **Branded transactional email theme.** Vendor mail markdown overridden to use the krait-500/600 brand greens for the action button, krait-700 for the header wordmark, and krait-500 for panel rules. "Kraite" header, "Kraite" sender, "— The Kraite team" salutation.
+
+### Tests
+- [NEW FEATURE] **Pest installed as the project test runner.** First Pest battery covers the password-reset flow: 25 tests across 8 describe blocks (silent success, per-email rate limit, email branding, name capture conditional, password rules, single-use enforcement, expired-token redirect). 43 tests / 138 assertions green.
+
+### Infrastructure
+- [INFRA] **Dual-manifest pattern (`composer.json` + `composer.production.json`).** Mirrors the kraite (web-app) profile. Local Mac stays path-symlinked; the deploy block swaps the production manifest over `composer.json` after `git checkout`, regenerates `composer.lock` via `composer update`, and never leaves the server with hand-edited composer state.
+
+### Fixes
+- [BUG FIX] **Removed obsolete Breeze tests (`RegistrationTest`, `ExampleTest`).** Admin has no `/register` (users created on the landing site) — the test was a 404 against a non-existent route.
+
 ## [0.4.1] — 2026-05-10
 
 ### Fixes

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
@@ -10,54 +12,87 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rules;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class NewPasswordController extends Controller
 {
-    /**
-     * Display the password reset view.
-     */
     public function create(Request $request): View
     {
-        return view('auth.reset-password', ['request' => $request]);
+        $email = (string) $request->query('email', '');
+
+        return view('auth.reset-password', [
+            'request' => $request,
+            'needsName' => $this->userNeedsName($email),
+        ]);
     }
 
     /**
-     * Handle an incoming new password request.
-     *
      * @throws ValidationException
      */
     public function store(Request $request): RedirectResponse
     {
-        $request->validate([
+        $needsName = $this->userNeedsName((string) $request->input('email'));
+
+        $rules = [
             'token' => ['required'],
             'email' => ['required', 'email'],
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
-        ]);
+            'password' => ['required', 'confirmed', PasswordRule::min(8)->mixedCase()->numbers()],
+        ];
 
-        // Here we will attempt to reset the user's password. If it is successful we
-        // will update the password on an actual user model and persist it to the
-        // database. Otherwise we will parse the error and return the response.
+        if ($needsName) {
+            $rules['name'] = ['required', 'string', 'min:2', 'max:255'];
+        }
+
+        $request->validate($rules);
+
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user) use ($request) {
-                $user->forceFill([
-                    'password' => Hash::make($request->password),
+            function (User $user) use ($request, $needsName): void {
+                $attributes = [
+                    'password' => Hash::make($request->string('password')->toString()),
                     'remember_token' => Str::random(60),
-                ])->save();
+                ];
+
+                if ($needsName) {
+                    $attributes['name'] = trim($request->string('name')->toString());
+                }
+
+                $user->forceFill($attributes)->save();
 
                 event(new PasswordReset($user));
             }
         );
 
-        // If the password was successfully reset, we will redirect the user back to
-        // the application's home authenticated view. If there is an error we can
-        // redirect them back to where they came from with their error message.
-        return $status == Password::PASSWORD_RESET
-                    ? redirect()->route('login')->with('status', __($status))
-                    : back()->withInput($request->only('email'))
-                        ->withErrors(['email' => __($status)]);
+        if ($status === Password::PASSWORD_RESET) {
+            return redirect()
+                ->route('login')
+                ->with('status', 'Password updated. Please log in.');
+        }
+
+        if (in_array($status, [Password::INVALID_TOKEN, Password::INVALID_USER], true)) {
+            return redirect()->route('password.expired');
+        }
+
+        return back()
+            ->withInput($request->only('email', 'name'))
+            ->withErrors(['email' => __($status)]);
+    }
+
+    public function expired(): View
+    {
+        return view('auth.reset-password-invalid');
+    }
+
+    private function userNeedsName(string $email): bool
+    {
+        if ($email === '') {
+            return false;
+        }
+
+        $user = User::where('email', $email)->first();
+
+        return $user !== null && blank($user->name);
     }
 }

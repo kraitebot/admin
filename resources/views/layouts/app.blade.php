@@ -30,6 +30,9 @@
                 <a href="{{ route('dashboard') }}" wire:navigate>
                     <img src="{{ asset('logos/snake-green.svg') }}" alt="Kraite" class="w-10 h-10" />
                 </a>
+                @if(app()->environment('local'))
+                    <span class="mt-1 text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-yellow-500 text-black">local</span>
+                @endif
             </x-slot:logo>
 
             <a
