@@ -2,6 +2,26 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.6.0] — 2026-05-17
+
+### Features
+- [NEW FEATURE] **Private-beta registration completion flow.** Confirmed users can complete onboarding at `/register/{uuid}` with Livewire server-side validation, exchange selection, API key capture, plan selection, terms acceptance, and account creation.
+- [NEW FEATURE] **API key modal with connectivity testing.** API credentials now live in a blurred-backdrop modal; connectivity checks require filled credentials, lock the modal while running, and surface verified state before completion.
+- [NEW FEATURE] **Password strength acceptance.** Registration passwords are accepted based on a server-backed strength threshold with a visual progress bar instead of rigid composition rules.
+- [NEW FEATURE] **Binance and Bitget enabled for onboarding.** Bybit and KuCoin remain visible but disabled with grayscale styling and "Coming soon" badges.
+
+### Improvements
+- [IMPROVED] **Registration terms link now uses `kraite.website_url`.** Local admin resolves to `kraite.test`, production resolves to the public website, and tests can override via `KRAITE_WEBSITE_URL`.
+- [IMPROVED] **Admin auth login title refreshed** to match the Kraite console branding.
+
+### Tests
+- [NEW FEATURE] **Playwright registration E2E suite.** Adds a deterministic browser registration fixture, setup script, test environment, and `npm run test:e2e`.
+- [NEW FEATURE] **Feature coverage for registration validation and completion.** Locks server-side Livewire validation, password strength, disabled exchanges, API key requirements, and the dynamic terms link.
+
+### Dependencies
+- [DEPENDENCIES] Added `@playwright/test` as a dev dependency.
+- [DEPENDENCIES] `kraitebot/core` path-package reference bumped to `5e15c70`.
+
 ## [0.5.1] — 2026-05-13
 
 ### Features

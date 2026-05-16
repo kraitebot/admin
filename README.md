@@ -20,10 +20,13 @@ Kraite Admin is the back-office interface for managing the Kraite trading infras
 - **Backtesting Review** — approve/reject backtesting results, manage symbol eligibility
 - **System Diagnostics** — step dispatcher status, queue health, API error logs
 - **Indicator Overrides** — per-symbol TP/SL, gap percentages, direction overrides
+- **Private Beta Registration** — confirmed users complete onboarding through `/register/{uuid}` with server-side Livewire validation, password strength feedback, exchange/API key capture, and plan selection
 
 ## Architecture
 
 Shares the `kraite` database with `ingestion.kraite.com`. All schema changes live in `kraitebot/core` — this repo has no migrations. Built with `brunocfalcao/hub-ui` for the component library and theme system.
+
+The registration completion flow links back to the public legal pages through `config('kraite.website_url')`, which defaults from `APP_URL` by mapping admin hosts to the public Kraite website.
 
 ## Requirements
 
@@ -31,6 +34,11 @@ Shares the `kraite` database with `ingestion.kraite.com`. All schema changes liv
 - Laravel 12
 - Node.js (for frontend build)
 - Shared MySQL access (via Zeus)
+
+## Testing
+
+- `php artisan test --compact tests/Feature/RegistrationTest.php` checks the registration flow.
+- `npm run test:e2e -- registration.spec.js` runs the Playwright browser workflow against the deterministic `.env.testing` setup.
 
 ## Disclaimer
 

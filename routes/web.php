@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NowPaymentsWebhookController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectionsController;
+use App\Http\Controllers\RegistrationController;
 use App\Http\Controllers\System\BacktrackingController;
 use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsController;
 use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
@@ -23,6 +24,18 @@ use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
     return redirect()->route('login');
+});
+
+Route::middleware('throttle:10,1')->group(function () {
+    Route::get('/register/{uuid}', [RegistrationController::class, 'show'])
+        ->whereUuid('uuid')
+        ->name('register.show');
+    Route::post('/register/{uuid}/connectivity', [RegistrationController::class, 'testConnectivity'])
+        ->whereUuid('uuid')
+        ->name('register.connectivity');
+    Route::post('/register/{uuid}', [RegistrationController::class, 'store'])
+        ->whereUuid('uuid')
+        ->name('register.store');
 });
 
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
