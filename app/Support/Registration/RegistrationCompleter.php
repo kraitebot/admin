@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Registration;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ApiSystem;
 use Kraite\Core\Models\Subscription;
@@ -16,9 +17,9 @@ final class RegistrationCompleter
     /**
      * @param  array{name: string, password: string, exchange: string, api_key: string, api_secret: string, passphrase?: string|null, subscription_id: int|string}  $data
      */
-    public function complete(User $user, array $data): void
+    public function complete(User $user, array $data, ?Account $draftAccount = null, bool $canTrade = true): void
     {
-        DB::transaction(function () use ($data, $user): void {
+        DB::transaction(function () use ($canTrade, $data, $draftAccount, $user): void {
             $subscription = Subscription::whereKey((int) $data['subscription_id'])->firstOrFail();
             $apiSystem = ApiSystem::where('canonical', $data['exchange'])->firstOrFail();
             $tradeConfiguration = TradeConfiguration::where('is_default', true)->first()
@@ -32,9 +33,15 @@ final class RegistrationCompleter
                 'status' => 'active',
                 'is_active' => true,
                 'can_trade' => true,
+                'current_connectivity_test_uuid' => null,
             ])->save();
 
-            $account = new Account([
+            $account = $draftAccount instanceof Account && (int) $draftAccount->user_id === (int) $user->id
+                ? $draftAccount
+                : new Account;
+
+            $account->forceFill([
+                'uuid' => $account->uuid ?: (string) Str::uuid(),
                 'user_id' => $user->id,
                 'api_system_id' => $apiSystem->id,
                 'trade_configuration_id' => $tradeConfiguration->id,
@@ -42,8 +49,10 @@ final class RegistrationCompleter
                 'portfolio_quote' => 'USDT',
                 'trading_quote' => 'USDT',
                 'margin' => 1000,
-                'can_trade' => true,
+                'can_trade' => $canTrade,
                 'is_active' => true,
+                'disabled_reason' => $canTrade ? null : 'Registration connectivity test failed on one or more required servers.',
+                'disabled_at' => $canTrade ? null : now(),
                 'profit_percentage' => '0.360',
                 'stop_market_initial_percentage' => '2.50',
                 'total_positions_long' => 4,
@@ -57,12 +66,15 @@ final class RegistrationCompleter
                 'allow_other_orders' => false,
             ]);
 
-            $account->all_credentials = $this->credentialColumns(
-                exchange: (string) $data['exchange'],
-                apiKey: (string) $data['api_key'],
-                apiSecret: (string) $data['api_secret'],
-                passphrase: $data['passphrase'] ?? null,
-            );
+            if (! $draftAccount instanceof Account) {
+                $account->all_credentials = $this->credentialColumns(
+                    exchange: (string) $data['exchange'],
+                    apiKey: (string) $data['api_key'],
+                    apiSecret: (string) $data['api_secret'],
+                    passphrase: $data['passphrase'] ?? null,
+                );
+            }
+
             $account->save();
 
             if ($subscription->max_accounts === 1) {

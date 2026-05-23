@@ -29,5 +29,9 @@ Thumbs.db
 # Claude Code / Ralph runtime state (local only)
 /.claude/
 /.ralph/
+/.agents/
 .ralphrc
 /claude.sh
+
+# Step-dispatcher runtime flags (local trading-active state, regenerated)
+/storage/step-dispatcher/

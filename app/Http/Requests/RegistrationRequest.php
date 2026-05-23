@@ -58,6 +58,7 @@ final class RegistrationRequest extends FormRequest
                 }),
             ],
             'terms' => ['accepted'],
+            'continue_without_connectivity' => ['nullable', 'boolean'],
         ];
     }
 

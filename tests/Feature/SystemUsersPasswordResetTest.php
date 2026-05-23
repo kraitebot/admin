@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use App\Http\Middleware\EnsureAdmin;
 use App\Models\User;
-use App\Notifications\ResetPasswordNotification;
 use Illuminate\Support\Facades\Notification;
+use Kraite\Core\Notifications\AlertNotification;
 
 beforeEach(function (): void {
     Notification::fake();
@@ -34,8 +34,12 @@ it('lets an admin dispatch a password-reset email to a beta user', function (): 
         ->assertRedirect(route('system.users', $betaUser))
         ->assertSessionHas('status', "Password reset link sent to {$betaUser->email}.");
 
-    Notification::assertSentTo($betaUser, ResetPasswordNotification::class);
-    Notification::assertNotSentTo($admin, ResetPasswordNotification::class);
+    // Password reset routes through kraitebot/core's NotificationService::send()
+    // which dispatches an AlertNotification with canonical 'password_reset',
+    // not a local ResetPasswordNotification.
+    $isPasswordReset = fn (AlertNotification $notification): bool => $notification->canonical === 'password_reset';
+    Notification::assertSentTo($betaUser, AlertNotification::class, $isPasswordReset);
+    Notification::assertNotSentTo($admin, AlertNotification::class, $isPasswordReset);
 });
 
 it('redirects guests to login without sending mail', function (): void {

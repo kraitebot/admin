@@ -27,6 +27,6 @@
         <livewire:register-form :uuid="$user->uuid" />
     </main>
 
-    @livewireScripts
+    @livewireScriptConfig
 </body>
 </html>

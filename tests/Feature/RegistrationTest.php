@@ -3,18 +3,24 @@
 declare(strict_types=1);
 
 use App\Livewire\RegisterForm;
-use App\Support\Registration\RegistrationConnectivityResult;
-use App\Support\Registration\RegistrationConnectivityTester;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Kraite\Core\Jobs\Lifecycles\Account\TestExchangeConnectivityStep;
+use Kraite\Core\Jobs\Lifecycles\Account\TestServerConnectivityStep;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ApiSystem;
+use Kraite\Core\Models\Server;
 use Kraite\Core\Models\Subscription;
 use Kraite\Core\Models\TradeConfiguration;
 use Kraite\Core\Models\User;
 use Livewire\Livewire;
+use StepDispatcher\Models\Step;
+use StepDispatcher\States\Completed;
+use StepDispatcher\States\Failed;
+use StepDispatcher\States\Pending;
 
 beforeEach(function (): void {
     $this->withoutMiddleware(ThrottleRequests::class);
@@ -64,6 +70,9 @@ function prepareRegistrationSchema(): void
         if (! Schema::hasColumn('users', 'notification_channels')) {
             $table->json('notification_channels')->nullable()->after('is_admin');
         }
+        if (! Schema::hasColumn('users', 'current_connectivity_test_uuid')) {
+            $table->char('current_connectivity_test_uuid', 36)->nullable()->after('notification_channels');
+        }
     });
 
     Schema::create('subscriptions', function (Blueprint $table): void {
@@ -110,6 +119,8 @@ function prepareRegistrationSchema(): void
         $table->decimal('margin', 20, 8)->nullable();
         $table->boolean('can_trade')->default(true);
         $table->boolean('is_active')->default(true);
+        $table->string('disabled_reason')->nullable();
+        $table->timestamp('disabled_at')->nullable();
         $table->decimal('profit_percentage', 6, 3)->default(0.360);
         $table->unsignedTinyInteger('total_limit_orders_filled_to_notify')->default(0);
         $table->decimal('stop_market_initial_percentage', 5, 2)->default(2.50);
@@ -137,6 +148,75 @@ function prepareRegistrationSchema(): void
         $table->longText('bitget_passphrase')->nullable();
         $table->timestamps();
         $table->softDeletes();
+    });
+
+    Schema::create('servers', function (Blueprint $table): void {
+        $table->id();
+        $table->string('hostname');
+        $table->string('ip_address')->nullable();
+        $table->boolean('is_apiable')->default(false);
+        $table->boolean('needs_whitelisting')->default(false);
+        $table->string('own_queue_name')->nullable();
+        $table->string('description')->nullable();
+        $table->string('type')->default('server');
+        $table->text('secret')->nullable();
+        $table->timestamps();
+    });
+
+    Schema::create('steps', function (Blueprint $table): void {
+        $table->id();
+        $table->char('block_uuid', 36)->index();
+        $table->string('type', 50)->default('default')->index();
+        $table->string('group', 50)->nullable();
+        $table->string('state')->default(Pending::class)->index();
+        $table->string('class')->nullable();
+        $table->string('label')->nullable();
+        $table->integer('index')->nullable();
+        $table->longText('response')->nullable();
+        $table->text('error_message')->nullable();
+        $table->longText('error_stack_trace')->nullable();
+        $table->longText('step_log')->nullable();
+        $table->string('relatable_type')->nullable()->index();
+        $table->unsignedBigInteger('relatable_id')->nullable()->index();
+        $table->char('child_block_uuid', 36)->nullable()->index();
+        $table->string('execution_mode', 50)->nullable();
+        $table->tinyInteger('double_check')->default(0);
+        $table->unsignedBigInteger('tick_id')->nullable();
+        $table->char('workflow_id', 36)->nullable()->index();
+        $table->string('canonical', 100)->nullable();
+        $table->string('queue', 50)->default('default');
+        $table->json('arguments')->nullable();
+        $table->integer('retries')->default(0);
+        $table->tinyInteger('was_throttled')->default(0)->index();
+        $table->tinyInteger('is_throttled')->default(0)->index();
+        $table->string('priority', 20)->nullable()->index();
+        $table->timestamp('dispatch_after')->nullable()->index();
+        $table->timestamp('started_at')->nullable();
+        $table->timestamp('completed_at')->nullable();
+        $table->bigInteger('duration')->default(0);
+        $table->string('hostname', 100)->nullable();
+        $table->tinyInteger('was_notified')->default(0);
+        $table->timestamps();
+    });
+
+    Schema::create('steps_dispatcher', function (Blueprint $table): void {
+        $table->id();
+        $table->string('group', 50)->nullable()->unique();
+        $table->tinyInteger('can_dispatch')->default(1)->index();
+        $table->unsignedBigInteger('current_tick_id')->nullable()->index();
+        $table->timestamp('last_tick_completed')->nullable()->index();
+        $table->timestamp('last_selected_at', 6)->nullable()->index();
+        $table->timestamps();
+    });
+
+    Schema::create('steps_dispatcher_ticks', function (Blueprint $table): void {
+        $table->id();
+        $table->string('group', 50)->nullable();
+        $table->integer('progress')->default(0);
+        $table->timestamp('started_at')->nullable();
+        $table->timestamp('completed_at')->nullable();
+        $table->integer('duration')->nullable();
+        $table->timestamps();
     });
 
     Schema::create('model_logs', function (Blueprint $table): void {
@@ -215,7 +295,109 @@ function seedRegistrationCatalog(): array
         'min_account_balance' => 100,
     ]);
 
+    Server::create([
+        'hostname' => 'orion',
+        'ip_address' => '10.0.0.1',
+        'is_apiable' => true,
+        'needs_whitelisting' => true,
+        'own_queue_name' => 'orion',
+        'type' => 'trading',
+    ]);
+
+    Server::create([
+        'hostname' => 'vega',
+        'ip_address' => '10.0.0.2',
+        'is_apiable' => true,
+        'needs_whitelisting' => true,
+        'own_queue_name' => 'vega',
+        'type' => 'trading',
+    ]);
+
     return [$basic, $binance];
+}
+
+function registrationDraftAccount(User $user, ApiSystem $apiSystem): Account
+{
+    $tradeConfiguration = TradeConfiguration::firstOrFail();
+
+    $account = new Account([
+        'uuid' => (string) Str::uuid(),
+        'name' => 'Registration connectivity test',
+        'user_id' => $user->id,
+        'api_system_id' => $apiSystem->id,
+        'trade_configuration_id' => $tradeConfiguration->id,
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+        'margin' => 1000,
+        'can_trade' => false,
+        'is_active' => false,
+        'profit_percentage' => '0.360',
+        'stop_market_initial_percentage' => '2.50',
+        'total_positions_long' => 4,
+        'total_positions_short' => 4,
+        'position_leverage_long' => 10,
+        'position_leverage_short' => 10,
+        'margin_percentage_long' => '4.00',
+        'margin_percentage_short' => '4.00',
+        'on_hedge_mode' => false,
+        'allow_other_positions' => false,
+        'allow_other_orders' => false,
+    ]);
+
+    $account->all_credentials = [
+        'binance_api_key' => 'binance-key',
+        'binance_api_secret' => 'binance-secret',
+    ];
+    $account->save();
+
+    return $account;
+}
+
+function registrationConnectivityBlock(User $user, Account $account, bool $allConnected = true): string
+{
+    $blockUuid = (string) Str::uuid();
+    $childBlockUuid = (string) Str::uuid();
+
+    $user->forceFill(['current_connectivity_test_uuid' => $blockUuid])->save();
+
+    Step::create([
+        'block_uuid' => $blockUuid,
+        'child_block_uuid' => $childBlockUuid,
+        'class' => TestExchangeConnectivityStep::class,
+        'state' => Completed::class,
+        'queue' => 'cronjobs',
+        'relatable_type' => Account::class,
+        'relatable_id' => $account->id,
+        'arguments' => ['accountId' => $account->id],
+        'index' => 1,
+        'completed_at' => now(),
+    ]);
+
+    Server::query()
+        ->where('is_apiable', true)
+        ->where('needs_whitelisting', true)
+        ->whereNotNull('ip_address')
+        ->orderBy('hostname')
+        ->get()
+        ->each(function (Server $server, int $index) use ($account, $allConnected, $childBlockUuid): void {
+            Step::create([
+                'block_uuid' => $childBlockUuid,
+                'class' => TestServerConnectivityStep::class,
+                'state' => $allConnected || $index === 0 ? Completed::class : Failed::class,
+                'queue' => $server->own_queue_name ?: 'default',
+                'relatable_type' => Account::class,
+                'relatable_id' => $account->id,
+                'arguments' => [
+                    'accountId' => $account->id,
+                    'serverId' => $server->id,
+                ],
+                'index' => $index + 1,
+                'completed_at' => now(),
+                'error_message' => $allConnected || $index === 0 ? null : 'IP is not whitelisted.',
+            ]);
+        });
+
+    return $blockUuid;
 }
 
 it('hides unknown registration uuids', function (): void {
@@ -240,13 +422,13 @@ it('renders registration for confirmed users', function (): void {
         ->assertSuccessful()
         ->assertSee('Welcome to Kraite!')
         ->assertSee($user->email)
-        ->assertSee('Add API Keys')
-        ->assertSee('Coming soon')
+        ->assertSee('1. Profile')
+        ->assertSee('2. API keys')
+        ->assertDontSee('Trading exchange')
+        ->assertDontSee('Coming soon')
         ->assertSee('href="https://kraite.test/terms-and-conditions"', false)
-        ->assertSee('wire:submit="register"', false)
         ->assertSee('novalidate', false)
-        ->assertSee('data-api-keys-modal', false)
-        ->assertSee('Since you registered for private beta');
+        ->assertSee('Since you registered for private beta, you get a 7-day free trial');
 });
 
 it('proposes a title-cased name from the email local part', function (): void {
@@ -284,23 +466,74 @@ it('shows server validation errors through livewire without creating an account'
         ->set('name', '')
         ->set('password', '')
         ->set('password_confirmation', '')
-        ->set('api_key', '')
-        ->set('api_secret', '')
         ->set('terms', false)
-        ->call('register')
+        ->call('continueToCredentials')
         ->assertHasErrors([
             'name' => ['required'],
             'password' => ['required'],
-            'api_key' => ['required'],
-            'api_secret' => ['required'],
             'terms' => ['accepted'],
-        ]);
+        ])
+        ->assertSet('step', 'profile');
 
     $html = $component->html(stripInitialData: true);
 
     expect(substr_count($html, 'The password field is required.'))->toBe(1)
-        ->and(substr_count($html, 'The API key field is required.'))->toBe(1)
+        ->and($html)->not->toContain('The API key field is required.')
         ->and($html)->not->toContain('mb-5 rounded-lg border border-red-200 bg-red-50');
+
+    expect(Account::count())->toBe(0);
+});
+
+it('moves to the credentials step after profile validation passes', function (): void {
+    seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('terms', true)
+        ->call('continueToCredentials')
+        ->assertHasNoErrors()
+        ->assertSet('step', 'credentials');
+});
+
+it('does not let an already active user move to the credentials step from a stale tab', function (): void {
+    seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    $component = Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('terms', true);
+
+    $user->forceFill(['status' => 'active'])->save();
+
+    $component
+        ->call('continueToCredentials')
+        ->assertRedirect(route('login', ['email' => $user->email]));
+
+    expect(Account::count())->toBe(0);
+});
+
+it('requires api credentials on the credentials step', function (): void {
+    seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('terms', true)
+        ->call('continueToCredentials')
+        ->call('register')
+        ->assertHasErrors([
+            'api_key' => ['required'],
+            'api_secret' => ['required'],
+        ])
+        ->assertNoRedirect();
 
     expect(Account::count())->toBe(0);
 });
@@ -344,6 +577,8 @@ it('rejects registration exchanges that are visible but coming soon', function (
 it('completes registration through livewire and creates a tradeable account', function (): void {
     [$basic, $binance] = seedRegistrationCatalog();
     $user = registrationUser('confirmed');
+    $draftAccount = registrationDraftAccount($user, $binance);
+    $blockUuid = registrationConnectivityBlock($user, $draftAccount);
 
     Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
         ->set('name', 'Bruno Falcao')
@@ -354,11 +589,11 @@ it('completes registration through livewire and creates a tradeable account', fu
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('connectivity_test_uuid', $blockUuid)
         ->call('register')
         ->assertHasNoErrors()
-        ->assertRedirect(route('dashboard'));
-
-    $this->assertTrue(session()->has('status'));
+        ->assertSet('step', 'confirmation')
+        ->assertNoRedirect();
 
     $this->assertAuthenticated();
 
@@ -374,36 +609,179 @@ it('completes registration through livewire and creates a tradeable account', fu
         ->and($account->api_system_id)->toBe($binance->id)
         ->and($account->can_trade)->toBeTrue()
         ->and($account->is_active)->toBeTrue()
+        ->and($account->name)->toBe('Binance Account')
         ->and($account->binance_api_key)->toBe('binance-key')
         ->and($account->binance_api_secret)->toBe('binance-secret');
 
     expect($user->active_account_id)->toBe($account->id);
 });
 
-it('tests registration exchange connectivity with the entered credentials', function (): void {
+it('requires connectivity to be verified before creating the account', function (): void {
+    [$basic] = seedRegistrationCatalog();
     $user = registrationUser('confirmed');
 
-    $this->mock(RegistrationConnectivityTester::class)
-        ->shouldReceive('test')
-        ->once()
-        ->with('binance', 'binance-key', 'binance-secret', null)
-        ->andReturn(new RegistrationConnectivityResult(
-            connected: true,
-            message: 'Connectivity verified, all good!',
-            ordersCount: 0,
-        ));
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('api_key', 'binance-key')
+        ->set('api_secret', 'binance-secret')
+        ->set('subscription_id', $basic->id)
+        ->set('terms', true)
+        ->call('register')
+        ->assertHasErrors(['connectivity_verified'])
+        ->assertNoRedirect();
 
-    $this->postJson(route('register.connectivity', $user->uuid), [
+    expect(Account::count())->toBe(0);
+});
+
+it('can complete registration with trading disabled when required servers fail connectivity', function (): void {
+    [$basic, $binance] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+    $draftAccount = registrationDraftAccount($user, $binance);
+    $blockUuid = registrationConnectivityBlock($user, $draftAccount, allConnected: false);
+
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('api_key', 'binance-key')
+        ->set('api_secret', 'binance-secret')
+        ->set('subscription_id', $basic->id)
+        ->set('terms', true)
+        ->set('continue_without_connectivity', true)
+        ->set('connectivity_test_uuid', $blockUuid)
+        ->call('register')
+        ->assertHasNoErrors()
+        ->assertSet('step', 'confirmation')
+        ->assertSet('connectivity_passed', false)
+        ->assertNoRedirect();
+
+    $this->assertAuthenticated();
+
+    $user->refresh();
+    expect($user->status)->toBe('active')
+        ->and((bool) $user->can_trade)->toBeTrue()
+        ->and($user->current_connectivity_test_uuid)->toBeNull();
+
+    $account = Account::firstOrFail();
+    expect($account->user_id)->toBe($user->id)
+        ->and($account->can_trade)->toBeFalse()
+        ->and($account->is_active)->toBeTrue()
+        ->and($account->disabled_reason)->toBe('Registration connectivity test failed on one or more required servers.')
+        ->and($account->disabled_at)->not->toBeNull()
+        ->and($account->binance_api_key)->toBe('binance-key')
+        ->and($account->binance_api_secret)->toBe('binance-secret');
+
+    expect($user->active_account_id)->toBe($account->id);
+});
+
+it('requires an explicit choice before completing with failed connectivity', function (): void {
+    [$basic, $binance] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+    $draftAccount = registrationDraftAccount($user, $binance);
+    $blockUuid = registrationConnectivityBlock($user, $draftAccount, allConnected: false);
+
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('api_key', 'binance-key')
+        ->set('api_secret', 'binance-secret')
+        ->set('subscription_id', $basic->id)
+        ->set('terms', true)
+        ->set('connectivity_test_uuid', $blockUuid)
+        ->call('register')
+        ->assertHasErrors(['connectivity_verified'])
+        ->assertSee('Some servers could not connect. You can still create the account but the trading will be disabled.')
+        ->assertSet('step', 'profile')
+        ->assertNoRedirect();
+
+    $user->refresh();
+
+    expect($user->status)->toBe('confirmed');
+    expect($draftAccount->refresh()->is_active)->toBeFalse();
+});
+
+it('does not complete registration for an already active user from a stale tab', function (): void {
+    [$basic] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    $component = Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('api_key', 'binance-key')
+        ->set('api_secret', 'binance-secret')
+        ->set('subscription_id', $basic->id)
+        ->set('terms', true)
+        ->set('connectivity_verified', true);
+
+    $user->forceFill(['status' => 'active'])->save();
+
+    $component
+        ->call('register')
+        ->assertRedirect(route('login', ['email' => $user->email]));
+
+    expect(Account::count())->toBe(0);
+});
+
+it('tests registration exchange connectivity with the entered credentials', function (): void {
+    seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    $response = $this->postJson(route('register.connectivity', $user->uuid), [
         'exchange' => 'binance',
         'api_key' => 'binance-key',
         'api_secret' => 'binance-secret',
-    ])
+    ]);
+
+    $response
+        ->assertOk()
+        ->assertJsonStructure(['block_uuid', 'is_complete', 'all_connected', 'servers'])
+        ->assertJson([
+            'is_complete' => false,
+            'all_connected' => false,
+            'total_servers' => 2,
+        ]);
+
+    $user->refresh();
+    $account = Account::firstOrFail();
+
+    expect($user->current_connectivity_test_uuid)->toBe($response->json('block_uuid'))
+        ->and($account->user_id)->toBe($user->id)
+        ->and($account->name)->toBe('Registration connectivity test')
+        ->and($account->can_trade)->toBeFalse()
+        ->and($account->is_active)->toBeFalse()
+        ->and($account->binance_api_key)->toBe('binance-key')
+        ->and($account->binance_api_secret)->toBe('binance-secret');
+});
+
+it('reports registration connectivity workflow status', function (): void {
+    [, $binance] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+    $draftAccount = registrationDraftAccount($user, $binance);
+    $blockUuid = registrationConnectivityBlock($user, $draftAccount);
+
+    $this->getJson(route('register.connectivity.status', [$user->uuid, $blockUuid]))
         ->assertOk()
         ->assertJson([
-            'connected' => true,
-            'message' => 'Connectivity verified, all good!',
-            'orders_count' => 0,
+            'is_complete' => true,
+            'all_connected' => true,
+            'connected_servers' => 2,
+            'failed_servers' => 0,
         ]);
+});
+
+it('keeps registration connectivity status polling on a dedicated throttle', function (): void {
+    $middleware = collect(Route::getRoutes()->getByName('register.connectivity.status')?->gatherMiddleware());
+
+    expect($middleware)->toContain('throttle:60,1')
+        ->and($middleware)->not->toContain('throttle:10,1');
 });
 
 it('returns a validation error when connectivity credentials are incomplete', function (): void {
@@ -437,27 +815,27 @@ it('hides connectivity checks for users that are not ready to register', functio
     ])->assertNotFound();
 });
 
-it('returns failed connectivity results without creating an account', function (): void {
-    $user = registrationUser('confirmed');
-
-    $this->mock(RegistrationConnectivityTester::class)
-        ->shouldReceive('test')
-        ->once()
-        ->andReturn(new RegistrationConnectivityResult(
-            connected: false,
-            message: 'Credentials rejected or this server IP is not whitelisted.',
-        ));
+it('hides connectivity checks for active users', function (): void {
+    $user = registrationUser('active');
 
     $this->postJson(route('register.connectivity', $user->uuid), [
         'exchange' => 'binance',
-        'api_key' => 'bad-key',
-        'api_secret' => 'bad-secret',
-    ])
-        ->assertUnprocessable()
-        ->assertJson([
-            'connected' => false,
-            'message' => 'Credentials rejected or this server IP is not whitelisted.',
-        ]);
+        'api_key' => 'binance-key',
+        'api_secret' => 'binance-secret',
+    ])->assertNotFound();
+});
 
-    expect(Account::count())->toBe(0);
+it('returns failed connectivity workflow status', function (): void {
+    [, $binance] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+    $draftAccount = registrationDraftAccount($user, $binance);
+    $blockUuid = registrationConnectivityBlock($user, $draftAccount, allConnected: false);
+
+    $this->getJson(route('register.connectivity.status', [$user->uuid, $blockUuid]))
+        ->assertOk()
+        ->assertJson([
+            'is_complete' => true,
+            'all_connected' => false,
+            'failed_servers' => 1,
+        ]);
 });

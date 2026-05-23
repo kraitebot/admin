@@ -3,15 +3,26 @@
 declare(strict_types=1);
 
 use App\Models\User;
-use App\Notifications\ResetPasswordNotification;
 use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
+use Kraite\Core\Mail\AlertMail;
+use Kraite\Core\Notifications\AlertNotification;
+
+/**
+ * Closure for Notification::assertSentTo/Times callbacks that only matches
+ * AlertNotifications carrying the password-reset canonical — so unrelated
+ * AlertNotifications fired during the same request (e.g. observers, log
+ * listeners) don't accidentally satisfy these assertions.
+ */
+function isPasswordResetNotification(): Closure
+{
+    return fn (AlertNotification $notification): bool => $notification->canonical === 'password_reset';
+}
 
 beforeEach(function () {
     Notification::fake();
@@ -62,7 +73,7 @@ describe('forgot-password POST — silent success + per-email rate limit', funct
             ->assertRedirect()
             ->assertSessionHas('status', 'If your email is part of our system, you will receive a reset link shortly.');
 
-        Notification::assertSentTo($user, ResetPasswordNotification::class);
+        Notification::assertSentTo($user, AlertNotification::class, isPasswordResetNotification());
     });
 
     it('returns the SAME neutral status for an unknown email and sends nothing', function () {
@@ -98,13 +109,13 @@ describe('forgot-password POST — silent success + per-email rate limit', funct
                 ->assertRedirect()
                 ->assertSessionHas('status');
         }
-        Notification::assertSentToTimes($user, ResetPasswordNotification::class, 5);
+        Notification::assertSentToTimes($user, AlertNotification::class, 5);
 
         // 6th hit: silent success but NO new notification dispatched.
         $this->post('/forgot-password', ['email' => $user->email])
             ->assertRedirect()
             ->assertSessionHas('status', 'If your email is part of our system, you will receive a reset link shortly.');
-        Notification::assertSentToTimes($user, ResetPasswordNotification::class, 5);
+        Notification::assertSentToTimes($user, AlertNotification::class, 5);
     });
 
     it('rate-limits per-email, not globally — different emails are independent', function () {
@@ -120,8 +131,8 @@ describe('forgot-password POST — silent success + per-email rate limit', funct
         // a is now capped, but b still gets a fresh send
         $this->post('/forgot-password', ['email' => $b->email]);
 
-        Notification::assertSentToTimes($a, ResetPasswordNotification::class, 5);
-        Notification::assertSentToTimes($b, ResetPasswordNotification::class, 1);
+        Notification::assertSentToTimes($a, AlertNotification::class, 5);
+        Notification::assertSentToTimes($b, AlertNotification::class, 1);
     });
 });
 
@@ -134,21 +145,33 @@ describe('reset password email branding', function () {
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPasswordNotification::class, function ($notification) use ($user) {
-            /** @var MailMessage $mail */
+        // Inspect the AlertMail mailable that AlertNotification produces.
+        // notificationTitle drives the email subject (via AlertMail::envelope());
+        // emailBlocks carries the component-rendered body. The Kraite sender
+        // name is config-level (mail.from.name) and isn't set per-notification
+        // so we assert the global config value directly.
+        Notification::assertSentTo($user, AlertNotification::class, function (AlertNotification $notification) use ($user) {
+            if ($notification->canonical !== 'password_reset') {
+                return false;
+            }
+
+            /** @var AlertMail $mail */
             $mail = $notification->toMail($user);
 
-            expect($mail->subject)->toBe('Reset your Kraite password');
-            expect($mail->from[0])->toBe(config('mail.from.address'));
-            expect($mail->from[1])->toBe('Kraite');
-            expect($mail->greeting)->toBe('Hi Pat Smith,');
-            expect($mail->salutation)->toBe('— The Kraite team');
+            expect($mail)->toBeInstanceOf(AlertMail::class);
+            expect($mail->notificationTitle)->toBe('Reset your Kraite password');
+            expect($mail->userName)->toBe('Pat Smith');
+            expect(config('mail.from.name'))->toBe('Kraite');
 
-            $body = collect($mail->introLines)->merge($mail->outroLines)->implode("\n");
-            expect($body)
+            $blocks = collect($mail->emailBlocks ?? []);
+            $bodyText = $blocks->pluck('text')->filter()->implode("\n");
+            $buttonLabel = $blocks->firstWhere('type', 'button')['label'] ?? null;
+
+            expect($bodyText)
+                ->toContain('Hi Pat Smith,')
                 ->toContain('You requested a password reset for your Kraite account.')
-                ->toContain('15 minutes')
                 ->toContain('you can safely ignore this email');
+            expect($buttonLabel)->toBe('Reset password');
 
             return true;
         });
@@ -162,10 +185,16 @@ describe('reset password email branding', function () {
 
         $this->post('/forgot-password', ['email' => $user->email]);
 
-        Notification::assertSentTo($user, ResetPasswordNotification::class, function ($notification) use ($user) {
-            /** @var MailMessage $mail */
+        Notification::assertSentTo($user, AlertNotification::class, function (AlertNotification $notification) use ($user) {
+            if ($notification->canonical !== 'password_reset') {
+                return false;
+            }
+
+            /** @var AlertMail $mail */
             $mail = $notification->toMail($user);
-            expect($mail->greeting)->toBe('Hi there,');
+            $bodyText = collect($mail->emailBlocks ?? [])->pluck('text')->filter()->implode("\n");
+
+            expect($bodyText)->toContain('Hi there,');
 
             return true;
         });

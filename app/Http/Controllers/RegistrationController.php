@@ -7,7 +7,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\RegistrationConnectivityRequest;
 use App\Http\Requests\RegistrationRequest;
 use App\Support\Registration\RegistrationCompleter;
-use App\Support\Registration\RegistrationConnectivityTester;
+use App\Support\Registration\RegistrationConnectivityWorkflow;
 use App\Support\Registration\RegistrationExchange;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -42,8 +42,12 @@ final class RegistrationController extends Controller
         ]);
     }
 
-    public function store(RegistrationRequest $request, string $uuid, RegistrationCompleter $registrationCompleter): RedirectResponse
-    {
+    public function store(
+        RegistrationRequest $request,
+        string $uuid,
+        RegistrationCompleter $registrationCompleter,
+        RegistrationConnectivityWorkflow $connectivity,
+    ): RedirectResponse {
         $user = $this->findRegistrationUser($uuid);
 
         if ($user === null) {
@@ -59,7 +63,26 @@ final class RegistrationController extends Controller
         }
 
         $data = $request->validated();
-        $registrationCompleter->complete($user, $data);
+        $connectivityResult = $connectivity->evaluate($user, $user->current_connectivity_test_uuid);
+
+        if (! $connectivityResult['is_complete']) {
+            return back()->withErrors([
+                'connectivity_verified' => 'Test connectivity before continuing.',
+            ])->withInput();
+        }
+
+        if (! $connectivityResult['all_connected'] && ! $request->boolean('continue_without_connectivity')) {
+            return back()->withErrors([
+                'connectivity_verified' => 'Some servers could not connect. Fix the whitelist or continue with trading disabled.',
+            ])->withInput();
+        }
+
+        $registrationCompleter->complete(
+            user: $user,
+            data: $data,
+            draftAccount: $connectivityResult['draft_account'],
+            canTrade: (bool) $connectivityResult['all_connected'],
+        );
 
         $user->refresh();
 
@@ -74,22 +97,31 @@ final class RegistrationController extends Controller
     public function testConnectivity(
         RegistrationConnectivityRequest $request,
         string $uuid,
-        RegistrationConnectivityTester $connectivityTester,
+        RegistrationConnectivityWorkflow $connectivity,
     ): JsonResponse {
+        $user = $request->registrationUser();
+
+        if ($user === null) {
+            abort(404);
+        }
+
         $data = $request->validated();
 
-        $result = $connectivityTester->test(
-            exchange: (string) $data['exchange'],
-            apiKey: (string) $data['api_key'],
-            apiSecret: (string) $data['api_secret'],
-            passphrase: $data['passphrase'] ?? null,
-        );
+        return response()->json($connectivity->start($user, $data));
+    }
 
-        return response()->json([
-            'connected' => $result->connected,
-            'message' => $result->message,
-            'orders_count' => $result->ordersCount,
-        ], $result->connected ? 200 : 422);
+    public function connectivityStatus(
+        string $uuid,
+        string $blockUuid,
+        RegistrationConnectivityWorkflow $connectivity,
+    ): JsonResponse {
+        $user = $this->findRegistrationUser($uuid);
+
+        if ($user === null || $user->status !== 'confirmed') {
+            abort(404);
+        }
+
+        return response()->json($connectivity->status($user, $blockUuid));
     }
 
     private function findRegistrationUser(string $uuid): ?User

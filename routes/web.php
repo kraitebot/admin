@@ -38,6 +38,12 @@ Route::middleware('throttle:10,1')->group(function () {
         ->name('register.store');
 });
 
+Route::get('/register/{uuid}/connectivity/{blockUuid}', [RegistrationController::class, 'connectivityStatus'])
+    ->middleware('throttle:60,1')
+    ->whereUuid('uuid')
+    ->whereUuid('blockUuid')
+    ->name('register.connectivity.status');
+
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
