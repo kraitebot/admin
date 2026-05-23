@@ -2,7 +2,10 @@
 
 All notable changes to the admin.kraite.com project.
 
-## [0.6.0] — 2026-05-17
+## [0.6.0] — 2026-05-23
+
+### Bug Fixes
+- [FIXED] **Production CSS regression on helios.** `tailwind.config.js` referenced only the local dev path `../packages/brunocfalcao/hub-ui/...`, which doesn't exist on production (hub-ui is composer-installed under `./vendor/`). Tailwind silently scanned no hub-ui templates, purged all hub-ui-only utilities (`.h-screen`, structural classes, `.bg-emerald-*`), and shipped a 40KB no-utilities CSS — the entire dashboard sidebar lost its dark-theme styling. Added the `./vendor/brunocfalcao/hub-ui/...` glob alongside the dev path. `/kraite-deploy` also now drops `--silent` on `npm install`/`npm run build` and aborts with an explicit message if `.h-screen` is missing from the compiled CSS, so a stripped build can never reach warmup again.
 
 ### Features
 - [NEW FEATURE] **Private-beta registration completion flow.** Confirmed users can complete onboarding at `/register/{uuid}` with Livewire server-side validation, exchange selection, API key capture, plan selection, terms acceptance, and account creation.
