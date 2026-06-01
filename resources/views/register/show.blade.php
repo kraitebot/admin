@@ -19,9 +19,10 @@
 
     <style>[x-cloak] { display: none !important; }</style>
 </head>
-<body class="font-sans antialiased min-h-screen bg-gray-950 text-white">
+<body class="min-h-screen bg-[#020805] font-sans text-white antialiased">
+    <div class="fixed inset-0 -z-10 bg-[radial-gradient(circle_at_center,rgba(16,185,129,0.16),transparent_34%),linear-gradient(135deg,#020805_0%,#03150d_45%,#010409_100%)]"></div>
     <div class="fixed inset-0 -z-10 bg-[url('/logos/snake-white.svg')] bg-[length:34rem_34rem] bg-center bg-no-repeat opacity-10 blur-sm scale-105"></div>
-    <div class="fixed inset-0 -z-10 bg-gray-950/75"></div>
+    <div class="fixed inset-0 -z-10 bg-[#020805]/65"></div>
 
     <main class="min-h-screen px-4 py-8 sm:py-12 flex items-center justify-center">
         <livewire:register-form :uuid="$user->uuid" />

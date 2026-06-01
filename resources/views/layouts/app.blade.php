@@ -97,6 +97,23 @@
                 <span class="text-xs">BSCS</span>
             </a>
 
+            @if(! auth()->user()?->is_admin)
+                <a
+                    href="{{ route('accounts.edit') }}" wire:navigate
+                    data-nav-item="edit-account"
+                    @click="highlight = 'edit-account'; $nextTick(() => open = null)"
+                    class="flex flex-col items-center gap-1 py-2 rounded-xl cursor-pointer transition-colors relative z-10"
+                    :class="highlight === 'edit-account' ? 'ui-sidebar-text-active' : 'ui-sidebar-text hover:ui-text-muted'"
+                >
+                    <span class="w-7 h-7">
+                        <svg fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75 12 3l9.75 9.75M4.5 10.5v9.75h15V10.5M9 20.25v-6h6v6" />
+                        </svg>
+                    </span>
+                    <span class="text-xs">Accounts</span>
+                </a>
+            @endif
+
             <a
                 href="{{ route('accounts.positions') }}" wire:navigate
                 data-nav-item="positions"
@@ -323,6 +340,35 @@
             </form>
         </div>
     </x-slot:topbar>
+
+    @if($connectivityIssueAccounts->isNotEmpty())
+        <div class="mx-4 mb-4 mt-2 sm:mx-6 lg:mx-12">
+            <div class="overflow-hidden rounded-lg border border-red-200 bg-white shadow-sm">
+                <div class="flex flex-col gap-3 border-l-4 border-red-500 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div class="flex items-start gap-3">
+                        <div class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700">
+                            <x-feathericon-alert-triangle class="h-5 w-5" />
+                        </div>
+                        <div class="min-w-0">
+                            <div class="flex items-center gap-2">
+                                <p class="text-sm font-semibold text-red-950">Exchange connection needs attention</p>
+                                <span class="inline-flex h-2 w-2 rounded-full bg-red-500"></span>
+                            </div>
+                            <p class="mt-1 max-w-4xl text-sm leading-5 text-red-800">
+                                Trading is disabled for
+                                <span class="font-semibold">{{ $connectivityIssueAccounts->pluck('name')->join(', ', ' and ') }}</span>.
+                                Add the Kraite IP addresses in your exchange account, then run the connection test.
+                            </p>
+                        </div>
+                    </div>
+                    <a href="{{ route('accounts.edit') }}" wire:navigate class="inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-lg bg-red-700 px-4 text-xs font-semibold text-white transition hover:bg-red-800">
+                        <x-feathericon-settings class="h-4 w-4" />
+                        <span>Open Accounts</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    @endif
 
     {{ $slot }}
 

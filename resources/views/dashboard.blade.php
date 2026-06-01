@@ -7,7 +7,7 @@
         />
 
         {{-- Account selector --}}
-        <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-6 flex items-end gap-4 flex-wrap">
+        <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-5 flex items-end gap-4 flex-wrap">
             <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
                 <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
                 <x-hub-ui::select
@@ -24,16 +24,23 @@
             </div>
         </div>
 
-        <div x-show="!isAdmin && accounts.length === 1" x-cloak class="mb-6 text-xs ui-text-subtle">
-            <span x-text="accounts[0]?.exchange + ' · ' + accounts[0]?.name"></span>
-        </div>
-
         {{-- Empty: no accounts --}}
         <div x-show="accounts.length === 0" x-cloak>
-            <x-hub-ui::empty-state
-                title="No accounts yet"
-                description="Once an account is wired to your user, your open positions will appear here."
-            />
+            <div class="ui-card p-8">
+                <div class="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
+                    <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
+                        <x-feathericon-home class="h-7 w-7" />
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold ui-text">No accounts yet</h2>
+                        <p class="mt-1 text-sm ui-text-subtle">Create an account before positions can appear here.</p>
+                    </div>
+                    <a href="{{ route('accounts.edit') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700">
+                        <x-feathericon-plus class="h-4 w-4" />
+                        <span>Open Accounts</span>
+                    </a>
+                </div>
+            </div>
         </div>
 
         {{-- Loading --}}
@@ -42,98 +49,163 @@
         </div>
 
         {{-- No selection yet --}}
-        <div x-show="!loading && !selectedAccountId && (isAdmin || accounts.length > 1)" x-cloak>
-            <x-hub-ui::empty-state
-                title="Pick an account"
-                description="Choose an account above to see its open positions."
-            />
+        <div x-show="!loading && accounts.length > 0 && !selectedAccountId && (isAdmin || accounts.length > 1)" x-cloak>
+            <div class="ui-card p-8">
+                <div class="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
+                    <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 ui-text-muted">
+                        <x-feathericon-search class="h-7 w-7" />
+                    </div>
+                    <div>
+                        <h2 class="text-lg font-semibold ui-text">Pick an account</h2>
+                        <p class="mt-1 text-sm ui-text-subtle">Choose an account to see its current trading state.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Compact account context. Keep it quiet: these are reference
+             signals, not the main content of the dashboard. --}}
+        <div x-show="!loading && selectedAccountId && positions.length > 0" x-cloak class="mb-4 flex flex-wrap items-center gap-2 text-xs">
+            <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
+                <x-feathericon-briefcase class="h-4 w-4 ui-text-muted" />
+                <span class="font-semibold ui-text" x-text="selectedAccount()?.exchange"></span>
+                <span class="ui-text-subtle" x-text="selectedAccount()?.name"></span>
+            </span>
+
+            <span x-show="btc" class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
+                <span class="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-orange-100">
+                    <template x-if="btc?.image">
+                        <img :src="btc.image" alt="BTC" class="h-full w-full object-cover" loading="lazy">
+                    </template>
+                </span>
+                <span class="ui-text-subtle">BTC</span>
+                <span class="font-mono font-semibold ui-text ui-tabular" x-text="btc ? '$' + formatPrice(btc.mark) : '—'"></span>
+            </span>
+
+            <span x-show="bscs" class="inline-flex h-9 items-center gap-2 rounded-lg border px-3 shadow-sm" :class="marketCheckClass()">
+                <x-feathericon-shield class="h-4 w-4" />
+                <span class="font-semibold" x-text="marketCheckLabel()"></span>
+            </span>
+
+            <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
+                <x-feathericon-activity class="h-4 w-4 ui-text-muted" />
+                <span class="ui-text-subtle">Open trades</span>
+                <span class="font-mono font-semibold ui-text ui-tabular" x-text="positions.length"></span>
+            </span>
+
+            <template x-if="metrics && !metrics.is_stub && metrics.balance !== null && metrics.balance !== undefined">
+                <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
+                    <x-feathericon-dollar-sign class="h-4 w-4 ui-text-muted" />
+                    <span class="ui-text-subtle">Balance</span>
+                    <span class="font-mono font-semibold ui-text ui-tabular" x-text="'$' + formatPrice(metrics.balance)"></span>
+                </span>
+            </template>
         </div>
 
         {{-- Empty: account selected, no open positions --}}
-        <div x-show="!loading && selectedAccountId && positions.length === 0" x-cloak>
-            <x-hub-ui::empty-state
-                title="No open positions"
-                description="Nothing is open on this account right now."
-            />
-        </div>
-
-        {{-- Top metrics strip — BTC reference on the left, account KPIs on
-             the right. Account KPIs are stubbed until the balance feed lands. --}}
-        <div x-show="!loading && selectedAccountId" x-cloak class="ui-card mb-4 px-4 py-3 flex items-center justify-between gap-4 flex-wrap">
-
-            {{-- BTC reference --}}
-            <div class="flex items-center gap-3" x-show="btc">
-                <div class="w-9 h-9 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style="background-color: rgb(var(--ui-bg-elevated))">
-                    <template x-if="btc?.image">
-                        <img :src="btc.image" alt="BTC" class="w-full h-full object-cover" loading="lazy">
-                    </template>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">BTC</span>
-                        <span class="text-sm font-mono font-bold ui-text ui-tabular" x-text="btc ? '$' + formatPrice(btc.mark) : '—'"></span>
-                    </div>
-                    <div class="flex items-start gap-1.5 mt-1">
-                        <template x-for="dot in (btc?.dots || [])" :key="dot.timeframe">
-                            <div class="flex flex-col items-center gap-0.5" :title="dot.timeframe + ' — ' + dot.direction">
-                                <span class="w-2.5 h-2.5 rounded-full ring-1" :style="dotColor(dot.direction)"></span>
-                                <span class="text-[8px] font-mono ui-tabular ui-text-subtle leading-none" x-text="dot.timeframe"></span>
+        <div x-show="!loading && selectedAccountId && positions.length === 0" x-cloak class="mb-5">
+            <div class="ui-card overflow-hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
+                    <div class="p-7 sm:p-8">
+                        <div class="max-w-3xl">
+                            <div class="mb-6 flex items-center gap-3">
+                                <div
+                                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                                    :class="selectedAccount()?.disabled_reason ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'"
+                                >
+                                    <template x-if="selectedAccount()?.disabled_reason">
+                                        <x-feathericon-alert-triangle class="h-6 w-6" />
+                                    </template>
+                                    <template x-if="!selectedAccount()?.disabled_reason">
+                                        <x-feathericon-activity class="h-6 w-6" />
+                                    </template>
+                                </div>
+                                <div class="min-w-0">
+                                    <p class="text-[10px] font-semibold uppercase tracking-[0.14em] ui-text-subtle">Current account</p>
+                                    <p class="truncate text-sm font-semibold ui-text" x-text="selectedAccount()?.exchange + ' · ' + selectedAccount()?.name"></p>
+                                </div>
                             </div>
-                        </template>
+
+                            <h2 class="text-2xl font-semibold leading-tight ui-text" x-text="selectedAccount()?.disabled_reason ? 'Trading is paused for this account' : 'No open trades right now'"></h2>
+                            <p class="mt-3 max-w-2xl text-sm leading-6 ui-text-subtle" x-text="selectedAccount()?.disabled_reason ? 'This account is set up, but Kraite will not open new trades until the exchange connection is fixed.' : 'Kraite is monitoring the market. When a trade opens, it will appear here with entry, risk, profit target, and progress.'"></p>
+
+                            <div x-show="selectedAccount()?.disabled_reason" x-cloak class="mt-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
+                                <x-feathericon-info class="mt-0.5 h-4 w-4 shrink-0" />
+                                <p>Allow the Kraite IP addresses in your exchange account, then test the connection again.</p>
+                            </div>
+
+                            <div class="mt-6 flex flex-wrap gap-2">
+                                <a href="{{ route('accounts.edit') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition"
+                                   :class="selectedAccount()?.disabled_reason ? 'bg-red-700 text-white hover:bg-red-800' : 'bg-emerald-600 text-white hover:bg-emerald-700'"
+                                >
+                                    <x-feathericon-settings class="h-4 w-4" />
+                                    <span x-text="selectedAccount()?.disabled_reason ? 'Fix connection' : 'Manage account'"></span>
+                                </a>
+                                <a href="{{ route('accounts.positions') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border ui-border bg-white px-4 text-sm font-semibold ui-text transition hover:bg-slate-50">
+                                    <x-feathericon-bar-chart-2 class="h-4 w-4" />
+                                    <span>Positions</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="border-t ui-border bg-slate-50/60 p-6 lg:border-l lg:border-t-0">
+                        <div class="space-y-5">
+                            <div>
+                                <p class="text-[10px] font-semibold uppercase tracking-[0.14em] ui-text-subtle">Snapshot</p>
+                                <p class="mt-1 text-sm ui-text-subtle">Nothing is using margin on this account.</p>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-2 ui-text-subtle">
+                                        <x-feathericon-activity class="h-4 w-4" />
+                                        <span class="text-sm">Open trades</span>
+                                    </div>
+                                    <span class="font-mono text-sm font-semibold ui-text">0</span>
+                                </div>
+
+                                <div class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-2 ui-text-subtle">
+                                        <x-feathericon-shield class="h-4 w-4" />
+                                        <span class="text-sm">Trading</span>
+                                    </div>
+                                    <span
+                                        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                                        :class="selectedAccount()?.disabled_reason ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'"
+                                    >
+                                        <span class="h-1.5 w-1.5 rounded-full" :class="selectedAccount()?.disabled_reason ? 'bg-red-500' : 'bg-emerald-500'"></span>
+                                        <span x-text="selectedAccount()?.disabled_reason ? 'Paused' : 'Ready'"></span>
+                                    </span>
+                                </div>
+
+                                <div x-show="btc" class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-2 ui-text-subtle">
+                                        <span class="flex h-4 w-4 items-center justify-center overflow-hidden rounded-full bg-orange-100">
+                                            <template x-if="btc?.image">
+                                                <img :src="btc.image" alt="BTC" class="h-full w-full object-cover" loading="lazy">
+                                            </template>
+                                        </span>
+                                        <span class="text-sm">BTC</span>
+                                    </div>
+                                    <span class="font-mono text-sm font-semibold ui-text ui-tabular" x-text="btc ? '$' + formatPrice(btc.mark) : '—'"></span>
+                                </div>
+
+                                <div x-show="bscs" class="flex items-center justify-between gap-4">
+                                    <div class="flex items-center gap-2 ui-text-subtle">
+                                        <x-feathericon-shield class="h-4 w-4" />
+                                        <span class="text-sm">Market</span>
+                                    </div>
+                                    <span class="text-sm font-semibold" :class="marketCheckTextClass()" x-text="marketCheckLabel()"></span>
+                                </div>
+                            </div>
+
+                            <div class="border-t ui-border pt-4">
+                                <p class="text-xs leading-5 ui-text-subtle" x-text="selectedAccount()?.disabled_reason ? 'Fix the connection before expecting new trades here.' : 'Leave this page open to watch new trades as they appear.'"></p>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            {{-- Divider --}}
-            <div class="hidden md:block self-stretch" style="width:1px;background-color:rgb(var(--ui-border))"></div>
-
-            {{-- Black Swan posture --}}
-            <div class="flex items-center gap-3" x-show="bscs">
-                <div class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center font-mono font-bold text-sm"
-                     :style="bscsTileStyle()"
-                     x-text="bscs?.score ?? '—'"></div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Regime</span>
-                        <span class="text-sm font-semibold" :style="bscsLabelStyle()" x-text="(bscs?.band ?? 'unknown').toUpperCase()"></span>
-                    </div>
-                    <div class="text-[10px] ui-text-subtle leading-tight mt-0.5" x-text="bscs?.status ?? ''"></div>
-                </div>
-            </div>
-
-            {{-- Divider --}}
-            <div class="hidden md:block self-stretch" x-show="bscs" style="width:1px;background-color:rgb(var(--ui-border))"></div>
-
-            {{-- Account KPIs --}}
-            <div class="flex items-center gap-5 sm:gap-7 flex-wrap">
-                <div class="flex flex-col">
-                    <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Balance</span>
-                    <span class="text-base font-mono font-semibold ui-text ui-tabular" x-text="metrics?.balance != null ? '$' + formatPrice(metrics.balance) : '—'"></span>
-                </div>
-                <div class="flex flex-col">
-                    <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">PnL</span>
-                    <span class="text-base font-mono font-semibold ui-tabular"
-                          :style="metrics?.pnl !== null && metrics?.pnl !== undefined ? (parseFloat(metrics.pnl) < 0 ? 'color: rgb(var(--ui-danger))' : 'color: rgb(var(--ui-success))') : 'color: rgb(var(--ui-text-subtle))'"
-                          x-text="metrics?.pnl != null ? (parseFloat(metrics.pnl) >= 0 ? '+' : '') + '$' + formatPrice(metrics.pnl) : '—'"
-                    ></span>
-                </div>
-                <div class="flex flex-col">
-                    <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Drawdown</span>
-                    <span class="text-base font-mono font-semibold ui-tabular"
-                          :style="metrics?.drawdown_pct !== null && metrics?.drawdown_pct !== undefined ? 'color: rgb(var(--ui-warning))' : 'color: rgb(var(--ui-text-subtle))'"
-                          x-text="metrics?.drawdown_pct !== null && metrics?.drawdown_pct !== undefined ? metrics.drawdown_pct + '%' : '—'"
-                    ></span>
-                </div>
-                <div class="flex flex-col">
-                    <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle font-semibold">Margin Ratio</span>
-                    <span class="text-base font-mono font-semibold ui-text ui-tabular"
-                          x-text="metrics?.margin_ratio !== null && metrics?.margin_ratio !== undefined ? metrics.margin_ratio + '%' : '—'"
-                    ></span>
-                </div>
-
-                <template x-if="metrics?.is_stub">
-                    <span class="text-[10px] uppercase tracking-[0.12em] ui-text-subtle italic">stub data</span>
-                </template>
             </div>
         </div>
 
@@ -385,20 +457,61 @@
                 bscs: null,
                 _interval: null,
 
-                bscsBandColor() {
+                marketCheckLabel() {
+                    if (!this.bscs) {
+                        return 'Market check unavailable';
+                    }
+
+                    if (this.bscs.blocked) {
+                        return 'New trades paused';
+                    }
+
                     return ({
-                        calm:     'rgb(16, 185, 129)',
-                        elevated: 'rgb(245, 158, 11)',
-                        fragile:  'rgb(249, 115, 22)',
-                        critical: 'rgb(239, 68, 68)',
-                    })[this.bscs?.band] ?? 'rgb(148, 163, 184)';
+                        calm: 'Market normal',
+                        elevated: 'Market active',
+                        fragile: 'Trade size reduced',
+                        critical: 'New trades paused',
+                    })[this.bscs.band] ?? 'Market check unavailable';
                 },
-                bscsTileStyle() {
-                    const c = this.bscsBandColor();
-                    return `background-color: ${c}1a; color: ${c}; border: 1px solid ${c}40`;
+
+                marketCheckClass() {
+                    if (!this.bscs) {
+                        return 'border-slate-200 bg-white text-slate-600';
+                    }
+
+                    if (this.bscs.blocked || this.bscs.band === 'critical') {
+                        return 'border-red-200 bg-red-50 text-red-800';
+                    }
+
+                    if (this.bscs.band === 'fragile') {
+                        return 'border-orange-200 bg-orange-50 text-orange-800';
+                    }
+
+                    if (this.bscs.band === 'elevated') {
+                        return 'border-amber-200 bg-amber-50 text-amber-800';
+                    }
+
+                    return 'border-emerald-200 bg-emerald-50 text-emerald-800';
                 },
-                bscsLabelStyle() {
-                    return `color: ${this.bscsBandColor()}`;
+
+                marketCheckTextClass() {
+                    if (!this.bscs) {
+                        return 'text-slate-600';
+                    }
+
+                    if (this.bscs.blocked || this.bscs.band === 'critical') {
+                        return 'text-red-700';
+                    }
+
+                    if (this.bscs.band === 'fragile') {
+                        return 'text-orange-700';
+                    }
+
+                    if (this.bscs.band === 'elevated') {
+                        return 'text-amber-700';
+                    }
+
+                    return 'text-emerald-700';
                 },
 
                 init() {
@@ -444,6 +557,10 @@
                     return this.isAdmin
                         ? acc.owner + ' · ' + acc.name
                         : acc.exchange + ' · ' + acc.name;
+                },
+
+                selectedAccount() {
+                    return this.accounts.find(acc => String(acc.id) === String(this.selectedAccountId)) || null;
                 },
 
                 async fetchData({ silent = false } = {}) {

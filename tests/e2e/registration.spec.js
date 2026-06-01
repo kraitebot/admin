@@ -25,6 +25,7 @@ test('private beta registration validates inline and completes without page refr
     await expect(page.locator('#password').locator('xpath=..')).toContainText('The password field is required.');
     await expect(page.getByText('The API key field is required.')).toHaveCount(0);
     await expect(page.getByText('The terms field must be accepted.')).toHaveCount(1);
+    await expect(page.getByText('The risk acknowledgement field must be accepted.')).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Configure API keys' })).toBeEnabled();
 
     await page.locator('#password').fill('password');
@@ -36,6 +37,7 @@ test('private beta registration validates inline and completes without page refr
     await expect(page.getByRole('progressbar', { name: 'Password strength' })).toHaveAttribute('aria-valuenow', '75');
     await page.locator('#password_confirmation').fill('correct-password');
     await page.getByLabel('I read the Terms & Conditions').check();
+    await page.getByLabel('I understand crypto trading is high-risk and I can lose some or all of my financial assets').check();
     await page.getByRole('button', { name: 'Configure API keys' }).click();
 
     await expect(page.getByRole('heading', { name: 'Trading exchange' })).toBeVisible();
@@ -50,15 +52,22 @@ test('private beta registration validates inline and completes without page refr
 
     await page.getByRole('button', { name: 'Create account' }).click();
 
-    await expect(page.locator('#api_key').locator('xpath=..')).toContainText('The API key field is required.');
+    await expect(page.getByRole('heading', { name: 'Create account without API setup?' })).toBeVisible();
+    await expect(page.getByText('API credentials are missing.')).toBeVisible();
+    await expect(page.getByText('API connectivity has not been verified.')).toBeVisible();
+    await page.getByRole('button', { name: 'Go back' }).click();
     await expect(page.getByRole('button', { name: 'Test connectivity' })).toBeDisabled();
 
+    await page.getByRole('button', { name: 'Add API keys' }).click();
+    await expect(page.getByRole('heading', { name: 'API keys' })).toBeVisible();
     await page.locator('#api_key').fill('binance-key');
     await page.locator('#api_secret').fill('binance-secret');
+    await page.getByRole('button', { name: 'Save keys' }).click();
 
     await expect(page.getByRole('button', { name: 'Test connectivity' })).toBeEnabled();
-    await page.getByRole('button', { name: 'Create account' }).click();
-    await expect(page.getByText('Test connectivity before continuing.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Test connectivity' })).toHaveClass(/animate-pulse/);
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await expect(page.getByText('Test connectivity before creating the account.')).toBeVisible();
 
     const connectivityResponses = [];
 
@@ -96,7 +105,10 @@ test('private beta registration validates inline and completes without page refr
     });
 
     await page.getByRole('button', { name: 'Test connectivity' }).click();
-    await expect(page.getByText('Some servers could not connect. You can still create the account but the trading will be disabled.')).toBeVisible();
+    await expect(page.getByText('Some servers could not connect. Add the IP addresses to your exchange account, or confirm below to create the account with trading disabled.')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Test connectivity' })).not.toHaveClass(/animate-pulse/);
+    await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await page.getByLabel('I would like to create the account - Trading will be disabled until I add the IP addresses to my exchange account').check();
     await expect(page.getByRole('button', { name: 'Create account' })).toBeEnabled();
 
     let releaseConnectivity;
@@ -124,9 +136,11 @@ test('private beta registration validates inline and completes without page refr
     await page.getByRole('button', { name: 'Test connectivity' }).click();
     await connectivityRequest;
     await expect(page.getByRole('button', { name: 'Create account' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Test connectivity' })).toHaveClass(/animate-pulse/);
     releaseConnectivity();
 
     await expect(page.getByText('Connectivity verified, all good!')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Test connectivity' })).not.toHaveClass(/animate-pulse/);
     await expect(page.getByRole('button', { name: 'Create account' })).toBeEnabled();
 
     await page.getByRole('button', { name: 'Create account' }).click();

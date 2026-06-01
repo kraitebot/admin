@@ -47,6 +47,8 @@ Route::get('/register/{uuid}/connectivity/{blockUuid}', [RegistrationController:
 Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::middleware('auth')->group(function () {
+    Route::view('/2', 'prototypes.dashboard-v2')->name('dashboard.prototype');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -72,6 +74,12 @@ Route::middleware('auth')->group(function () {
     Route::get('/accounts/edit', [AccountController::class, 'edit'])->name('accounts.edit');
     Route::get('/accounts/edit/quotes', [AccountController::class, 'quotes'])->name('accounts.quotes');
     Route::patch('/accounts/edit', [AccountController::class, 'update'])->name('accounts.update');
+    Route::patch('/accounts/connectivity/credentials', [AccountController::class, 'saveCredentials'])->name('accounts.connectivity.credentials');
+    Route::post('/accounts/connectivity/test', [AccountController::class, 'testConnectivity'])->middleware('throttle:10,1')->name('accounts.connectivity.test');
+    Route::get('/accounts/connectivity/{blockUuid}', [AccountController::class, 'connectivityStatus'])
+        ->middleware('throttle:60,1')
+        ->whereUuid('blockUuid')
+        ->name('accounts.connectivity.status');
 
     // System — every surface under /system/* is sysadmin-only. Server-side
     // gate via the `admin` middleware so a non-admin can't reach any of

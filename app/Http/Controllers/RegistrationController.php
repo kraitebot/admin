@@ -64,24 +64,67 @@ final class RegistrationController extends Controller
 
         $data = $request->validated();
         $connectivityResult = $connectivity->evaluate($user, $user->current_connectivity_test_uuid);
+        $hasRequiredApiKeys = filled($data['api_key'] ?? null)
+            && filled($data['api_secret'] ?? null)
+            && (! in_array((string) ($data['exchange'] ?? ''), ['kucoin', 'bitget'], true) || filled($data['passphrase'] ?? null));
+        $completeWithoutApiSetup = $request->boolean('complete_without_api_setup');
+        $canTrade = (bool) ($hasRequiredApiKeys && $connectivityResult['is_complete'] && $connectivityResult['all_connected']);
+
+        if (! $hasRequiredApiKeys) {
+            if (! $completeWithoutApiSetup) {
+                return back()->withErrors([
+                    'api_key' => 'Add API credentials or confirm you want to create the account without them.',
+                ])->withInput();
+            }
+
+            $data['api_key'] = null;
+            $data['api_secret'] = null;
+            $data['passphrase'] = null;
+        }
 
         if (! $connectivityResult['is_complete']) {
+            if ($completeWithoutApiSetup) {
+                $registrationCompleter->complete(
+                    user: $user,
+                    data: $data,
+                    draftAccount: null,
+                    canTrade: false,
+                    disabledReason: $hasRequiredApiKeys
+                        ? 'Registration connectivity was not verified.'
+                        : 'API credentials were not configured during registration.',
+                );
+
+                $user->refresh();
+
+                Auth::login($user);
+                $request->session()->regenerate();
+
+                return redirect()
+                    ->route('dashboard')
+                    ->with('status', 'Account created! Welcome to Kraite.');
+            }
+
             return back()->withErrors([
                 'connectivity_verified' => 'Test connectivity before continuing.',
             ])->withInput();
         }
 
         if (! $connectivityResult['all_connected'] && ! $request->boolean('continue_without_connectivity')) {
-            return back()->withErrors([
-                'connectivity_verified' => 'Some servers could not connect. Fix the whitelist or continue with trading disabled.',
-            ])->withInput();
+            if (! $completeWithoutApiSetup) {
+                return back()->withErrors([
+                    'connectivity_verified' => 'Some servers could not connect. Confirm that trading will stay disabled until you add the IP addresses to your exchange account.',
+                ])->withInput();
+            }
         }
 
         $registrationCompleter->complete(
             user: $user,
             data: $data,
-            draftAccount: $connectivityResult['draft_account'],
-            canTrade: (bool) $connectivityResult['all_connected'],
+            draftAccount: $hasRequiredApiKeys ? $connectivityResult['draft_account'] : null,
+            canTrade: $canTrade,
+            disabledReason: $canTrade
+                ? null
+                : ($hasRequiredApiKeys ? 'Registration connectivity test failed on one or more required servers.' : 'API credentials were not configured during registration.'),
         );
 
         $user->refresh();

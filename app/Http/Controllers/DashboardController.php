@@ -58,6 +58,8 @@ class DashboardController extends Controller
                 'name' => $account->name,
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
                 'owner' => $account->user?->name ?? 'Unknown',
+                'can_trade' => (bool) $account->can_trade,
+                'disabled_reason' => $account->disabled_reason,
             ]);
 
         return view('dashboard', [
@@ -134,10 +136,10 @@ class DashboardController extends Controller
 
         $statusLine = match (true) {
             $score === null => 'Awaiting first compute…',
-            $blocked => 'New opens paused — regime fragile.',
-            $band === 'fragile' => 'Soft posture — sizing reduced on new opens.',
-            $band === 'elevated' => 'Elevated — monitoring.',
-            default => 'All systems normal.',
+            $blocked => 'New trades paused.',
+            $band === 'fragile' => 'New trades use smaller size.',
+            $band === 'elevated' => 'Market moving more than usual.',
+            default => 'Market normal.',
         };
 
         return [

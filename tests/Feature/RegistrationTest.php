@@ -427,6 +427,7 @@ it('renders registration for confirmed users', function (): void {
         ->assertDontSee('Trading exchange')
         ->assertDontSee('Coming soon')
         ->assertSee('href="https://kraite.test/terms-and-conditions"', false)
+        ->assertSee('I understand crypto trading is high-risk and I can lose some or all of my financial assets')
         ->assertSee('novalidate', false)
         ->assertSee('Since you registered for private beta, you get a 7-day free trial');
 });
@@ -467,11 +468,13 @@ it('shows server validation errors through livewire without creating an account'
         ->set('password', '')
         ->set('password_confirmation', '')
         ->set('terms', false)
+        ->set('risk_acknowledgement', false)
         ->call('continueToCredentials')
         ->assertHasErrors([
             'name' => ['required'],
             'password' => ['required'],
             'terms' => ['accepted'],
+            'risk_acknowledgement' => ['accepted'],
         ])
         ->assertSet('step', 'profile');
 
@@ -493,6 +496,7 @@ it('moves to the credentials step after profile validation passes', function ():
         ->set('password', 'correct-password')
         ->set('password_confirmation', 'correct-password')
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->call('continueToCredentials')
         ->assertHasNoErrors()
         ->assertSet('step', 'credentials');
@@ -506,7 +510,8 @@ it('does not let an already active user move to the credentials step from a stal
         ->set('name', 'Bruno Falcao')
         ->set('password', 'correct-password')
         ->set('password_confirmation', 'correct-password')
-        ->set('terms', true);
+        ->set('terms', true)
+        ->set('risk_acknowledgement', true);
 
     $user->forceFill(['status' => 'active'])->save();
 
@@ -517,7 +522,7 @@ it('does not let an already active user move to the credentials step from a stal
     expect(Account::count())->toBe(0);
 });
 
-it('requires api credentials on the credentials step', function (): void {
+it('requires confirmation before completing without api credentials', function (): void {
     seedRegistrationCatalog();
     $user = registrationUser('confirmed');
 
@@ -527,15 +532,51 @@ it('requires api credentials on the credentials step', function (): void {
         ->set('password_confirmation', 'correct-password')
         ->set('exchange', 'binance')
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->call('continueToCredentials')
         ->call('register')
-        ->assertHasErrors([
-            'api_key' => ['required'],
-            'api_secret' => ['required'],
-        ])
+        ->assertHasErrors(['api_key'])
         ->assertNoRedirect();
 
     expect(Account::count())->toBe(0);
+});
+
+it('can complete registration with trading disabled without api credentials after confirmation', function (): void {
+    [$basic, $binance] = seedRegistrationCatalog();
+    $user = registrationUser('confirmed');
+
+    Livewire::test(RegisterForm::class, ['uuid' => $user->uuid])
+        ->set('name', 'Bruno Falcao')
+        ->set('password', 'correct-password')
+        ->set('password_confirmation', 'correct-password')
+        ->set('exchange', 'binance')
+        ->set('subscription_id', $basic->id)
+        ->set('terms', true)
+        ->set('risk_acknowledgement', true)
+        ->set('complete_without_api_setup', true)
+        ->call('continueToCredentials')
+        ->call('register')
+        ->assertHasNoErrors()
+        ->assertSet('step', 'confirmation')
+        ->assertNoRedirect();
+
+    $this->assertAuthenticated();
+
+    $user->refresh();
+    expect($user->status)->toBe('active')
+        ->and($user->subscription_id)->toBe($basic->id)
+        ->and($user->active_account_id)->not->toBeNull()
+        ->and($user->current_connectivity_test_uuid)->toBeNull();
+
+    $account = Account::firstOrFail();
+    expect($account->user_id)->toBe($user->id)
+        ->and($account->api_system_id)->toBe($binance->id)
+        ->and($account->can_trade)->toBeFalse()
+        ->and($account->is_active)->toBeTrue()
+        ->and($account->disabled_reason)->toBe('API credentials were not configured during registration.')
+        ->and($account->disabled_at)->not->toBeNull()
+        ->and($account->binance_api_key)->toBeNull()
+        ->and($account->binance_api_secret)->toBeNull();
 });
 
 it('rejects passwords below the strength threshold', function (): void {
@@ -549,6 +590,7 @@ it('rejects passwords below the strength threshold', function (): void {
         ->set('api_key', 'binance-key')
         ->set('api_secret', 'binance-secret')
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->call('register')
         ->assertHasErrors(['password']);
 
@@ -568,6 +610,7 @@ it('rejects registration exchanges that are visible but coming soon', function (
         ->set('api_secret', 'bybit-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->call('register')
         ->assertHasErrors(['exchange']);
 
@@ -589,6 +632,7 @@ it('completes registration through livewire and creates a tradeable account', fu
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->set('connectivity_test_uuid', $blockUuid)
         ->call('register')
         ->assertHasNoErrors()
@@ -629,6 +673,7 @@ it('requires connectivity to be verified before creating the account', function 
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->call('register')
         ->assertHasErrors(['connectivity_verified'])
         ->assertNoRedirect();
@@ -651,6 +696,7 @@ it('can complete registration with trading disabled when required servers fail c
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->set('continue_without_connectivity', true)
         ->set('connectivity_test_uuid', $blockUuid)
         ->call('register')
@@ -693,10 +739,11 @@ it('requires an explicit choice before completing with failed connectivity', fun
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->set('connectivity_test_uuid', $blockUuid)
         ->call('register')
         ->assertHasErrors(['connectivity_verified'])
-        ->assertSee('Some servers could not connect. You can still create the account but the trading will be disabled.')
+        ->assertSee('Some servers could not connect. Confirm that trading will stay disabled until you add the IP addresses to your exchange account.')
         ->assertSet('step', 'profile')
         ->assertNoRedirect();
 
@@ -719,6 +766,7 @@ it('does not complete registration for an already active user from a stale tab',
         ->set('api_secret', 'binance-secret')
         ->set('subscription_id', $basic->id)
         ->set('terms', true)
+        ->set('risk_acknowledgement', true)
         ->set('connectivity_verified', true);
 
     $user->forceFill(['status' => 'active'])->save();

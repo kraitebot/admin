@@ -40,6 +40,8 @@ final class RegisterForm extends Component
 
     public bool $terms = false;
 
+    public bool $risk_acknowledgement = false;
+
     public bool $connectivity_verified = false;
 
     public bool $connectivity_complete = false;
@@ -49,6 +51,8 @@ final class RegisterForm extends Component
     public ?string $connectivity_test_uuid = null;
 
     public bool $continue_without_connectivity = false;
+
+    public bool $complete_without_api_setup = false;
 
     public function mount(string $uuid): void
     {
@@ -119,7 +123,45 @@ final class RegisterForm extends Component
             ];
         }
 
+        $hasRequiredApiKeys = $this->hasRequiredApiKeys();
+        $canTrade = (bool) ($hasRequiredApiKeys && $connectivityResult['is_complete'] && $connectivityResult['all_connected']);
+
+        if (! $hasRequiredApiKeys) {
+            if (! $this->complete_without_api_setup) {
+                $this->addError('api_key', 'Add API credentials or confirm you want to create the account without them.');
+
+                return null;
+            }
+
+            $data['api_key'] = null;
+            $data['api_secret'] = null;
+            $data['passphrase'] = null;
+        }
+
         if (! $connectivityResult['is_complete']) {
+            if ($this->complete_without_api_setup) {
+                $registrationCompleter->complete(
+                    user: $user,
+                    data: $data,
+                    draftAccount: null,
+                    canTrade: false,
+                    disabledReason: $hasRequiredApiKeys
+                        ? 'Registration connectivity was not verified.'
+                        : 'API credentials were not configured during registration.',
+                );
+
+                $user->refresh();
+
+                auth()->login($user);
+                session()->regenerate();
+
+                session()->flash('status', 'Account created! Welcome to Kraite.');
+
+                $this->step = 'confirmation';
+
+                return null;
+            }
+
             $this->connectivity_complete = false;
             $this->connectivity_passed = false;
             $this->connectivity_verified = false;
@@ -129,12 +171,16 @@ final class RegisterForm extends Component
         }
 
         if (! $connectivityResult['all_connected'] && ! $this->continue_without_connectivity) {
-            $this->connectivity_complete = true;
-            $this->connectivity_passed = false;
-            $this->connectivity_verified = false;
-            $this->addError('connectivity_verified', 'Some servers could not connect. You can still create the account but the trading will be disabled.');
+            if ($this->complete_without_api_setup) {
+                $this->continue_without_connectivity = true;
+            } else {
+                $this->connectivity_complete = true;
+                $this->connectivity_passed = false;
+                $this->connectivity_verified = false;
+                $this->addError('connectivity_verified', 'Some servers could not connect. Confirm that trading will stay disabled until you add the IP addresses to your exchange account.');
 
-            return null;
+                return null;
+            }
         }
 
         $this->connectivity_complete = true;
@@ -144,8 +190,11 @@ final class RegisterForm extends Component
         $registrationCompleter->complete(
             user: $user,
             data: $data,
-            draftAccount: $connectivityResult['draft_account'],
-            canTrade: (bool) $connectivityResult['all_connected'],
+            draftAccount: $hasRequiredApiKeys ? $connectivityResult['draft_account'] : null,
+            canTrade: $canTrade,
+            disabledReason: $canTrade
+                ? null
+                : ($hasRequiredApiKeys ? 'Registration connectivity test failed on one or more required servers.' : 'API credentials were not configured during registration.'),
         );
 
         $user->refresh();
@@ -219,6 +268,7 @@ final class RegisterForm extends Component
                     ->where('is_active', true),
             ],
             'terms' => ['accepted'],
+            'risk_acknowledgement' => ['accepted'],
         ];
     }
 
@@ -229,9 +279,14 @@ final class RegisterForm extends Component
     {
         return [
             'exchange' => ['required', 'string', Rule::in(RegistrationExchange::enabled())],
-            'api_key' => ['required', 'string', 'max:2000'],
-            'api_secret' => ['required', 'string', 'max:2000'],
-            'passphrase' => ['nullable', 'required_if:exchange,kucoin,bitget', 'string', 'max:2000'],
+            'api_key' => ['nullable', 'string', 'max:2000'],
+            'api_secret' => ['nullable', 'string', 'max:2000'],
+            'passphrase' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => in_array($this->exchange, ['kucoin', 'bitget'], true) && $this->hasAnyApiKeyInput()),
+                'string',
+                'max:2000',
+            ],
         ];
     }
 
@@ -243,6 +298,7 @@ final class RegisterForm extends Component
         return [
             'api_key' => 'API key',
             'api_secret' => 'API secret',
+            'risk_acknowledgement' => 'risk acknowledgement',
             'subscription_id' => 'plan',
         ];
     }
@@ -276,5 +332,20 @@ final class RegisterForm extends Component
         $this->connectivity_passed = false;
         $this->connectivity_test_uuid = null;
         $this->continue_without_connectivity = false;
+        $this->complete_without_api_setup = false;
+    }
+
+    private function hasRequiredApiKeys(): bool
+    {
+        return trim($this->api_key) !== ''
+            && trim($this->api_secret) !== ''
+            && (! in_array($this->exchange, ['kucoin', 'bitget'], true) || trim((string) $this->passphrase) !== '');
+    }
+
+    private function hasAnyApiKeyInput(): bool
+    {
+        return trim($this->api_key) !== ''
+            || trim($this->api_secret) !== ''
+            || trim((string) $this->passphrase) !== '';
     }
 }

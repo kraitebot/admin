@@ -15,11 +15,16 @@ use Kraite\Core\Models\User;
 final class RegistrationCompleter
 {
     /**
-     * @param  array{name: string, password: string, exchange: string, api_key: string, api_secret: string, passphrase?: string|null, subscription_id: int|string}  $data
+     * @param  array{name: string, password: string, exchange: string, api_key?: string|null, api_secret?: string|null, passphrase?: string|null, subscription_id: int|string}  $data
      */
-    public function complete(User $user, array $data, ?Account $draftAccount = null, bool $canTrade = true): void
-    {
-        DB::transaction(function () use ($canTrade, $data, $draftAccount, $user): void {
+    public function complete(
+        User $user,
+        array $data,
+        ?Account $draftAccount = null,
+        bool $canTrade = true,
+        ?string $disabledReason = null,
+    ): void {
+        DB::transaction(function () use ($canTrade, $data, $disabledReason, $draftAccount, $user): void {
             $subscription = Subscription::whereKey((int) $data['subscription_id'])->firstOrFail();
             $apiSystem = ApiSystem::where('canonical', $data['exchange'])->firstOrFail();
             $tradeConfiguration = TradeConfiguration::where('is_default', true)->first()
@@ -51,7 +56,7 @@ final class RegistrationCompleter
                 'margin' => 1000,
                 'can_trade' => $canTrade,
                 'is_active' => true,
-                'disabled_reason' => $canTrade ? null : 'Registration connectivity test failed on one or more required servers.',
+                'disabled_reason' => $canTrade ? null : ($disabledReason ?? 'Registration connectivity test failed on one or more required servers.'),
                 'disabled_at' => $canTrade ? null : now(),
                 'profit_percentage' => '0.360',
                 'stop_market_initial_percentage' => '2.50',
@@ -69,8 +74,8 @@ final class RegistrationCompleter
             if (! $draftAccount instanceof Account) {
                 $account->all_credentials = $this->credentialColumns(
                     exchange: (string) $data['exchange'],
-                    apiKey: (string) $data['api_key'],
-                    apiSecret: (string) $data['api_secret'],
+                    apiKey: (string) ($data['api_key'] ?? ''),
+                    apiSecret: (string) ($data['api_secret'] ?? ''),
                     passphrase: $data['passphrase'] ?? null,
                 );
             }
@@ -87,8 +92,12 @@ final class RegistrationCompleter
     /**
      * @return array<string, string|null>
      */
-    private function credentialColumns(string $exchange, string $apiKey, string $apiSecret, ?string $passphrase): array
+    private function credentialColumns(string $exchange, ?string $apiKey, ?string $apiSecret, ?string $passphrase): array
     {
+        $apiKey = filled($apiKey) ? $apiKey : null;
+        $apiSecret = filled($apiSecret) ? $apiSecret : null;
+        $passphrase = filled($passphrase) ? $passphrase : null;
+
         return match ($exchange) {
             'binance' => [
                 'binance_api_key' => $apiKey,

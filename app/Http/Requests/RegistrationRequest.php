@@ -46,9 +46,14 @@ final class RegistrationRequest extends FormRequest
                 },
             ],
             'exchange' => ['required', 'string', Rule::in(RegistrationExchange::enabled())],
-            'api_key' => ['required', 'string', 'max:2000'],
-            'api_secret' => ['required', 'string', 'max:2000'],
-            'passphrase' => ['nullable', 'required_if:exchange,kucoin,bitget', 'string', 'max:2000'],
+            'api_key' => ['nullable', 'string', 'max:2000'],
+            'api_secret' => ['nullable', 'string', 'max:2000'],
+            'passphrase' => [
+                'nullable',
+                Rule::requiredIf(fn (): bool => in_array(Str::lower((string) $this->input('exchange')), ['kucoin', 'bitget'], true) && ($this->filled('api_key') || $this->filled('api_secret'))),
+                'string',
+                'max:2000',
+            ],
             'subscription_id' => [
                 'required',
                 'integer',
@@ -58,7 +63,9 @@ final class RegistrationRequest extends FormRequest
                 }),
             ],
             'terms' => ['accepted'],
+            'risk_acknowledgement' => ['accepted'],
             'continue_without_connectivity' => ['nullable', 'boolean'],
+            'complete_without_api_setup' => ['nullable', 'boolean'],
         ];
     }
 
@@ -81,6 +88,7 @@ final class RegistrationRequest extends FormRequest
         return [
             'api_key' => 'API key',
             'api_secret' => 'API secret',
+            'risk_acknowledgement' => 'risk acknowledgement',
             'subscription_id' => 'plan',
             'terms' => 'Terms & Conditions',
         ];
