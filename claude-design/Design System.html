@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kraite — Design System</title>
+<link rel="icon" href="assets/snake-green.svg"/>
+<link rel="stylesheet" href="assets/colors_and_type.css"/>
+<link rel="stylesheet" href="app/shell.css"/>
+<link rel="stylesheet" href="app/ds.css"/>
+</head>
+<body data-theme="light">
+
+<header class="ds-top">
+  <img src="assets/snake-green.svg" alt="Kraite"/>
+  <div>
+    <div class="ds-top__title">Kraite <span>Admin</span> — Design System</div>
+    <div class="ds-top__sub">Back-office surface · v4.2.1</div>
+  </div>
+  <div class="ds-top__spacer"></div>
+  <a class="ds-back" href="Kraite Admin.html">
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    Open the app
+  </a>
+</header>
+
+<div class="ds-wrap">
+  <!-- TABLE OF CONTENTS -->
+  <nav class="ds-toc">
+    <div class="ds-toc__grp">Foundations</div>
+    <a href="#color">Color</a>
+    <a href="#type">Type</a>
+    <a href="#radius">Radius</a>
+    <a href="#spacing">Spacing</a>
+    <div class="ds-toc__grp">Components</div>
+    <a href="#buttons">Buttons</a>
+    <a href="#badges">Badges &amp; status</a>
+    <a href="#sides">Side tags</a>
+    <a href="#table">Data table</a>
+    <a href="#tiles">KPI tiles</a>
+    <a href="#inputs">Form inputs</a>
+    <a href="#tabs">Tabs</a>
+    <a href="#alerts">Alerts</a>
+    <a href="#cards">Cards</a>
+    <a href="#code">Code blocks</a>
+    <a href="#empty">Empty states</a>
+  </nav>
+
+  <!-- CONTENT -->
+  <main class="ds-main">
+    <div class="ds-lede">
+      <h1>Design system</h1>
+      <p>The component foundation for the Kraite operator console. Dark chrome, calm light content, terminal-green accent, monospaced numbers. Trading semantics are sacred — green is long / profit / safe, red is short / loss / risk, never inverted. Surfaces use a soft radius scale; numbers are the hero.</p>
+    </div>
+
+    <!-- ================= COLOR ================= -->
+    <section class="ds-sec" id="color">
+      <div class="ds-sec__eyebrow">Foundations</div>
+      <h2>Color</h2>
+      <p class="ds-sec__desc">One signal color — terminal green — on a neutral ink scale. A fixed P&amp;L pair and a five-step Black Swan regime palette carry all market meaning. No decorative gradients.</p>
+
+      <div class="ds-block">
+        <div class="ds-block__label">Brand · accent</div>
+        <div class="ds-swatches">
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent</div><div class="ds-swatch__hex">--green-500 · #00d17a</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#1ee08e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent hover</div><div class="ds-swatch__hex">--green-600 · #1ee08e</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00a35e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent (light)</div><div class="ds-swatch__hex">--green-300 · #00a35e</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#003d24"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent soft</div><div class="ds-swatch__hex">--green-50 · #003d24</div></div></div>
+        </div>
+      </div>
+
+      <div class="ds-block">
+        <div class="ds-block__label">P&amp;L semantic pair — never substitute</div>
+        <div class="ds-swatches">
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Profit / long</div><div class="ds-swatch__hex">--pnl-up-fg · #00d17a</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff4d4d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Loss / short</div><div class="ds-swatch__hex">--pnl-down-fg · #ff4d4d</div></div></div>
+        </div>
+      </div>
+
+      <div class="ds-block">
+        <div class="ds-block__label">Black Swan regime — escalation</div>
+        <div class="ds-swatches">
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Calm</div><div class="ds-swatch__hex">--bsi-calm · #00d17a</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ffb000"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Watch</div><div class="ds-swatch__hex">--bsi-watch · #ffb000</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff7a1a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Elevated</div><div class="ds-swatch__hex">--bsi-elevated · #ff7a1a</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff2d2d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Cascade</div><div class="ds-swatch__hex">--bsi-cascade · #ff2d2d</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#a020f0"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Black swan</div><div class="ds-swatch__hex">--bsi-blackswan · #a020f0</div></div></div>
+        </div>
+      </div>
+
+      <div class="ds-block">
+        <div class="ds-block__label">Neutral ink scale</div>
+        <div class="ds-swatches">
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#050607"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Canvas</div><div class="ds-swatch__hex">--black · #050607</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#161a1e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Elevated</div><div class="ds-swatch__hex">--ink-2 · #161a1e</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#5a636d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Mute</div><div class="ds-swatch__hex">--ink-6 · #5a636d</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#c4cad1"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Secondary</div><div class="ds-swatch__hex">--ink-8 · #c4cad1</div></div></div>
+          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#f1f3f5;border-bottom:1px solid var(--border)"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">High emphasis</div><div class="ds-swatch__hex">--ink-9 · #f1f3f5</div></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TYPE ================= -->
+    <section class="ds-sec" id="type">
+      <div class="ds-sec__eyebrow">Foundations</div>
+      <h2>Type</h2>
+      <p class="ds-sec__desc">Inter Tight for UI and headings; IBM Plex Mono for every number, ticker, code block, and eyebrow. Tabular figures on by default. 12px floor for tabular data.</p>
+      <div class="ds-demo ds-demo--col" style="padding:8px 26px">
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Page title</div><div class="ds-type-row__px">Inter Tight · 28 / 700</div></div><div class="ds-type-row__spec" style="font-size:28px;font-weight:700;letter-spacing:-0.02em">Dashboard</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Section</div><div class="ds-type-row__px">Inter Tight · 24 / 700</div></div><div class="ds-type-row__spec" style="font-size:24px;font-weight:700;letter-spacing:-0.02em">Open positions</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Card title</div><div class="ds-type-row__px">Inter Tight · 14 / 600</div></div><div class="ds-type-row__spec" style="font-size:14px;font-weight:600">Exchange connectivity</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Body</div><div class="ds-type-row__px">Inter Tight · 14 / 400</div></div><div class="ds-type-row__spec" style="font-size:14px;color:var(--fg-2)">Engine runs autonomously. Drawdowns happen — cascades don't have to.</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Eyebrow</div><div class="ds-type-row__px">Plex Mono · 11 / caps</div></div><div class="ds-type-row__spec eyebrow">PORTFOLIO VALUE</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Data — large</div><div class="ds-type-row__px">Plex Mono · 30 / 600</div></div><div class="ds-type-row__spec mono" style="font-size:30px;font-weight:600;letter-spacing:-0.025em">$284,910.42</div></div>
+        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Data — table</div><div class="ds-type-row__px">Plex Mono · 13 / 500</div></div><div class="ds-type-row__spec mono" style="font-size:13px">68,910.50 · +2.21% · 0.850</div></div>
+      </div>
+    </section>
+
+    <!-- ================= RADIUS ================= -->
+    <section class="ds-sec" id="radius">
+      <div class="ds-sec__eyebrow">Foundations</div>
+      <h2>Radius</h2>
+      <p class="ds-sec__desc">A soft, modern radius scale — distinct from the marketing site's hard edges. Surfaces are generous, controls are gentle, chips and avatars are fully round. No sharp 0px corners anywhere in the back office.</p>
+      <div class="ds-demo">
+        <div class="ds-tokens">
+          <div class="ds-token"><div class="ds-token__box" style="border-radius:14px"></div><div class="ds-token__name">--ar-surface</div><div class="ds-token__val">14px · cards, panels</div></div>
+          <div class="ds-token"><div class="ds-token__box" style="border-radius:10px"></div><div class="ds-token__name">--ar-control</div><div class="ds-token__val">10px · buttons, inputs, tiles</div></div>
+          <div class="ds-token"><div class="ds-token__box" style="border-radius:999px;width:64px"></div><div class="ds-token__name">--ar-chip</div><div class="ds-token__val">999px · badges, pills</div></div>
+          <div class="ds-token"><div class="ds-token__box" style="border-radius:50%;width:64px"></div><div class="ds-token__name">circle</div><div class="ds-token__val">50% · avatars, dots</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SPACING ================= -->
+    <section class="ds-sec" id="spacing">
+      <div class="ds-sec__eyebrow">Foundations</div>
+      <h2>Spacing</h2>
+      <p class="ds-sec__desc">A 4px base unit. Density over comfort in product UI — compact mode tightens table rows and tile padding further.</p>
+      <div class="ds-demo">
+        <div class="ds-space">
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:4px"></div><div class="ds-space__name">sp-2 · 4</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:8px"></div><div class="ds-space__name">sp-3 · 8</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:12px"></div><div class="ds-space__name">sp-4 · 12</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:16px"></div><div class="ds-space__name">sp-5 · 16</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:20px"></div><div class="ds-space__name">sp-6 · 20</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:24px"></div><div class="ds-space__name">sp-7 · 24</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:32px"></div><div class="ds-space__name">sp-8 · 32</div></div>
+          <div class="ds-space__col"><div class="ds-space__bar" style="height:48px"></div><div class="ds-space__name">sp-9 · 48</div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= BUTTONS ================= -->
+    <section class="ds-sec" id="buttons">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Buttons</h2>
+      <p class="ds-sec__desc">Primary green for the single most-likely action; secondary outline and ghost for everything else. Press nudges down 1px — no scale, no bounce.</p>
+      <div class="ds-demo">
+        <button class="btn btn--primary">Deploy strategy</button>
+        <button class="btn btn--secondary">View projections</button>
+        <button class="btn btn--ghost">Cancel</button>
+        <button class="btn btn--danger">Halt trading</button>
+        <button class="btn btn--secondary btn--sm">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
+          Sync
+        </button>
+        <button class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg></button>
+      </div>
+    </section>
+
+    <!-- ================= BADGES ================= -->
+    <section class="ds-sec" id="badges">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Badges &amp; status</h2>
+      <p class="ds-sec__desc">Fully pill-shaped. Regime pills and status indicators pair a colored dot with an ALL-CAPS mono label — cascade and black-swan states pulse.</p>
+      <div class="ds-block">
+        <div class="ds-block__label">Regime pills</div>
+        <div class="ds-demo">
+          <span class="pill" style="background:color-mix(in srgb,#00a35e 12%,transparent);border-color:color-mix(in srgb,#00a35e 38%,transparent);color:#00a35e"><span class="pill__dot" style="background:#00a35e"></span>CALM 0.31</span>
+          <span class="pill" style="background:color-mix(in srgb,#ffb000 14%,transparent);border-color:color-mix(in srgb,#ffb000 40%,transparent);color:#b07a00"><span class="pill__dot" style="background:#ffb000"></span>WATCH 0.42</span>
+          <span class="pill" style="background:color-mix(in srgb,#ff7a1a 14%,transparent);border-color:color-mix(in srgb,#ff7a1a 40%,transparent);color:#d4590a"><span class="pill__dot" style="background:#ff7a1a"></span>ELEVATED 0.63</span>
+          <span class="pill" style="background:color-mix(in srgb,#ff2d2d 12%,transparent);border-color:color-mix(in srgb,#ff2d2d 40%,transparent);color:#d12020"><span class="pill__dot" style="background:#ff2d2d;animation:kr-pulse 1.4s ease-in-out infinite"></span>CASCADE 0.82</span>
+          <span class="pill" style="background:color-mix(in srgb,#a020f0 12%,transparent);border-color:color-mix(in srgb,#a020f0 40%,transparent);color:#8810d8"><span class="pill__dot" style="background:#a020f0;animation:kr-pulse 1.4s ease-in-out infinite"></span>BLACK SWAN 0.94</span>
+        </div>
+      </div>
+      <div class="ds-block">
+        <div class="ds-block__label">Status indicators &amp; badges</div>
+        <div class="ds-demo">
+          <span class="stat stat--ok"><span class="stat__dot"></span>LINKED</span>
+          <span class="stat stat--warn"><span class="stat__dot"></span>DEGRADED</span>
+          <span class="stat stat--down"><span class="stat__dot"></span>DOWN</span>
+          <span class="stat stat--idle"><span class="stat__dot"></span>IDLE</span>
+          <span class="badge badge--green">+8.96%</span>
+          <span class="badge badge--red">-2.35%</span>
+          <span class="badge badge--amber">FUNDING</span>
+          <span class="badge badge--neutral">FUTURES</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= SIDE TAGS ================= -->
+    <section class="ds-sec" id="sides">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Side tags</h2>
+      <p class="ds-sec__desc">Long and short carry the P&amp;L color pair with a leading dot for instant scan. Leverage sits in a quiet outlined chip beside the market.</p>
+      <div class="ds-demo">
+        <span class="side side--long">LONG</span>
+        <span class="side side--short">SHORT</span>
+        <span style="display:inline-flex;align-items:center"><span class="sym" style="font-family:var(--font-mono);font-weight:600;color:var(--fg-1)">BTC-PERP</span><span class="lev">3×</span></span>
+        <span class="side-mini side-mini--long">LONG</span>
+        <span class="side-mini side-mini--short">SHORT</span>
+      </div>
+    </section>
+
+    <!-- ================= TABLE ================= -->
+    <section class="ds-sec" id="table">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Data table</h2>
+      <p class="ds-sec__desc">The workhorse. Mono tabular figures, right-aligned numerics, sticky header, row hover, and a 600ms green/red cell flash when a value updates. P&amp;L and percent columns read one step larger.</p>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr><th>Market</th><th>Side</th><th class="num">Size</th><th class="num">Entry</th><th class="num">Mark</th><th class="num">Unreal. P&amp;L</th><th class="num">%</th></tr></thead>
+            <tbody>
+              <tr><td><span class="sym">BTC-PERP</span><span class="lev">3×</span></td><td><span class="side side--long">LONG</span></td><td class="num mono">0.850</td><td class="num mono dim">67,420.00</td><td class="num mono">68,910.50</td><td class="num mono mono-lg pnl-up">+$1,266.93</td><td class="num mono mono-lg pnl-up">+2.21%</td></tr>
+              <tr class="flash-up"><td><span class="sym">SOL-PERP</span><span class="lev">2×</span></td><td><span class="side side--short">SHORT</span></td><td class="num mono">220.0</td><td class="num mono dim">168.40</td><td class="num mono">162.10</td><td class="num mono mono-lg pnl-up">+$1,386.00</td><td class="num mono mono-lg pnl-up">+3.74%</td></tr>
+              <tr><td><span class="sym">ARB-PERP</span><span class="lev">4×</span></td><td><span class="side side--long">LONG</span></td><td class="num mono">5,400</td><td class="num mono dim">0.8920</td><td class="num mono">0.8710</td><td class="num mono mono-lg pnl-down">−$113.40</td><td class="num mono mono-lg pnl-down">−2.35%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= TILES ================= -->
+    <section class="ds-sec" id="tiles">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>KPI tiles</h2>
+      <p class="ds-sec__desc">Eyebrow, then the loud mono value, then a tight delta pill and a sparkline. The value is always the dominant element on the tile.</p>
+      <div class="ds-demo" style="gap:16px">
+        <div class="tile" style="width:260px">
+          <div class="tile__eyebrow"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 6h18v12H3zM3 10h18"/></svg>PORTFOLIO VALUE</div>
+          <div class="tile__value">$284,910.42</div>
+          <div class="tile__metrow"><div class="tile__metleft"><span class="tile__delta pnl-up">↑ +1.84%</span><span class="tile__sub">NET EQUITY · USD</span></div></div>
+        </div>
+        <div class="tile" style="width:260px">
+          <div class="tile__eyebrow"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"/></svg>P&amp;L — 30 DAY</div>
+          <div class="tile__value">+$23,418.06</div>
+          <div class="tile__metrow"><div class="tile__metleft"><span class="tile__delta pnl-up">↑ +8.96%</span><span class="tile__sub">NET OF FEES</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= INPUTS ================= -->
+    <section class="ds-sec" id="inputs">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Form inputs</h2>
+      <p class="ds-sec__desc">Rounded controls with a green focus ring. Used sparingly — the trader surface is mostly read-only; inputs live in account setup, billing, and admin tools.</p>
+      <div class="ds-demo" style="gap:24px">
+        <label class="ds-label"><span class="ds-label__t">API key label</span><input class="ds-input" placeholder="binance-main"/></label>
+        <label class="ds-label"><span class="ds-label__t">Max notional</span><input class="ds-input mono" value="3.0×" style="width:120px"/></label>
+        <label class="ds-label"><span class="ds-label__t">Focused</span><input class="ds-input" value="0xA1b2…f9" style="border-color:var(--border-focus);box-shadow:var(--shadow-glow)"/></label>
+      </div>
+    </section>
+
+    <!-- ================= TABS ================= -->
+    <section class="ds-sec" id="tabs">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Tabs &amp; segmented control</h2>
+      <p class="ds-sec__desc">A compact rounded segmented control for filtering tables and switching views. The active segment lifts onto an elevated surface.</p>
+      <div class="ds-demo">
+        <div class="seg"><button class="is-active">ALL</button><button>LONG</button><button>SHORT</button></div>
+        <div class="seg"><button>1D</button><button class="is-active">1W</button><button>1M</button><button>ALL</button></div>
+      </div>
+    </section>
+
+    <!-- ================= ALERTS ================= -->
+    <section class="ds-sec" id="alerts">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Alerts</h2>
+      <p class="ds-sec__desc">Inline alerts borrow the regime palette. The critical exchange-disconnect alert escalates to a full-width red banner that drops between the top bar and content.</p>
+      <div class="ds-demo ds-demo--stack">
+        <div class="ds-alert ds-alert--danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 2v3M15 2v3M7 6h10v5a5 5 0 0 1-5 5 5 5 0 0 1-5-5V6zM12 16v6M3 3l18 18"/></svg><span><strong>OKX (arb)</strong> lost connectivity to its exchange — bot management paused for this account.</span></div>
+        <div class="ds-alert ds-alert--warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M12 3l10 18H2L12 3zM12 9v5M12 18h.01"/></svg><span><strong>Watch regime.</strong> Position sizing tightened — max notional 4.0× → 3.0×.</span></div>
+        <div class="ds-alert ds-alert--ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M4 12l5 5 11-11"/></svg><span><strong>All exchanges linked.</strong> Heartbeat nominal across 4 accounts.</span></div>
+      </div>
+    </section>
+
+    <!-- ================= CARDS ================= -->
+    <section class="ds-sec" id="cards">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Cards</h2>
+      <p class="ds-sec__desc">1px border on an elevated surface, 14px radius, no drop shadow. A header row (title + actions), a body, and an optional dense footer.</p>
+      <div style="max-width:420px">
+        <div class="card">
+          <div class="card__head">
+            <div class="card__title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 2v4M15 2v4M7 6h10v6a5 5 0 0 1-10 0V6z"/></svg>
+              Exchange connectivity
+            </div>
+            <span class="stat stat--down"><span class="stat__dot"></span>1 DOWN</span>
+          </div>
+          <div>
+            <div class="acct"><span class="acct__dot acct__dot--ok"></span><span class="acct__name">Binance<span class="acct__tag">MAIN</span></span><span class="acct__lat">12ms</span></div>
+            <div class="acct is-down"><span class="acct__dot acct__dot--down"></span><span class="acct__name">OKX<span class="acct__tag">ARB</span></span><span class="acct__lat acct__lat--down">DOWN</span></div>
+          </div>
+          <div class="card__foot">
+            <span class="mono" style="font-size:11px;color:var(--fg-mute)">HEARTBEAT 5s</span>
+            <a href="#" class="link-arrow">View details →</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CODE ================= -->
+    <section class="ds-sec" id="code">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Code blocks</h2>
+      <p class="ds-sec__desc">For the SQL console, command runner, and audit log. Mono, rounded, on an elevated surface with green keywords and green numerics.</p>
+      <div class="ds-demo ds-demo--col">
+<div class="ds-code"><span class="c">-- step-dispatcher: positions opened in window</span>
+<span class="k">SELECT</span> market, side, size, entry_px
+<span class="k">FROM</span> positions
+<span class="k">WHERE</span> opened_at > now() - <span class="n">interval</span> <span class="n">'1 hour'</span>
+<span class="k">ORDER BY</span> opened_at <span class="k">DESC</span>;</div>
+      </div>
+    </section>
+
+    <!-- ================= EMPTY ================= -->
+    <section class="ds-sec" id="empty">
+      <div class="ds-sec__eyebrow">Components</div>
+      <h2>Empty states</h2>
+      <p class="ds-sec__desc">Calm, centered, never cute. A bordered icon, a terse line, and a single quiet action. Used on pages still in the build queue and for genuinely empty tables.</p>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:64px 20px;border:1px dashed var(--border);border-radius:var(--ar-surface);background:var(--bg-elev-1)">
+        <div style="width:48px;height:48px;border-radius:var(--ar-control);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--fg-mute);margin-bottom:16px">
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>
+        </div>
+        <h4 style="margin-bottom:6px;font-size:18px">No open positions</h4>
+        <p style="font-size:14px;color:var(--fg-3);max-width:380px">The engine is flat. New positions resume automatically when the regime clears and a setup qualifies.</p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" fill="#050607"/>
+  <rect x="28" y="28" width="20" height="20" rx="5" fill="#00d17a"/>
+  <rect x="52" y="28" width="20" height="20" rx="5" fill="none" stroke="#00d17a" stroke-width="3"/>
+  <rect x="28" y="52" width="44" height="9" rx="4.5" fill="#2a3037"/>
+  <rect x="28" y="65" width="30" height="9" rx="4.5" fill="#2a3037"/>
+</svg>
+</template>
+
+</body>
+</html>
