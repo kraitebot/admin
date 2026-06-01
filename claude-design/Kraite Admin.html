@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kraite — Admin</title>
+<link rel="icon" href="assets/snake-green.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="app/tw-config.js"></script>
+<link rel="stylesheet" href="assets/colors_and_type.css"/>
+<link rel="stylesheet" href="app/shell.css"/>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="app/tweaks-panel.jsx"></script>
+<script type="text/babel" src="app/icons.jsx"></script>
+<script type="text/babel" src="app/data.jsx"></script>
+<script type="text/babel" src="app/shell.jsx"></script>
+<script type="text/babel" src="app/dashboard.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "contentTheme": "dark",
+  "density": "compact",
+  "accent": "#00d17a",
+  "regime": "ELEVATED",
+  "showBanner": true,
+  "serverFault": true,
+  "paginatePositions": true,
+  "uiFont": "grotesk"
+}/*EDITMODE-END*/;
+
+const REGIME_SCORES = { CALM: 0.31, WATCH: 0.42, ELEVATED: 0.63, CASCADE: 0.82, 'BLACK SWAN': 0.94 };
+
+// UI typeface options — spanning the spectrum from ultra-legible ClearType-style
+// humanist sans → technical geometric grotesque → full monospace terminal.
+// Swaps --font-sans + --font-display. --font-mono (data/tickers) stays IBM Plex Mono.
+const UI_FONTS = {
+  grotesk: {
+    label: 'Space Grotesk — technical',
+    sans: "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
+    display: "'Space Grotesk', ui-sans-serif, system-ui, sans-serif",
+    tracking: '-0.02em',
+  },
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [active, setActive] = React.useState('dashboard');
+  const [displayed, setDisplayed] = React.useState('dashboard'); // route actually rendered (lags during fade)
+  const [fading, setFading] = React.useState(false);
+  const [bannerOpen, setBannerOpen] = React.useState(true);
+
+  // route change → fade content out, swap, fade back in
+  const go = React.useCallback((next) => {
+    if (next === active) return;
+    setActive(next);
+    setFading(true);                       // begin fade-out
+    const contentEl = document.querySelector('.content');
+    if (contentEl) contentEl.scrollTop = 0;
+    window.setTimeout(() => {
+      setDisplayed(next);                  // swap route at the bottom of the fade
+      requestAnimationFrame(() => requestAnimationFrame(() => setFading(false))); // fade back in
+    }, 180);
+  }, [active]);
+
+  // content theme driven by tweak OR top-bar toggle (kept in sync via tweak)
+  const contentDark = t.contentTheme === 'dark';
+  const setContentDark = (v) => setTweak('contentTheme', v ? 'dark' : 'light');
+
+  // accent override (light mode tones its own, but allow brand-green intensity tweak on the shell accent)
+  React.useEffect(() => {
+    document.documentElement.style.setProperty('--accent', t.accent);
+  }, [t.accent]);
+
+  // UI typeface swap — drives --font-sans + --font-display (data stays mono)
+  React.useEffect(() => {
+    const f = UI_FONTS[t.uiFont] || UI_FONTS.inter;
+    const root = document.documentElement.style;
+    root.setProperty('--font-sans', f.sans);
+    root.setProperty('--font-display', f.display);
+  }, [t.uiFont]);
+
+  // density attr on the app root
+  const showBanner = t.showBanner && bannerOpen;
+  const downAccount = ACCOUNTS.find(a => a.state === 'down');
+  const regime = t.regime;
+  const score = REGIME_SCORES[regime] ?? 0.42;
+
+  React.useEffect(() => { setBannerOpen(true); }, [t.showBanner]);
+
+  return (
+    <div className="grid grid-cols-[88px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
+      <Rail active={active} setActive={go}/>
+      <div className="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]">
+        <TopBar contentDark={contentDark} setContentDark={setContentDark} onBell={() => {}}/>
+        {showBanner && downAccount &&
+          <DisconnectBanner account={downAccount} onDismiss={() => setBannerOpen(false)}/>}
+        <div className="content flex-1 min-h-0 overflow-y-auto bg-canvas text-fg rounded-t-2xl relative z-[2] max-[640px]:rounded-t-xl" data-theme={contentDark ? 'dark' : 'light'}>
+          <div className={"max-w-wide mx-auto pt-6 px-8 pb-12 max-[640px]:pt-4 max-[640px]:px-3 max-[640px]:pb-6 transition-[opacity,transform] duration-200 ease-out " + (fading ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0")}>
+            {displayed === 'dashboard'
+              ? <Dashboard regime={regime} score={score} serverFault={t.serverFault} paginate={t.paginatePositions}/>
+              : <Placeholder route={displayed}/>}
+          </div>
+        </div>
+        <Footer/>
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="Content"/>
+        <TweakRadio label="Theme" value={t.contentTheme} options={['light', 'dark']}
+          onChange={(v) => setTweak('contentTheme', v)}/>
+        <TweakSection label="Market state"/>
+        <TweakSelect label="BSCS regime" value={t.regime}
+          options={['CALM', 'WATCH', 'ELEVATED', 'CASCADE', 'BLACK SWAN']}
+          onChange={(v) => setTweak('regime', v)}/>
+        <TweakToggle label="Exchange disconnect banner" value={t.showBanner}
+          onChange={(v) => setTweak('showBanner', v)}/>
+        <TweakToggle label="Simulate server fault" value={t.serverFault}
+          onChange={(v) => setTweak('serverFault', v)}/>
+        <TweakToggle label="Paginate positions (>6)" value={t.paginatePositions}
+          onChange={(v) => setTweak('paginatePositions', v)}/>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" fill="#050607"/>
+  <rect x="30" y="30" width="40" height="40" rx="6" fill="none" stroke="#00d17a" stroke-width="4"/>
+  <path d="M38 58 L46 46 L54 52 L62 40" fill="none" stroke="#00d17a" stroke-width="4" stroke-linecap="square"/>
+</svg>
+</template>
+</body>
+</html>
