@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "704422304b7516d48c774016cdc7b733",
+    "content-hash": "38a108d8473ac6f1f9b46474941f2d80",
     "packages": [
         {
             "name": "angle/chrono",
@@ -348,57 +348,6 @@
                 "source": "https://github.com/brunocfalcao/blade-feather-icons/tree/v6.0.1"
             },
             "time": "2026-05-31T20:43:30+00:00"
-        },
-        {
-            "name": "brunocfalcao/hub-ui",
-            "version": "dev-master",
-            "dist": {
-                "type": "path",
-                "url": "../packages/brunocfalcao/hub-ui",
-                "reference": "f5c5a550224070e97591404bb429a45ba2f519e1"
-            },
-            "require": {
-                "illuminate/support": "^11.0|^12.0",
-                "php": "^8.2"
-            },
-            "type": "library",
-            "extra": {
-                "laravel": {
-                    "providers": [
-                        "HubUI\\HubUIServiceProvider"
-                    ]
-                }
-            },
-            "autoload": {
-                "psr-4": {
-                    "HubUI\\": "src/"
-                }
-            },
-            "license": [
-                "MIT"
-            ],
-            "authors": [
-                {
-                    "name": "Bruno Falcao",
-                    "email": "bruno.falcao@laraning.com"
-                }
-            ],
-            "description": "Reusable Laravel admin panel UI components with dark theme, Alpine.js, and Tailwind CSS",
-            "keywords": [
-                "admin",
-                "alpinejs",
-                "blade",
-                "components",
-                "dark-theme",
-                "dashboard",
-                "laravel",
-                "tailwindcss",
-                "ui"
-            ],
-            "transport-options": {
-                "symlink": true,
-                "relative": true
-            }
         },
         {
             "name": "brunocfalcao/laravel-helpers",
@@ -11631,7 +11580,6 @@
     "minimum-stability": "dev",
     "stability-flags": {
         "brunocfalcao/ai-bridge": 20,
-        "brunocfalcao/hub-ui": 20,
         "kraitebot/core": 20
     },
     "prefer-stable": true,

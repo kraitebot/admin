@@ -7,11 +7,6 @@ export default {
         './vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php',
         './storage/framework/views/*.php',
         './resources/views/**/*.blade.php',
-        // Local dev: hub-ui lives in ~/Herd/packages/ (path-symlinked).
-        // Production: hub-ui is installed via composer to ./vendor/.
-        // Both globs are listed; Tailwind silently skips non-existent paths.
-        '../packages/brunocfalcao/hub-ui/resources/views/**/*.blade.php',
-        './vendor/brunocfalcao/hub-ui/resources/views/**/*.blade.php',
     ],
 
     theme: {
