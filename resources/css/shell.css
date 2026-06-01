@@ -1,0 +1,150 @@
+/* =========================================================================
+   KRAITE ADMIN — shell.css (post-Tailwind-migration residue)
+
+   The application + design-system UI is now styled with Tailwind utilities
+   (mapped to the design tokens in app/tw-config.js). This file retains ONLY
+   what can't cleanly live as a utility:
+
+     1. The reset + the radius/density CSS variables that tw-config.js reads
+        (rounded-surface/-control/-chip resolve to var(--ar-*)).
+     2. The `.card` component base — `.card--alert` re-assigns surface tokens
+        (--bg-elev-1 etc.) so descendant `bg-surface`/`text-fg-*` utilities
+        inherit the alert-red palette automatically; that var-cascade trick
+        has no utility equivalent.
+     3. Parent-attribute-scoped theme rules: `.content[data-theme="dark"] …`
+        re-tints card/tile/ptile borders and lifts muted-text contrast. These
+        depend on the content wrapper's OWN [data-theme], so they can't be a
+        utility that keys off the (always-dark) <html>.
+   Everything else (chrome, components, responsive breakpoints) is inline.
+   ========================================================================= */
+
+:root {
+  --ar-surface: 14px;
+  --ar-control: 10px;
+  --ar-chip: 999px;
+}
+
+* { box-sizing: border-box; }
+/* Tailwind Preflight is OFF (to preserve colors_and_type.css base typography),
+   so restore just its border reset — otherwise `border`/`border-b` utilities set
+   a width with no style and collapse to 0 (invisible), and <button>/<input>
+   fall back to the UA "outset" border. This makes every border utility a clean
+   1px solid line in the token border color unless a color utility overrides. */
+*, ::before, ::after { border-width: 0; border-style: solid; border-color: var(--border); }
+html, body { margin: 0; padding: 0; height: 100%; }
+body { background: var(--black); overflow: hidden; }
+
+/* =========================================================================
+   CARD — base surface + stateful borders (var-reassigning alert/warn)
+   ========================================================================= */
+.card {
+  background: var(--bg-elev-1);
+  border: 1px solid var(--border);
+  border-radius: var(--ar-surface);
+  overflow: hidden;
+}
+/* fault state: invert the whole card to a deep-red alert surface. Descendant
+   utilities that read these vars (bg-surface, text-fg-*, border-line) follow. */
+.card--alert {
+  border: 2px solid var(--danger);
+  --bg-elev-1: #260808;
+  --fg-1: #ffe4e4;
+  --fg-2: #ffd2d2;
+  --fg-3: #f0a8a8;
+  --fg-mute: #cf8c8c;
+  --border: #511414;
+  --border-soft: #471111;
+  --bg-elev-3: #380e0e;
+  --bg-hover: #3a1010;
+}
+.card--alert .srv.is-down { background: rgba(255,90,90,0.12); }
+.card--warn { border: 2px solid var(--warn); }
+.srv.is-down { background: var(--pnl-down-bg); }
+
+/* KPI tiles: token-reassignment invert (like .card--alert) so all descendant
+   utilities follow. DARK content → bright white tiles; LIGHT content → vivid
+   green hero tiles (value/delta/sparkline recolor to white). */
+.content[data-theme="dark"] .kpi-invert {
+  --bg-elev-1: #ffffff;
+  --bg-elev-3: #f4f4f0;
+  --fg-1: #0a0c0e;
+  --fg-2: #1d2228;
+  --fg-3: #4a525c;
+  --fg-mute: #6e7680;
+  --border: #e2e0da;
+  --border-strong: #c8c6c0;
+  --accent: #00a35e;
+  --pnl-up-bg: #e0f5eb;
+  --pnl-up-fg: #008a4f;
+  --pnl-down-bg: #fce4e4;
+  --pnl-down-fg: #d12020;
+}
+.content[data-theme="light"] .kpi-invert {
+  --bg-elev-1: #00a35e;
+  --bg-elev-3: #008a4f;
+  --fg-1: #ffffff;
+  --fg-2: #eafff4;
+  --fg-3: #c4ecd8;
+  --fg-mute: #aee3ca;
+  --border: #00a35e;
+  --border-strong: #11b873;
+  --accent: #ffffff;
+  --pnl-up-bg: rgba(255,255,255,0.18);
+  --pnl-up-fg: #ffffff;
+  --pnl-down-bg: rgba(255,255,255,0.18);
+  --pnl-down-fg: #ffe1e1;
+}
+
+/* =========================================================================
+   CONTENT — carries its own [data-theme]; re-tint borders + lift contrast.
+   (chrome <html> is always dark, so these must scope to .content directly.)
+   ========================================================================= */
+.content[data-theme="dark"] {
+  --fg-3: #aab1ba;
+  --fg-mute: #828b95;
+  /* deeper canvas + clearly-raised surfaces = real value separation so cards
+     stop melting into the background. */
+  --bg: #0a0e12;
+  --bg-elev-1: #1d242d;
+  --bg-elev-3: #283139;
+  --bg-hover: #283139;
+  /* progressive canvas: faint brand-green glow up top (where content meets the
+     chrome) fading into a deeper slate toward the bottom. Pinned to the
+     viewport (default bg-attachment), so it stays put while content scrolls. */
+  background-image:
+    radial-gradient(90% 90% at 0% 0%, color-mix(in srgb, var(--accent) 11%, transparent), transparent 50%),
+    linear-gradient(145deg, #151d26 0%, #0a0e12 58%);
+}
+.content[data-theme="light"] {
+  --fg-3: #3a414b;
+  --fg-mute: #565d67;
+}
+/* dark theme: cards/tiles/ptiles get a green border + a faint top inset
+   highlight so they read as raised panels against the deep canvas. */
+.content[data-theme="dark"] .card,
+.content[data-theme="dark"] .tile,
+.content[data-theme="dark"] .ptile {
+  border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 10px rgba(0,0,0,0.35);
+}
+.content[data-theme="dark"] .card:hover,
+.content[data-theme="dark"] .tile:hover,
+.content[data-theme="dark"] .ptile:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+}
+/* directional tile borders: green for longs, red for shorts — both themes +
+   hover. Placed AFTER the generic .ptile rule so equal-specificity selectors
+   win by source order; direction also wins over WAP'd status. */
+.ptile--long  { border-color: color-mix(in srgb, var(--pnl-up-fg) 34%, transparent); }
+.ptile--short { border-color: color-mix(in srgb, var(--pnl-down-fg) 36%, transparent); }
+.ptile--long:hover  { border-color: color-mix(in srgb, var(--pnl-up-fg) 55%, transparent); }
+.ptile--short:hover { border-color: color-mix(in srgb, var(--pnl-down-fg) 58%, transparent); }
+.content[data-theme="dark"] .ptile--long  { border-color: color-mix(in srgb, var(--pnl-up-fg) 30%, transparent); }
+.content[data-theme="dark"] .ptile--short { border-color: color-mix(in srgb, var(--pnl-down-fg) 34%, transparent); }
+.content[data-theme="dark"] .ptile--long:hover  { border-color: color-mix(in srgb, var(--pnl-up-fg) 52%, transparent); }
+.content[data-theme="dark"] .ptile--short:hover { border-color: color-mix(in srgb, var(--pnl-down-fg) 56%, transparent); }
+/* alert/warn cards keep their 2px semantic border in dark theme */
+.content[data-theme="dark"] .card.card--alert,
+.content[data-theme="dark"] .card.card--alert:hover { border: 2px solid var(--danger); }
+.content[data-theme="dark"] .card.card--warn,
+.content[data-theme="dark"] .card.card--warn:hover { border: 2px solid var(--warn); }
