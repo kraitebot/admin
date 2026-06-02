@@ -27,7 +27,8 @@ Homestead.yaml
 Thumbs.db
 
 # Claude Code / Ralph runtime state (local only)
-/.claude/
+/.claude/*
+!/.claude/commands/
 /.ralph/
 /.agents/
 .ralphrc

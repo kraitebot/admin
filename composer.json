@@ -12,7 +12,6 @@
         "php": "^8.4",
         "brunocfalcao/ai-bridge": "@dev",
         "brunocfalcao/blade-feather-icons": "^6.0",
-        "brunocfalcao/hub-ui": "@dev",
         "kraitebot/core": "@dev",
         "laravel/framework": "^12.0|^13.0",
         "laravel/horizon": "^5.47",
@@ -107,13 +106,6 @@
         {
             "type": "path",
             "url": "../packages/brunocfalcao/ai-bridge",
-            "options": {
-                "symlink": true
-            }
-        },
-        {
-            "type": "path",
-            "url": "../packages/brunocfalcao/hub-ui",
             "options": {
                 "symlink": true
             }

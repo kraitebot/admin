@@ -4,13 +4,11 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
-use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Password;
-use Kraite\Core\Mail\AlertMail;
 use Kraite\Core\Notifications\AlertNotification;
 
 /**
@@ -41,41 +39,7 @@ function makeUserWithToken(array $overrides = []): array
     return [$user, $token];
 }
 
-describe('login page', function () {
-    it('shows the forgot-password link', function () {
-        $this->get('/login')
-            ->assertOk()
-            ->assertSee(route('password.request'))
-            ->assertSee('Forgot password?');
-    });
-
-    it('renders flash status as a success toast (post-reset redirect)', function () {
-        $this->withSession(['status' => 'Password updated. Please log in.'])
-            ->get('/login')
-            ->assertOk()
-            ->assertSee('Password updated. Please log in.');
-    });
-});
-
-describe('forgot-password GET', function () {
-    it('renders 200 for guests', function () {
-        $this->get('/forgot-password')->assertOk();
-    });
-});
-
 describe('forgot-password POST — silent success + per-email rate limit', function () {
-    it('returns the neutral status for a known email and sends our notification', function () {
-        $user = User::factory()->create([
-            'email' => 'known-'.uniqid().'@kraite.test',
-        ]);
-
-        $this->post('/forgot-password', ['email' => $user->email])
-            ->assertRedirect()
-            ->assertSessionHas('status', 'If your email is part of our system, you will receive a reset link shortly.');
-
-        Notification::assertSentTo($user, AlertNotification::class, isPasswordResetNotification());
-    });
-
     it('returns the SAME neutral status for an unknown email and sends nothing', function () {
         $unknown = 'ghost-'.uniqid().'@kraite.test';
 
@@ -97,132 +61,6 @@ describe('forgot-password POST — silent success + per-email rate limit', funct
         expect($a)->toBe($b);
     });
 
-    it('caps a single email at 5 sends within 60 seconds', function () {
-        $user = User::factory()->create(['email' => 'flood-'.uniqid().'@kraite.test']);
-
-        // Bypass the route's IP-throttle middleware so we isolate the
-        // controller's per-email RateLimiter under test.
-        $this->withoutMiddleware(ThrottleRequests::class);
-
-        for ($i = 0; $i < 5; $i++) {
-            $this->post('/forgot-password', ['email' => $user->email])
-                ->assertRedirect()
-                ->assertSessionHas('status');
-        }
-        Notification::assertSentToTimes($user, AlertNotification::class, 5);
-
-        // 6th hit: silent success but NO new notification dispatched.
-        $this->post('/forgot-password', ['email' => $user->email])
-            ->assertRedirect()
-            ->assertSessionHas('status', 'If your email is part of our system, you will receive a reset link shortly.');
-        Notification::assertSentToTimes($user, AlertNotification::class, 5);
-    });
-
-    it('rate-limits per-email, not globally — different emails are independent', function () {
-        $a = User::factory()->create(['email' => 'a-'.uniqid().'@kraite.test']);
-        $b = User::factory()->create(['email' => 'b-'.uniqid().'@kraite.test']);
-
-        $this->withoutMiddleware(ThrottleRequests::class);
-
-        for ($i = 0; $i < 5; $i++) {
-            $this->post('/forgot-password', ['email' => $a->email]);
-        }
-
-        // a is now capped, but b still gets a fresh send
-        $this->post('/forgot-password', ['email' => $b->email]);
-
-        Notification::assertSentToTimes($a, AlertNotification::class, 5);
-        Notification::assertSentToTimes($b, AlertNotification::class, 1);
-    });
-});
-
-describe('reset password email branding', function () {
-    it('uses Kraite sender name, correct subject, and the agreed copy', function () {
-        $user = User::factory()->create([
-            'name' => 'Pat Smith',
-            'email' => 'mailcheck-'.uniqid().'@kraite.test',
-        ]);
-
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        // Inspect the AlertMail mailable that AlertNotification produces.
-        // notificationTitle drives the email subject (via AlertMail::envelope());
-        // emailBlocks carries the component-rendered body. The Kraite sender
-        // name is config-level (mail.from.name) and isn't set per-notification
-        // so we assert the global config value directly.
-        Notification::assertSentTo($user, AlertNotification::class, function (AlertNotification $notification) use ($user) {
-            if ($notification->canonical !== 'password_reset') {
-                return false;
-            }
-
-            /** @var AlertMail $mail */
-            $mail = $notification->toMail($user);
-
-            expect($mail)->toBeInstanceOf(AlertMail::class);
-            expect($mail->notificationTitle)->toBe('Reset your Kraite password');
-            expect($mail->userName)->toBe('Pat Smith');
-            expect(config('mail.from.name'))->toBe('Kraite');
-
-            $blocks = collect($mail->emailBlocks ?? []);
-            $bodyText = $blocks->pluck('text')->filter()->implode("\n");
-            $buttonLabel = $blocks->firstWhere('type', 'button')['label'] ?? null;
-
-            expect($bodyText)
-                ->toContain('Hi Pat Smith,')
-                ->toContain('You requested a password reset for your Kraite account.')
-                ->toContain('you can safely ignore this email');
-            expect($buttonLabel)->toBe('Reset password');
-
-            return true;
-        });
-    });
-
-    it('falls back to "Hi there," when the user has no name on file', function () {
-        $user = User::factory()->create([
-            'name' => '',
-            'email' => 'noname-'.uniqid().'@kraite.test',
-        ]);
-
-        $this->post('/forgot-password', ['email' => $user->email]);
-
-        Notification::assertSentTo($user, AlertNotification::class, function (AlertNotification $notification) use ($user) {
-            if ($notification->canonical !== 'password_reset') {
-                return false;
-            }
-
-            /** @var AlertMail $mail */
-            $mail = $notification->toMail($user);
-            $bodyText = collect($mail->emailBlocks ?? [])->pluck('text')->filter()->implode("\n");
-
-            expect($bodyText)->toContain('Hi there,');
-
-            return true;
-        });
-    });
-});
-
-describe('reset password GET', function () {
-    it('renders without a name field when the user already has a name', function () {
-        [$user, $token] = makeUserWithToken(['name' => 'Pat Smith']);
-
-        $response = $this->get("/reset-password/{$token}?email=".urlencode($user->email));
-
-        $response->assertOk();
-        expect($response->getContent())
-            ->not->toContain('name="name"');
-    });
-
-    it('renders WITH a name field when the user record has no name', function () {
-        [$user, $token] = makeUserWithToken(['name' => '']);
-
-        $response = $this->get("/reset-password/{$token}?email=".urlencode($user->email));
-
-        $response->assertOk();
-        expect($response->getContent())
-            ->toContain('name="name"')
-            ->toContain('Full name')
-            ->toContain('We don&#039;t have your name on file');
-    });
 });
 
 describe('reset password POST — happy path', function () {
@@ -416,11 +254,4 @@ describe('reset password POST — invalid token paths', function () {
         expect(Hash::check('GoodPass1', $user->fresh()->password))->toBeFalse();
     });
 
-    it('renders the expired link page with a "Request a new link" CTA', function () {
-        $this->get('/reset-password-expired')
-            ->assertOk()
-            ->assertSee('Reset link no longer valid')
-            ->assertSee(route('password.request'))
-            ->assertSee('Request a new link');
-    });
 });

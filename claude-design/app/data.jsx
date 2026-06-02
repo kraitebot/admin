@@ -11,19 +11,29 @@ const REGIMES = {
 };
 
 // regime pills render fine on light content too — use semantic light tones there.
+const PILL_CLS = "inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap";
 const RegimePill = ({ regime, score, pulse }) => {
   const r = REGIMES[regime] || REGIMES.CALM;
   return (
-    <span className="pill" style={{
+    <span className={PILL_CLS} style={{
       background: 'color-mix(in srgb, ' + r.color + ' 12%, transparent)',
       borderColor: 'color-mix(in srgb, ' + r.color + ' 38%, transparent)',
       color: r.color,
     }}>
-      <span className="pill__dot" style={{ background: r.color, animation: pulse ? 'kr-pulse 1.4s ease-in-out infinite' : undefined }}/>
-      {regime}{score != null && <span style={{ opacity: 0.7, marginLeft: 2 }}>{score.toFixed(2)}</span>}
+      <span className={"w-2 h-2 rounded-chip" + (pulse ? " animate-pulse-soft" : "")} style={{ background: r.color }}/>
+      {regime}{score != null && <span className="opacity-70 ml-0.5">{score.toFixed(2)}</span>}
     </span>
   );
 };
+
+// shared inline-data class strings (feed + table cells)
+const SYM  = "font-mono font-semibold text-fg-1";
+const MONO = "font-mono tabular-nums text-fg-1";
+const MUP  = "font-mono tabular-nums text-pnlup";
+const MDN  = "font-mono tabular-nums text-pnldown";
+const TAG_BASE = "align-middle inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-px px-[5px] before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90";
+const TAG_L = TAG_BASE + " bg-pnlup-bg text-pnlup";
+const TAG_S = TAG_BASE + " bg-pnldown-bg text-pnldown";
 
 // ---- compact sparkline ----
 const Sparkline = ({ data, up = true, w = 120, h = 34, fill = true }) => {
@@ -38,7 +48,7 @@ const Sparkline = ({ data, up = true, w = 120, h = 34, fill = true }) => {
   const col = up ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)';
   const id = 'sp' + Math.random().toString(36).slice(2, 7);
   return (
-    <svg className="spark" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" width={w} height={h}>
+    <svg className="block w-full" viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" width={w} height={h}>
       {fill && <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor={col} stopOpacity="0.18"/>
         <stop offset="100%" stopColor={col} stopOpacity="0"/>
@@ -53,7 +63,7 @@ const Sparkline = ({ data, up = true, w = 120, h = 34, fill = true }) => {
 const Delta = ({ value, suffix = '%', showArrow = true }) => {
   const up = value >= 0;
   return (
-    <span className={'tile__delta ' + (up ? 'pnl-up' : 'pnl-down')}>
+    <span className={"font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip " + (up ? "text-pnlup bg-pnlup-bg" : "text-pnldown bg-pnldown-bg")}>
       {showArrow && <UIcon name={up ? 'arrowUp' : 'arrowDown'} size={12} style={{ width: 11, height: 11 }}/>}
       {up ? '+' : ''}{value.toFixed(2)}{suffix}
     </span>
@@ -117,20 +127,20 @@ const ACTIVITY_CATS = [
 ];
 
 const ACTIVITY = [
-  { kind: 'OPEN',    cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '2m',  el: (<>Opened <span className="side side--long" style={{padding:'1px 5px'}}>LONG</span> <span className="sym">BTC-PERP</span> <span className="mono">0.850</span> @ <span className="mono">67,420.00</span></>) },
-  { kind: 'REDUCE',  cat: 'trading', dot: 'var(--fg-mute)',     time: '14m', el: (<>Reduced <span className="sym">SOL-PERP</span> short by <span className="mono">40.0</span> @ <span className="mono">162.10</span> · realized <span className="mono pnl-up">+$252.00</span></>) },
-  { kind: 'REGIME',  cat: 'risk',    dot: 'var(--bsi-watch)',   time: '38m', el: (<>BSCS regime escalated <span className="mono">CALM → WATCH</span> at score <span className="mono">0.42</span></>) },
-  { kind: 'ALERT',   cat: 'system',  dot: 'var(--danger)',      time: '52m', el: (<>Exchange account <span className="sym">OKX</span> (arb) lost connectivity — bot management paused</>) },
-  { kind: 'CLOSE',   cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '1h',  el: (<>Closed <span className="sym">LINK-PERP</span> long <span className="mono pnl-up">+$312.40</span> @ <span className="mono">18.92</span></>) },
-  { kind: 'SIZING',  cat: 'risk',    dot: 'var(--bsi-watch)',   time: '1h',  el: (<>Position sizing tightened — max notional <span className="mono">4.0× → 3.0×</span></>) },
-  { kind: 'FUNDING', cat: 'funding', dot: 'var(--fg-mute)',     time: '2h',  el: (<>Funding collected <span className="mono pnl-up">+$84.20</span> across <span className="mono">4</span> positions</>) },
-  { kind: 'LOGIN',   cat: 'system',  dot: 'var(--fg-mute)',     time: '2h',  el: (<>New sign-in from <span className="mono">Frankfurt, DE</span> · session <span className="mono">a1f9…</span></>) },
-  { kind: 'FUNDING', cat: 'funding', dot: 'var(--fg-mute)',     time: '3h',  el: (<>Funding paid <span className="mono pnl-down">-$31.50</span> on <span className="sym">SOL-PERP</span> short</>) },
-  { kind: 'CLOSE',   cat: 'trading', dot: 'var(--pnl-down-fg)', time: '3h',  el: (<>Closed <span className="sym">APT-PERP</span> short <span className="mono pnl-down">-$96.10</span> @ <span className="mono">9.14</span> · stop hit</>) },
-  { kind: 'OPEN',    cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '4h',  el: (<>Opened <span className="side side--short" style={{padding:'1px 5px'}}>SHORT</span> <span className="sym">AVAX-PERP</span> <span className="mono">95.0</span> @ <span className="mono">38.20</span></>) },
-  { kind: 'REGIME',  cat: 'risk',    dot: 'var(--fg-mute)',     time: '5h',  el: (<>BSCS regime eased <span className="mono">WATCH → CALM</span> at score <span className="mono">0.31</span></>) },
-  { kind: 'FUNDING', cat: 'funding', dot: 'var(--pnl-up-fg)',   time: '6h',  el: (<>Funding collected <span className="mono pnl-up">+$61.80</span> across <span className="mono">5</span> positions</>) },
-  { kind: 'SYNC',    cat: 'system',  dot: 'var(--fg-mute)',     time: '6h',  el: (<>Account <span className="sym">Binance</span> balances synced · <span className="mono">$184,210.08</span></>) },
+  { kind: 'OPEN',    cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '2m',  el: (<>Opened <span className={TAG_L}>LONG</span> <span className={SYM}>BTC-PERP</span> <span className={MONO}>0.850</span> @ <span className={MONO}>67,420.00</span></>) },
+  { kind: 'REDUCE',  cat: 'trading', dot: 'var(--fg-mute)',     time: '14m', el: (<>Reduced <span className={SYM}>SOL-PERP</span> short by <span className={MONO}>40.0</span> @ <span className={MONO}>162.10</span> · realized <span className={MUP}>+$252.00</span></>) },
+  { kind: 'REGIME',  cat: 'risk',    dot: 'var(--bsi-watch)',   time: '38m', el: (<>BSCS regime escalated <span className={MONO}>CALM → WATCH</span> at score <span className={MONO}>0.42</span></>) },
+  { kind: 'ALERT',   cat: 'system',  dot: 'var(--danger)',      time: '52m', el: (<>Exchange account <span className={SYM}>OKX</span> (arb) lost connectivity — bot management paused</>) },
+  { kind: 'CLOSE',   cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '1h',  el: (<>Closed <span className={SYM}>LINK-PERP</span> long <span className={MUP}>+$312.40</span> @ <span className={MONO}>18.92</span></>) },
+  { kind: 'SIZING',  cat: 'risk',    dot: 'var(--bsi-watch)',   time: '1h',  el: (<>Position sizing tightened — max notional <span className={MONO}>4.0× → 3.0×</span></>) },
+  { kind: 'FUNDING', cat: 'funding', dot: 'var(--fg-mute)',     time: '2h',  el: (<>Funding collected <span className={MUP}>+$84.20</span> across <span className={MONO}>4</span> positions</>) },
+  { kind: 'LOGIN',   cat: 'system',  dot: 'var(--fg-mute)',     time: '2h',  el: (<>New sign-in from <span className={MONO}>Frankfurt, DE</span> · session <span className={MONO}>a1f9…</span></>) },
+  { kind: 'FUNDING', cat: 'funding', dot: 'var(--fg-mute)',     time: '3h',  el: (<>Funding paid <span className={MDN}>-$31.50</span> on <span className={SYM}>SOL-PERP</span> short</>) },
+  { kind: 'CLOSE',   cat: 'trading', dot: 'var(--pnl-down-fg)', time: '3h',  el: (<>Closed <span className={SYM}>APT-PERP</span> short <span className={MDN}>-$96.10</span> @ <span className={MONO}>9.14</span> · stop hit</>) },
+  { kind: 'OPEN',    cat: 'trading', dot: 'var(--pnl-up-fg)',   time: '4h',  el: (<>Opened <span className={TAG_S}>SHORT</span> <span className={SYM}>AVAX-PERP</span> <span className={MONO}>95.0</span> @ <span className={MONO}>38.20</span></>) },
+  { kind: 'REGIME',  cat: 'risk',    dot: 'var(--fg-mute)',     time: '5h',  el: (<>BSCS regime eased <span className={MONO}>WATCH → CALM</span> at score <span className={MONO}>0.31</span></>) },
+  { kind: 'FUNDING', cat: 'funding', dot: 'var(--pnl-up-fg)',   time: '6h',  el: (<>Funding collected <span className={MUP}>+$61.80</span> across <span className={MONO}>5</span> positions</>) },
+  { kind: 'SYNC',    cat: 'system',  dot: 'var(--fg-mute)',     time: '6h',  el: (<>Account <span className={SYM}>Binance</span> balances synced · <span className={MONO}>$184,210.08</span></>) },
 ];
 
 Object.assign(window, { REGIMES, RegimePill, Sparkline, Delta, KPIS, POSITIONS, ACCOUNTS, SERVERS, ACTIVITY, ACTIVITY_CATS });

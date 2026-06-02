@@ -1,712 +1,556 @@
-<x-app-layout :activeHighlight="'dashboard'">
-    <div x-data="userDashboard()" x-init="init()">
+@php
+    // ============================================================
+    // MOCK DATA — first design-fidelity port. Wire to backend later.
+    // ============================================================
+    $regime = 'ELEVATED';
+    $regimeScores = ['CALM' => 0.31, 'WATCH' => 0.42, 'ELEVATED' => 0.63, 'CASCADE' => 0.82, 'BLACK SWAN' => 0.94];
+    $score = $regimeScores[$regime] ?? 0.42;
+    $suspended = in_array($regime, ['ELEVATED', 'CASCADE', 'BLACK SWAN'], true);
+    $untilStr = gmdate('M j, H:i', time() + 24 * 3600) . ' UTC';
 
-        <x-hub-ui::page-header
-            title="Dashboard"
-            description="Open positions across the lifecycle."
-        />
+    $regimes = [
+        'CALM'        => ['color' => 'var(--bsi-calm)'],
+        'WATCH'       => ['color' => 'var(--bsi-watch)'],
+        'ELEVATED'    => ['color' => 'var(--bsi-cascade)'],
+        'CASCADE'     => ['color' => 'var(--bsi-cascade)'],
+        'BLACK SWAN'  => ['color' => 'var(--bsi-blackswan)'],
+    ];
+    $r = $regimes[$regime] ?? $regimes['CALM'];
 
-        {{-- Account selector --}}
-        <div x-show="isAdmin || accounts.length > 1" x-cloak class="mb-5 flex items-end gap-4 flex-wrap">
-            <div class="flex-1 min-w-0 sm:min-w-[280px] max-w-md w-full">
-                <label class="block text-[10px] font-semibold uppercase tracking-[0.12em] ui-text-subtle mb-2">Account</label>
-                <x-hub-ui::select
-                    name="account_id"
-                    x-model="selectedAccountId"
-                    @change="fetchData()"
-                    class="w-full"
-                >
-                    <option value="">Select account…</option>
-                    <template x-for="acc in accounts" :key="acc.id">
-                        <option :value="acc.id" x-text="optionLabel(acc)"></option>
-                    </template>
-                </x-hub-ui::select>
+    $kpis = [
+        ['key' => 'pv',  'label' => 'Portfolio value', 'icon' => 'credit-card', 'value' => '$284,910.42', 'delta' => 1.84,  'spark' => [262,264,261,268,270,267,272,275,273,279,278,281,280,285], 'up' => true],
+        ['key' => 'pnl', 'label' => "P&L — today",     'icon' => 'zap',         'value' => '+$5,142.18',  'delta' => 1.84,  'spark' => [0,0.4,0.2,0.9,0.7,1.3,1.1,1.0,1.6,1.4,1.9,1.7,2.1,1.84], 'up' => true],
+        ['key' => 'p30', 'label' => 'P&L — 30 day',    'icon' => 'arrow-up-right', 'value' => '+$23,418.06', 'delta' => 8.96, 'spark' => [0,2,1.5,3,4,3.6,5,4.7,6,5.8,7,6.6,8,8.96], 'up' => true],
+        ['key' => 'op',  'label' => 'Open positions',  'icon' => 'layers',      'value' => '10', 'delta' => null, 'spark' => null, 'up' => true],
+    ];
+
+    $positions = [
+        ['sym' => 'BTC',  'name' => 'Bitcoin',   'cmcId' => 1,     'color' => '#f7931a', 'osc' => ['up','up','down','up'],    'side' => 'long',  'lev' => '3×', 'eta' => '2h from now',  'path' => 4.3, 'limit' => 16.7, 'filled' => '1 / 4', 'fillN' => 1, 'trackTp' => 26, 'trackPx' => 35, 'open' => '67,420.00', 'tp' => '70,250.00', 'next' => '66,310.00'],
+        ['sym' => 'ETH',  'name' => 'Ethereum',  'cmcId' => 1027,  'color' => '#627eea', 'osc' => ['idle','idle','idle','idle'], 'status' => 'opening', 'side' => 'long',  'lev' => '3×', 'eta' => '1h from now',  'path' => 3.4, 'limit' => 13.1, 'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 13, 'open' => '3,512.00',  'tp' => '3,624.00',  'next' => '3,448.00'],
+        ['sym' => 'SOL',  'name' => 'Solana',    'cmcId' => 5426,  'color' => '#9945ff', 'osc' => ['down','up','up','up'],    'status' => 'waped',   'side' => 'short', 'lev' => '2×', 'eta' => '40m from now', 'path' => 2.2, 'limit' => 8.6,  'filled' => '2 / 4', 'fillN' => 2, 'trackTp' => 44, 'trackPx' => 54, 'open' => '168.40',    'tp' => '162.10',    'next' => '171.20'],
+        ['sym' => 'ARB',  'name' => 'Arbitrum',  'cmcId' => 11841, 'color' => '#28a0f0', 'osc' => ['down','down','up','down'], 'side' => 'long',  'lev' => '4×', 'eta' => '3h from now',  'path' => 1.9, 'limit' => 7.2,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 20, 'open' => '0.8920',    'tp' => '0.9180',    'next' => '0.8710'],
+        ['sym' => 'AVAX', 'name' => 'Avalanche', 'cmcId' => 5805,  'color' => '#e84142', 'osc' => ['up','down','down','up'],  'side' => 'short', 'lev' => '2×', 'eta' => '1h from now',  'path' => 1.5, 'limit' => 6.0,  'filled' => '1 / 4', 'fillN' => 1, 'trackTp' => 26, 'trackPx' => 37, 'open' => '38.20',     'tp' => '36.40',     'next' => '39.05'],
+        ['sym' => 'DOGE', 'name' => 'Dogecoin',  'cmcId' => 74,    'color' => '#c2a633', 'osc' => ['up','up','down','up'],    'side' => 'long',  'lev' => '3×', 'eta' => '5h from now',  'path' => 1.2, 'limit' => 4.8,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 16, 'open' => '0.16200',   'tp' => '0.16850',   'next' => '0.15900'],
+        ['sym' => 'LINK', 'name' => 'Chainlink', 'cmcId' => 1975,  'color' => '#2a5ada', 'osc' => ['up','down','up','up'],    'side' => 'long',  'lev' => '3×', 'eta' => '2h from now',  'path' => 2.7, 'limit' => 9.4,  'filled' => '1 / 4', 'fillN' => 1, 'trackTp' => 26, 'trackPx' => 33, 'open' => '18.92',     'tp' => '20.10',     'next' => '18.20'],
+        ['sym' => 'OP',   'name' => 'Optimism',  'cmcId' => 11840, 'color' => '#ff0420', 'osc' => ['down','up','up','down'],  'side' => 'long',  'lev' => '4×', 'eta' => '4h from now',  'path' => 1.6, 'limit' => 6.4,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 19, 'open' => '2.480',     'tp' => '2.610',     'next' => '2.395'],
+        ['sym' => 'XRP',  'name' => 'XRP',       'cmcId' => 52,    'color' => '#23292f', 'osc' => ['down','down','up','down'], 'side' => 'short', 'lev' => '2×', 'eta' => '1h from now',  'path' => 2.0, 'limit' => 7.8,  'filled' => '2 / 4', 'fillN' => 2, 'trackTp' => 44, 'trackPx' => 53, 'open' => '0.5420',    'tp' => '0.5180',    'next' => '0.5560'],
+        ['sym' => 'INJ',  'name' => 'Injective', 'cmcId' => 7226,  'color' => '#00a3ff', 'osc' => ['up','down','down','up'],  'side' => 'short', 'lev' => '2×', 'eta' => '3h from now',  'path' => 1.1, 'limit' => 5.2,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 15, 'open' => '24.80',     'tp' => '23.40',     'next' => '25.50'],
+    ];
+
+    // Pagination preparation. PER = 6 positions per page. Chunked per filter
+    // so each filter (ALL/LONG/SHORT) gets its own page set; switching filter
+    // resets Alpine's page state back to 0.
+    $per = 6;
+    $longs  = array_values(array_filter($positions, fn ($p) => $p['side'] === 'long'));
+    $shorts = array_values(array_filter($positions, fn ($p) => $p['side'] === 'short'));
+    $chunksAll   = array_chunk($positions, $per);
+    $chunksLong  = array_chunk($longs,  $per);
+    $chunksShort = array_chunk($shorts, $per);
+    $countsByFilter = ['ALL' => count($chunksAll), 'LONG' => count($chunksLong), 'SHORT' => count($chunksShort)];
+
+    $servers = [
+        ['id' => 'kr-fra-01', 'region' => 'fra', 'state' => 'ok',   'latency' => '11ms'],
+        ['id' => 'kr-fra-02', 'region' => 'fra', 'state' => 'ok',   'latency' => '12ms'],
+        ['id' => 'kr-ldn-01', 'region' => 'ldn', 'state' => 'ok',   'latency' => '19ms'],
+        ['id' => 'kr-nyc-01', 'region' => 'nyc', 'state' => 'ok',   'latency' => '38ms'],
+        ['id' => 'kr-sgp-01', 'region' => 'sgp', 'state' => 'down', 'latency' => '—'],
+        ['id' => 'kr-sgp-02', 'region' => 'sgp', 'state' => 'ok',   'latency' => '54ms'],
+    ];
+    $downServers = array_filter($servers, fn($s) => $s['state'] === 'down');
+    $okServers = array_filter($servers, fn($s) => $s['state'] === 'ok');
+    $downCount = count($downServers);
+
+    $activityCats = [
+        ['id' => 'all',     'label' => 'All activity'],
+        ['id' => 'trading', 'label' => 'Trading'],
+        ['id' => 'risk',    'label' => 'Risk & regime'],
+        ['id' => 'funding', 'label' => 'Funding'],
+        ['id' => 'system',  'label' => 'System & alerts'],
+    ];
+
+    // activity items rendered as inline HTML so spans + classes preserve faithfully
+    $activity = [
+        ['kind' => 'OPEN',    'cat' => 'trading', 'dot' => 'var(--pnl-up-fg)', 'time' => '2m',  'html' => 'Opened <span class="align-middle inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-px px-[5px] bg-pnlup-bg text-pnlup before:content-[\'\'] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">LONG</span> <span class="font-mono font-semibold text-fg-1">BTC-PERP</span> <span class="font-mono tabular-nums text-fg-1">0.850</span> @ <span class="font-mono tabular-nums text-fg-1">67,420.00</span>'],
+        ['kind' => 'REDUCE',  'cat' => 'trading', 'dot' => 'var(--fg-mute)',   'time' => '14m', 'html' => 'Reduced <span class="font-mono font-semibold text-fg-1">SOL-PERP</span> short by <span class="font-mono tabular-nums text-fg-1">40.0</span> @ <span class="font-mono tabular-nums text-fg-1">162.10</span> · realized <span class="font-mono tabular-nums text-pnlup">+$252.00</span>'],
+        ['kind' => 'REGIME',  'cat' => 'risk',    'dot' => 'var(--bsi-watch)', 'time' => '38m', 'html' => 'BSCS regime escalated <span class="font-mono tabular-nums text-fg-1">CALM → WATCH</span> at score <span class="font-mono tabular-nums text-fg-1">0.42</span>'],
+        ['kind' => 'ALERT',   'cat' => 'system',  'dot' => 'var(--danger)',    'time' => '52m', 'html' => 'Exchange account <span class="font-mono font-semibold text-fg-1">OKX</span> (arb) lost connectivity — bot management paused'],
+        ['kind' => 'CLOSE',   'cat' => 'trading', 'dot' => 'var(--pnl-up-fg)', 'time' => '1h',  'html' => 'Closed <span class="font-mono font-semibold text-fg-1">LINK-PERP</span> long <span class="font-mono tabular-nums text-pnlup">+$312.40</span> @ <span class="font-mono tabular-nums text-fg-1">18.92</span>'],
+        ['kind' => 'SIZING',  'cat' => 'risk',    'dot' => 'var(--bsi-watch)', 'time' => '1h',  'html' => 'Position sizing tightened — max notional <span class="font-mono tabular-nums text-fg-1">4.0× → 3.0×</span>'],
+        ['kind' => 'FUNDING', 'cat' => 'funding', 'dot' => 'var(--fg-mute)',   'time' => '2h',  'html' => 'Funding collected <span class="font-mono tabular-nums text-pnlup">+$84.20</span> across <span class="font-mono tabular-nums text-fg-1">4</span> positions'],
+        ['kind' => 'LOGIN',   'cat' => 'system',  'dot' => 'var(--fg-mute)',   'time' => '2h',  'html' => 'New sign-in from <span class="font-mono tabular-nums text-fg-1">Frankfurt, DE</span> · session <span class="font-mono tabular-nums text-fg-1">a1f9…</span>'],
+        ['kind' => 'FUNDING', 'cat' => 'funding', 'dot' => 'var(--fg-mute)',   'time' => '3h',  'html' => 'Funding paid <span class="font-mono tabular-nums text-pnldown">-$31.50</span> on <span class="font-mono font-semibold text-fg-1">SOL-PERP</span> short'],
+        ['kind' => 'CLOSE',   'cat' => 'trading', 'dot' => 'var(--pnl-down-fg)','time' => '3h', 'html' => 'Closed <span class="font-mono font-semibold text-fg-1">APT-PERP</span> short <span class="font-mono tabular-nums text-pnldown">-$96.10</span> @ <span class="font-mono tabular-nums text-fg-1">9.14</span> · stop hit'],
+        ['kind' => 'OPEN',    'cat' => 'trading', 'dot' => 'var(--pnl-up-fg)', 'time' => '4h',  'html' => 'Opened <span class="align-middle inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-px px-[5px] bg-pnldown-bg text-pnldown before:content-[\'\'] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">SHORT</span> <span class="font-mono font-semibold text-fg-1">AVAX-PERP</span> <span class="font-mono tabular-nums text-fg-1">95.0</span> @ <span class="font-mono tabular-nums text-fg-1">38.20</span>'],
+    ];
+
+    $downAccount = ['ex' => 'OKX', 'tag' => 'arb', 'note' => 'last seen 4m ago'];
+
+    // Sparkline SVG path helper
+    $sparkPath = function (array $data, int $w = 84, int $h = 28) {
+        $min = min($data); $max = max($data); $rng = ($max - $min) ?: 1;
+        $n = count($data);
+        $pts = [];
+        foreach ($data as $i => $v) {
+            $x = ($i / ($n - 1)) * $w;
+            $y = $h - 3 - (($v - $min) / $rng) * ($h - 6);
+            $pts[] = [$x, $y];
+        }
+        $line = '';
+        foreach ($pts as $i => $p) {
+            $line .= ($i ? 'L' : 'M') . number_format($p[0], 1) . ' ' . number_format($p[1], 1) . ' ';
+        }
+        $area = trim($line) . " L{$w} {$h} L0 {$h} Z";
+        return ['line' => trim($line), 'area' => $area];
+    };
+@endphp
+
+<x-app-layout active="dashboard" :title="'Kraite — Dashboard'" :showBanner="true" :downAccount="$downAccount">
+
+    {{-- ===================== PAGE HEADER ===================== --}}
+    <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
+        <div>
+            <div class="font-mono text-[11px] font-medium tracking-[0.12em] uppercase text-fg-3 mb-2 flex items-center gap-2">
+                <x-feathericon-home class="w-[13px] h-[13px]" stroke-width="1.75"/>OVERVIEW
+            </div>
+            <h1 class="font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leading-[1.1] max-[640px]:text-[24px]">Dashboard</h1>
+            <div class="text-[13px] text-fg-3 mt-1.5">
+                Engine running autonomously · <span class="font-mono tabular-nums text-fg-2">10</span> open positions · last sync <span class="font-mono tabular-nums text-fg-2">3s</span> ago
             </div>
         </div>
-
-        {{-- Empty: no accounts --}}
-        <div x-show="accounts.length === 0" x-cloak>
-            <div class="ui-card p-8">
-                <div class="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
-                    <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-emerald-50 text-emerald-700">
-                        <x-feathericon-home class="h-7 w-7" />
-                    </div>
-                    <div>
-                        <h2 class="text-lg font-semibold ui-text">No accounts yet</h2>
-                        <p class="mt-1 text-sm ui-text-subtle">Create an account before positions can appear here.</p>
-                    </div>
-                    <a href="{{ route('accounts.edit') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-emerald-600 px-4 text-sm font-semibold text-white transition hover:bg-emerald-700">
-                        <x-feathericon-plus class="h-4 w-4" />
-                        <span>Open Accounts</span>
-                    </a>
+        <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
+            <div class="flex items-center gap-2.5 whitespace-nowrap">
+                <img class="w-[26px] h-[26px] rounded-full flex-shrink-0" src="https://s2.coinmarketcap.com/static/img/coins/64x64/1.png" alt="BTC"/>
+                <div class="flex flex-col leading-[1.15]">
+                    <span class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">Bitcoin · USDT</span>
+                    <span class="font-mono text-[15px] font-semibold text-fg-1 tabular-nums tracking-[-0.01em]">68,910.50</span>
+                </div>
+                <div class="flex gap-[3px] items-center">
+                    @foreach(['up','up','down','up'] as $d)
+                        <i class="block w-1.5 h-1.5 rounded-chip {{ $d === 'up' ? 'bg-pnlup' : 'bg-pnldown' }}"></i>
+                    @endforeach
                 </div>
             </div>
-        </div>
-
-        {{-- Loading --}}
-        <div x-show="loading && accounts.length > 0" x-cloak class="flex items-center justify-center py-20">
-            <x-hub-ui::spinner size="lg" />
-        </div>
-
-        {{-- No selection yet --}}
-        <div x-show="!loading && accounts.length > 0 && !selectedAccountId && (isAdmin || accounts.length > 1)" x-cloak>
-            <div class="ui-card p-8">
-                <div class="mx-auto flex max-w-xl flex-col items-center gap-4 text-center">
-                    <div class="flex h-14 w-14 items-center justify-center rounded-lg bg-slate-100 ui-text-muted">
-                        <x-feathericon-search class="h-7 w-7" />
-                    </div>
-                    <div>
-                        <h2 class="text-lg font-semibold ui-text">Pick an account</h2>
-                        <p class="mt-1 text-sm ui-text-subtle">Choose an account to see its current trading state.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- Compact account context. Keep it quiet: these are reference
-             signals, not the main content of the dashboard. --}}
-        <div x-show="!loading && selectedAccountId && positions.length > 0" x-cloak class="mb-4 flex flex-wrap items-center gap-2 text-xs">
-            <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
-                <x-feathericon-briefcase class="h-4 w-4 ui-text-muted" />
-                <span class="font-semibold ui-text" x-text="selectedAccount()?.exchange"></span>
-                <span class="ui-text-subtle" x-text="selectedAccount()?.name"></span>
+            <div class="w-px h-[22px] bg-line"></div>
+            {{-- Regime pill --}}
+            <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
+                  style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
+                <span class="w-2 h-2 rounded-chip" style="background: {{ $r['color'] }};"></span>
+                {{ $regime }}<span class="opacity-70 ml-0.5">{{ number_format($score, 2) }}</span>
             </span>
-
-            <span x-show="btc" class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
-                <span class="flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-orange-100">
-                    <template x-if="btc?.image">
-                        <img :src="btc.image" alt="BTC" class="h-full w-full object-cover" loading="lazy">
-                    </template>
-                </span>
-                <span class="ui-text-subtle">BTC</span>
-                <span class="font-mono font-semibold ui-text ui-tabular" x-text="btc ? '$' + formatPrice(btc.mark) : '—'"></span>
-            </span>
-
-            <span x-show="bscs" class="inline-flex h-9 items-center gap-2 rounded-lg border px-3 shadow-sm" :class="marketCheckClass()">
-                <x-feathericon-shield class="h-4 w-4" />
-                <span class="font-semibold" x-text="marketCheckLabel()"></span>
-            </span>
-
-            <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
-                <x-feathericon-activity class="h-4 w-4 ui-text-muted" />
-                <span class="ui-text-subtle">Open trades</span>
-                <span class="font-mono font-semibold ui-text ui-tabular" x-text="positions.length"></span>
-            </span>
-
-            <template x-if="metrics && !metrics.is_stub && metrics.balance !== null && metrics.balance !== undefined">
-                <span class="inline-flex h-9 items-center gap-2 rounded-lg border ui-border bg-white px-3 shadow-sm">
-                    <x-feathericon-dollar-sign class="h-4 w-4 ui-text-muted" />
-                    <span class="ui-text-subtle">Balance</span>
-                    <span class="font-mono font-semibold ui-text ui-tabular" x-text="'$' + formatPrice(metrics.balance)"></span>
-                </span>
-            </template>
+            <div class="w-px h-[22px] bg-line"></div>
+            <button type="button" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
+                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
+            </button>
+            <button type="button" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] border-transparent bg-accent text-accent-on hover:bg-accent-hover">
+                <x-feathericon-activity class="w-[15px] h-[15px]" stroke-width="1.75"/>View projections
+            </button>
         </div>
-
-        {{-- Empty: account selected, no open positions --}}
-        <div x-show="!loading && selectedAccountId && positions.length === 0" x-cloak class="mb-5">
-            <div class="ui-card overflow-hidden">
-                <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_360px]">
-                    <div class="p-7 sm:p-8">
-                        <div class="max-w-3xl">
-                            <div class="mb-6 flex items-center gap-3">
-                                <div
-                                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
-                                    :class="selectedAccount()?.disabled_reason ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700'"
-                                >
-                                    <template x-if="selectedAccount()?.disabled_reason">
-                                        <x-feathericon-alert-triangle class="h-6 w-6" />
-                                    </template>
-                                    <template x-if="!selectedAccount()?.disabled_reason">
-                                        <x-feathericon-activity class="h-6 w-6" />
-                                    </template>
-                                </div>
-                                <div class="min-w-0">
-                                    <p class="text-[10px] font-semibold uppercase tracking-[0.14em] ui-text-subtle">Current account</p>
-                                    <p class="truncate text-sm font-semibold ui-text" x-text="selectedAccount()?.exchange + ' · ' + selectedAccount()?.name"></p>
-                                </div>
-                            </div>
-
-                            <h2 class="text-2xl font-semibold leading-tight ui-text" x-text="selectedAccount()?.disabled_reason ? 'Trading is paused for this account' : 'No open trades right now'"></h2>
-                            <p class="mt-3 max-w-2xl text-sm leading-6 ui-text-subtle" x-text="selectedAccount()?.disabled_reason ? 'This account is set up, but Kraite will not open new trades until the exchange connection is fixed.' : 'Kraite is monitoring the market. When a trade opens, it will appear here with entry, risk, profit target, and progress.'"></p>
-
-                            <div x-show="selectedAccount()?.disabled_reason" x-cloak class="mt-5 flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">
-                                <x-feathericon-info class="mt-0.5 h-4 w-4 shrink-0" />
-                                <p>Allow the Kraite IP addresses in your exchange account, then test the connection again.</p>
-                            </div>
-
-                            <div class="mt-6 flex flex-wrap gap-2">
-                                <a href="{{ route('accounts.edit') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-semibold transition"
-                                   :class="selectedAccount()?.disabled_reason ? 'bg-red-700 text-white hover:bg-red-800' : 'bg-emerald-600 text-white hover:bg-emerald-700'"
-                                >
-                                    <x-feathericon-settings class="h-4 w-4" />
-                                    <span x-text="selectedAccount()?.disabled_reason ? 'Fix connection' : 'Manage account'"></span>
-                                </a>
-                                <a href="{{ route('accounts.positions') }}" wire:navigate class="inline-flex h-10 items-center justify-center gap-2 rounded-lg border ui-border bg-white px-4 text-sm font-semibold ui-text transition hover:bg-slate-50">
-                                    <x-feathericon-bar-chart-2 class="h-4 w-4" />
-                                    <span>Positions</span>
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="border-t ui-border bg-slate-50/60 p-6 lg:border-l lg:border-t-0">
-                        <div class="space-y-5">
-                            <div>
-                                <p class="text-[10px] font-semibold uppercase tracking-[0.14em] ui-text-subtle">Snapshot</p>
-                                <p class="mt-1 text-sm ui-text-subtle">Nothing is using margin on this account.</p>
-                            </div>
-
-                            <div class="space-y-3">
-                                <div class="flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-2 ui-text-subtle">
-                                        <x-feathericon-activity class="h-4 w-4" />
-                                        <span class="text-sm">Open trades</span>
-                                    </div>
-                                    <span class="font-mono text-sm font-semibold ui-text">0</span>
-                                </div>
-
-                                <div class="flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-2 ui-text-subtle">
-                                        <x-feathericon-shield class="h-4 w-4" />
-                                        <span class="text-sm">Trading</span>
-                                    </div>
-                                    <span
-                                        class="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                                        :class="selectedAccount()?.disabled_reason ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800'"
-                                    >
-                                        <span class="h-1.5 w-1.5 rounded-full" :class="selectedAccount()?.disabled_reason ? 'bg-red-500' : 'bg-emerald-500'"></span>
-                                        <span x-text="selectedAccount()?.disabled_reason ? 'Paused' : 'Ready'"></span>
-                                    </span>
-                                </div>
-
-                                <div x-show="btc" class="flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-2 ui-text-subtle">
-                                        <span class="flex h-4 w-4 items-center justify-center overflow-hidden rounded-full bg-orange-100">
-                                            <template x-if="btc?.image">
-                                                <img :src="btc.image" alt="BTC" class="h-full w-full object-cover" loading="lazy">
-                                            </template>
-                                        </span>
-                                        <span class="text-sm">BTC</span>
-                                    </div>
-                                    <span class="font-mono text-sm font-semibold ui-text ui-tabular" x-text="btc ? '$' + formatPrice(btc.mark) : '—'"></span>
-                                </div>
-
-                                <div x-show="bscs" class="flex items-center justify-between gap-4">
-                                    <div class="flex items-center gap-2 ui-text-subtle">
-                                        <x-feathericon-shield class="h-4 w-4" />
-                                        <span class="text-sm">Market</span>
-                                    </div>
-                                    <span class="text-sm font-semibold" :class="marketCheckTextClass()" x-text="marketCheckLabel()"></span>
-                                </div>
-                            </div>
-
-                            <div class="border-t ui-border pt-4">
-                                <p class="text-xs leading-5 ui-text-subtle" x-text="selectedAccount()?.disabled_reason ? 'Fix the connection before expecting new trades here.' : 'Leave this page open to watch new trades as they appear.'"></p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- Tile grid --}}
-        <div x-show="!loading && positions.length > 0" x-cloak class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-            <template x-for="position in positions" :key="position.id">
-                <div class="ui-card p-2.5 relative overflow-hidden">
-                    {{-- Transient-state badge stays in full colour as the
-                         only signal cutting through the desaturated tile. --}}
-                    <template x-if="position.status !== 'active'">
-                        <div class="absolute top-1.5 right-1.5 z-30 flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold uppercase tracking-[0.08em]"
-                             :style="statusStyle(position.status)"
-                        >
-                            <span class="w-1.5 h-1.5 rounded-full animate-pulse" :style="`background-color: ${statusDotColor(position.status)}`"></span>
-                            <span x-text="statusLabel(position.status)"></span>
-                        </div>
-                    </template>
-
-                    <div class="flex flex-col gap-2">
-
-                    {{-- Tile header: icon + token meta + direction badge --}}
-                    <div class="flex items-center gap-2">
-                        {{-- Token icon --}}
-                        <div class="w-7 h-7 rounded-full overflow-hidden flex-shrink-0 flex items-center justify-center" style="background-color: rgb(var(--ui-bg-elevated))">
-                            <template x-if="position.token_image">
-                                <img :src="position.token_image" :alt="position.token" class="w-full h-full object-cover" loading="lazy">
-                            </template>
-                            <template x-if="!position.token_image">
-                                <span class="text-[9px] font-bold ui-text-muted" x-text="(position.token || '?').slice(0, 3)"></span>
-                            </template>
-                        </div>
-
-                        <div class="min-w-0 flex-1">
-                            <div class="flex items-baseline gap-1.5 flex-wrap">
-                                <span class="text-[13px] font-bold ui-text leading-none" x-text="position.token"></span>
-                                <span class="text-[10px] ui-text-subtle truncate leading-none" x-text="position.token_name"></span>
-                            </div>
-                            <div class="flex items-center gap-1.5 mt-1 flex-wrap">
-                                <span
-                                    class="inline-flex items-center gap-0.5 text-[9px] uppercase font-semibold tracking-[0.08em] px-1 py-0.5 rounded"
-                                    :style="directionStyle(position)"
-                                >
-                                    <svg x-show="position.direction === 'LONG'" class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 19V5M5 12l7-7 7 7" />
-                                    </svg>
-                                    <svg x-show="position.direction === 'SHORT'" class="w-2 h-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14M5 12l7 7 7-7" />
-                                    </svg>
-                                    <span x-text="position.direction + ' ' + position.leverage + 'x'"></span>
-                                </span>
-
-                                <span class="inline-flex items-center gap-0.5 text-[9px] ui-text-subtle">
-                                    <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="9" />
-                                        <path stroke-linecap="round" d="M12 7v5l3 2" />
-                                    </svg>
-                                    <span x-text="position.age_human || '—'"></span>
-                                </span>
-                            </div>
-                        </div>
-
-                        {{-- Timeframe direction dots, top-right (hidden on transient
-                             states so they don't collide with the status badge). --}}
-                        <div x-show="position.status === 'active'" class="flex items-start gap-1 flex-shrink-0 self-start">
-                            <template x-for="dot in position.timeframe_dots" :key="dot.timeframe">
-                                <div class="flex flex-col items-center gap-0.5" :title="dot.timeframe + ' — ' + dot.direction">
-                                    <span
-                                        class="w-2 h-2 rounded-full ring-1"
-                                        :style="dotColor(dot.direction)"
-                                    ></span>
-                                    <span class="text-[7px] font-mono ui-tabular ui-text-subtle leading-none" x-text="dot.timeframe"></span>
-                                </div>
-                            </template>
-                        </div>
-                    </div>
-
-                    {{-- Lifecycle bar — outer padding gives TP/limit labels
-                         vertical breathing room above & below the track;
-                         inner mx-3 indents the relative container so the
-                         0%/100% markers don't clip against the card border. --}}
-                    <div class="pt-4 pb-3">
-                        <div class="relative h-8 mx-3">
-                            {{-- Track --}}
-                            <div class="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-1 rounded-full" style="background-color: rgb(var(--ui-border))"></div>
-
-                            {{-- Stress fill — spans current TP marker → current price marker.
-                                 Visualises how far price has drifted from TP into the limit ladder. --}}
-                            <div
-                                class="absolute top-1/2 -translate-y-1/2 h-1 rounded-full transition-all duration-300"
-                                :style="`left: ${tickFraction(position, position.profit_price) * 100}%; width: ${Math.max(0, currentPriceFraction(position) - tickFraction(position, position.profit_price)) * 100}%; background-color: ${stressColor(position.alpha_path_pct, position.status)}`"
-                            ></div>
-
-                            {{-- Original TP ghost marker (where TP was before any limit filled — only
-                                 shown when at least one limit has filled, so the operator can read how far
-                                 the WAP-recalculated TP has drifted from where the position opened). --}}
-                            <div
-                                x-show="position.filled_count > 0"
-                                class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-[5]"
-                                :style="`left: ${tickFraction(position, position.first_profit_price) * 100}%`"
-                                :title="'Original TP ' + formatPrice(position.first_profit_price)"
-                            >
-                                <div class="w-0.5 h-5 rounded-full" style="background-color: rgb(var(--ui-text-subtle))"></div>
-                            </div>
-
-                            {{-- Current TP marker --}}
-                            <div
-                                class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-10 flex flex-col items-center"
-                                :style="`left: ${tickFraction(position, position.profit_price) * 100}%`"
-                                :title="'TP ' + formatPrice(position.profit_price)"
-                            >
-                                <div class="absolute -top-2.5 text-[8px] font-bold uppercase tracking-wider leading-none" :style="`color: ${tpColor(position)}`">TP</div>
-                                <div class="w-0.5 h-5 rounded-full" :style="`background-color: ${tpColor(position)}`"></div>
-                            </div>
-
-                            {{-- Unfilled limit ticks --}}
-                            <template x-for="limit in unfilledLimits(position)" :key="limit.index">
-                                <div
-                                    class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center"
-                                    :style="`left: ${tickFraction(position, limit.price) * 100}%`"
-                                    :title="'Limit ' + limit.index + ' · ' + formatPrice(limit.price)"
-                                >
-                                    <div class="w-0.5 h-3.5 rounded-full" style="background-color: rgb(var(--ui-text-subtle))"></div>
-                                    <div class="absolute -bottom-3.5 text-[9px] font-mono ui-text-subtle ui-tabular leading-none" x-text="limit.index"></div>
-                                </div>
-                            </template>
-
-                            {{-- Current price marker (filled chevron-style dot) --}}
-                            <div
-                                class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 z-20"
-                                :style="`left: ${currentPriceFraction(position) * 100}%`"
-                                :title="'Current ' + formatPrice(position.current_price)"
-                            >
-                                <div class="w-3 h-3 rounded-full border-2" :style="currentPriceMarkerStyle(position)"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {{-- Position size + live PnL --}}
-                    <div class="grid grid-cols-2 gap-1.5">
-                        <div class="ui-bg-elevated rounded-md py-1 px-1 flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 0 0-1.883 2.542l.857 6a2.25 2.25 0 0 0 2.227 1.932H19.05a2.25 2.25 0 0 0 2.227-1.932l.857-6a2.25 2.25 0 0 0-1.883-2.542m-16.5 0V6A2.25 2.25 0 0 1 6 3.75h3.879a1.5 1.5 0 0 1 1.06.44l2.122 2.12a1.5 1.5 0 0 0 1.06.44H18A2.25 2.25 0 0 1 20.25 9v.776" />
-                                </svg>
-                                <span>Size</span>
-                            </div>
-                            <div class="text-[13px] font-bold font-mono ui-tabular ui-text mt-0.5"
-                                 x-text="position.size !== null ? '$' + formatPrice(position.size) : '—'"></div>
-                        </div>
-                        <div class="ui-bg-elevated rounded-md py-1 px-1 flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.74-1.22m0 0-5.94-2.281m5.94 2.28-2.28 5.941" />
-                                </svg>
-                                <span>PnL</span>
-                            </div>
-                            <div class="text-sm font-bold font-mono ui-tabular mt-0.5"
-                                 :style="pnlColor(position.pnl, position.status)"
-                                 x-text="position.pnl !== null ? (parseFloat(position.pnl) >= 0 ? '+' : '') + '$' + formatPrice(position.pnl) : '—'"></div>
-                        </div>
-                    </div>
-
-                    {{-- Readouts: AlphaPath · AlphaLimit · Filled --}}
-                    <div class="grid grid-cols-3 gap-1.5">
-                        <div class="ui-bg-elevated rounded-md py-1 px-1 flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" d="M3 12h18M3 6h18M3 18h12" />
-                                </svg>
-                                <span>Path</span>
-                            </div>
-                            <div
-                                class="text-base font-bold font-mono ui-tabular mt-0.5"
-                                :style="`color: ${stressColor(position.alpha_path_pct, position.status)}`"
-                                x-text="position.alpha_path_pct + '%'"
-                            ></div>
-                        </div>
-                        <div class="ui-bg-elevated rounded-md py-1 px-1 flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" d="M5 12h14M13 6l6 6-6 6" />
-                                </svg>
-                                <span>Limit</span>
-                            </div>
-                            <div class="text-[13px] font-bold font-mono ui-tabular ui-text mt-0.5" x-text="position.alpha_limit_pct + '%'"></div>
-                        </div>
-                        <div class="ui-bg-elevated rounded-md py-1 px-1 flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" d="M5 12l5 5L20 7" />
-                                </svg>
-                                <span>Filled</span>
-                            </div>
-                            <div class="text-[13px] font-bold font-mono ui-tabular ui-text mt-0.5" x-text="position.filled_count + ' / ' + position.total_limits"></div>
-                        </div>
-                    </div>
-
-                    {{-- Prices grid --}}
-                    <div class="grid grid-cols-3 gap-1.5 pt-1.5 border-t ui-border">
-                        <div class="flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="9" />
-                                    <path stroke-linecap="round" d="M12 8v4l3 3" />
-                                </svg>
-                                <span>Orig TP</span>
-                            </div>
-                            <div class="text-[11px] font-mono ui-text-muted ui-tabular mt-0.5 leading-none" x-text="formatPrice(position.first_profit_price)"></div>
-                        </div>
-                        <div class="flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider" :style="`color: ${tpColor(position)}`">
-                                <svg class="w-2.5 h-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                                    <path stroke-linecap="round" d="M12 19V5M5 12l7-7 7 7" />
-                                </svg>
-                                <span>TP</span>
-                            </div>
-                            <div class="text-[11px] font-mono ui-tabular mt-0.5 leading-none" :style="`color: ${tpColor(position)}`" x-text="formatPrice(position.profit_price)"></div>
-                        </div>
-                        <div class="flex flex-col items-center">
-                            <div class="flex items-center gap-0.5 text-[9px] uppercase tracking-wider ui-text-subtle">
-                                <svg class="w-2.5 h-2.5 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path stroke-linecap="round" d="M12 5v14M5 12l7 7 7-7" />
-                                </svg>
-                                <span>Next</span>
-                            </div>
-                            <div class="text-xs font-mono ui-text-muted ui-tabular mt-0.5" x-text="formatPrice(position.next_limit_price)"></div>
-                        </div>
-                    </div>
-
-                    </div>
-
-                </div>
-            </template>
-        </div>
-
     </div>
 
+    {{-- ===================== SUSPENDED BANNER (regime-conditional) ===================== --}}
+    @if($suspended)
+        <div class="flex items-center gap-3 py-[13px] px-4 mb-5 rounded-control bg-pnldown-bg text-pnldown border" style="border-color: color-mix(in srgb, var(--danger) 45%, transparent);">
+            <span class="flex flex-shrink-0 animate-pulse-soft"><x-feathericon-alert-triangle class="w-[18px] h-[18px]" stroke-width="1.75"/></span>
+            <span class="text-[13px] leading-[1.45] flex-1 min-w-0">
+                <strong class="text-pnldown-strong font-bold">New position openings suspended for 24h</strong> — Black Swan regime is
+                <span class="font-mono text-pnldown-strong font-semibold">{{ $regime }} {{ number_format($score, 2) }}</span>.
+                Resumes <span class="font-mono text-pnldown-strong font-semibold">{{ $untilStr }}</span> if the regime clears. Existing positions are still managed.
+            </span>
+            <a href="#" class="flex-shrink-0 text-[12px] font-semibold no-underline text-pnldown whitespace-nowrap hover:text-pnldown-strong">View risk policy →</a>
+        </div>
+    @endif
 
-    <script>
-        function userDashboard() {
-            return {
-                accounts: @json($accounts),
-                isAdmin: @json($isAdmin),
-                selectedAccountId: '',
-                loading: false,
-                positions: [],
-                metrics: null,
-                btc: null,
-                bscs: null,
-                _interval: null,
+    {{-- ===================== KPI TILES ===================== --}}
+    <div class="grid grid-cols-4 gap-5 mb-6 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-2 max-[640px]:gap-3 max-[420px]:grid-cols-1">
+        @foreach($kpis as $k)
+            <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast ease-out hover:border-line-strong">
+                <div class="font-mono text-[10px] font-medium tracking-[0.11em] uppercase text-fg-3 flex items-center gap-[7px]">
+                    <x-dynamic-component :component="'feathericon-' . $k['icon']" class="w-[12px] h-[12px]" stroke-width="1.75"/>{{ $k['label'] }}
+                </div>
+                @if($k['key'] === 'op')
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="font-mono font-semibold text-[24px] tracking-[-0.025em] text-fg-1 tabular-nums leading-none">{{ $k['value'] }}</span>
+                        <div class="ml-auto flex flex-col gap-1 w-24 min-w-0 flex-shrink">
+                            <div class="flex h-1.5 rounded-chip overflow-hidden gap-0.5">
+                                <span class="rounded-chip" style="flex: 6; background: var(--pnl-up-fg);"></span>
+                                <span class="rounded-chip" style="flex: 4; background: var(--pnl-down-fg);"></span>
+                            </div>
+                            <div class="flex justify-between">
+                                <span class="font-mono text-[10px] font-semibold text-pnlup">6L</span>
+                                <span class="font-mono text-[10px] font-semibold text-pnldown">4S</span>
+                            </div>
+                        </div>
+                    </div>
+                @else
+                    <div class="flex items-center gap-2.5 min-w-0">
+                        <span class="font-mono font-semibold text-[24px] tracking-[-0.025em] text-fg-1 tabular-nums leading-none">{{ $k['value'] }}</span>
+                        @if($k['delta'] !== null)
+                            @php $up = $k['delta'] >= 0; @endphp
+                            <span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip {{ $up ? 'text-pnlup bg-pnlup-bg' : 'text-pnldown bg-pnldown-bg' }}">
+                                @if($up)
+                                    <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="2"/>+{{ number_format($k['delta'], 2) }}%
+                                @else
+                                    <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="2"/>{{ number_format($k['delta'], 2) }}%
+                                @endif
+                            </span>
+                        @endif
+                        @if($k['spark'])
+                            @php $sp = $sparkPath($k['spark'], 84, 28); $col = $k['up'] ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'; $gid = 'sp_' . $k['key']; @endphp
+                            <div class="ml-auto w-[84px] min-w-0 flex-shrink">
+                                <svg class="block w-full" viewBox="0 0 84 28" preserveAspectRatio="none" width="84" height="28">
+                                    <defs><linearGradient id="{{ $gid }}" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stop-color="{{ $col }}" stop-opacity="0.18"/>
+                                        <stop offset="100%" stop-color="{{ $col }}" stop-opacity="0"/>
+                                    </linearGradient></defs>
+                                    <path d="{{ $sp['area'] }}" fill="url(#{{ $gid }})"/>
+                                    <path d="{{ $sp['line'] }}" fill="none" stroke="{{ $col }}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+                                </svg>
+                            </div>
+                        @endif
+                    </div>
+                @endif
+            </div>
+        @endforeach
+    </div>
 
-                marketCheckLabel() {
-                    if (!this.bscs) {
-                        return 'Market check unavailable';
+    {{-- ===================== POSITIONS SECTION ===================== --}}
+    @php
+        // Dot geometry. Render the rail as an absolute-positioned strip: each
+        // dot lives at left = i * dotStep, so the thumb's position math uses
+        // the same formula and can't drift relative to the dots.
+        $dotW = 7; $dotGap = 7; $dotStep = $dotW + $dotGap;
+    @endphp
+    <section class="mb-6"
+             x-data="{
+                filter: 'ALL',
+                page: 0,
+                prevPage: 0,
+                per: {{ $per }},
+                dotW: {{ $dotW }},
+                dotStep: {{ $dotStep }},
+                counts: @js($countsByFilter),
+                totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
+                segHl: null,
+                dotLeft: 0,
+                dotWidth: {{ $dotW }},
+                _settleTimer: null,
+                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => this.measureSeg()); },
+                pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
+                safePage() { return Math.min(this.page, this.pageCount() - 1); },
+                rangeLabel() {
+                    const total = this.totals[this.filter] || 0;
+                    if (total <= this.per) return total + ' positions managed across the lifecycle · no manual orders';
+                    const from = this.safePage() * this.per + 1;
+                    const to = Math.min(from + this.per - 1, total);
+                    return total + ' positions · showing ' + from + '–' + to + ' · max ' + this.per + ' per page';
+                },
+                measureSeg() {
+                    const el = this.$refs.seg?.querySelector('[data-seg-active]');
+                    if (!el) { this.segHl = null; return; }
+                    this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
+                },
+                animateDot(next) {
+                    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                    const cur = this.safePage();
+                    const lo = Math.min(cur, next);
+                    const hi = Math.max(cur, next);
+                    if (lo !== hi) {
+                        // Stage 1: stretch — thumb spans from the leftmost dot
+                        // (lo) to the rightmost (hi), inclusive of the dot's
+                        // own width.
+                        this.dotLeft = lo * this.dotStep;
+                        this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
                     }
-
-                    if (this.bscs.blocked) {
-                        return 'New trades paused';
-                    }
-
-                    return ({
-                        calm: 'Market normal',
-                        elevated: 'Market active',
-                        fragile: 'Trade size reduced',
-                        critical: 'New trades paused',
-                    })[this.bscs.band] ?? 'Market check unavailable';
+                    this.prevPage = cur;
+                    this.page = next;
+                    // Stage 2: settle on the target dot after the stretch peaks.
+                    this._settleTimer = setTimeout(() => {
+                        this.dotLeft = this.safePage() * this.dotStep;
+                        this.dotWidth = this.dotW;
+                        this._settleTimer = null;
+                    }, lo !== hi ? 190 : 0);
                 },
+             }"
+             x-init="
+                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; });
+                window.addEventListener('resize', () => measureSeg());
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg());
+             ">
+        <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
+            <div>
+                <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
+                    <x-feathericon-layers class="w-[17px] h-[17px] text-fg-3" stroke-width="1.75"/>Open positions
+                </div>
+                <div class="text-[12.5px] text-fg-3 mt-1 whitespace-nowrap" x-text="rangeLabel()"></div>
+            </div>
+            <div class="flex items-center gap-4 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
+                {{-- Segmented control with sliding green pill --}}
+                <div x-ref="seg" class="relative inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
+                    <span aria-hidden="true"
+                          x-show="segHl"
+                          x-cloak
+                          :style="segHl ? `left:${segHl.left}px;top:${segHl.top}px;width:${segHl.width}px;height:${segHl.height}px` : ''"
+                          class="absolute z-0 bg-accent rounded-[7px] shadow-1 pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]"></span>
+                    @foreach(['ALL','LONG','SHORT'] as $opt)
+                        <button type="button" @click="setFilter('{{ $opt }}')"
+                                :data-seg-active="filter === '{{ $opt }}' ? '' : null"
+                                :class="filter === '{{ $opt }}' ? 'text-accent-on' : 'text-fg-3 hover:text-fg-1'"
+                                class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer relative z-[1] transition-colors duration-fast ease-out">{{ $opt }}</button>
+                    @endforeach
+                </div>
+                {{-- Account dropdown (static for now) --}}
+                <button type="button" class="inline-flex items-center gap-[9px] h-[34px] border border-line rounded-control bg-surface px-3 cursor-pointer text-[12.5px] text-fg-2 max-w-[280px] transition-colors duration-fast ease-out hover:border-line-strong max-[640px]:max-w-none max-[640px]:flex-1">
+                    <span class="w-[7px] h-[7px] rounded-chip bg-green-500 flex-shrink-0"></span>
+                    <span class="whitespace-nowrap overflow-hidden text-ellipsis">Karine Esnault · Binance</span>
+                    <x-feathericon-chevron-down class="w-[14px] h-[14px] text-fg-mute" stroke-width="1.75"/>
+                </button>
+            </div>
+        </div>
 
-                marketCheckClass() {
-                    if (!this.bscs) {
-                        return 'border-slate-200 bg-white text-slate-600';
-                    }
+        @php
+            // Render one sliding-page carousel per filter so the dot count
+            // adapts to filter. Visibility is toggled by Alpine (x-show).
+            $tracks = ['ALL' => $chunksAll, 'LONG' => $chunksLong, 'SHORT' => $chunksShort];
+        @endphp
+        @foreach($tracks as $filterKey => $chunks)
+            <div x-show="filter === '{{ $filterKey }}'" x-cloak
+                 x-data="{
+                    chunkCount: {{ count($chunks) }},
+                    drag: { active: false, startX: 0, base: 0, w: 0, moved: 0, pointerId: null },
+                    onDown(e) {
+                        if (this.chunkCount <= 1 || e.button === 1 || e.button === 2) return;
+                        const v = this.$refs.view, t = this.$refs.track;
+                        if (!v || !t) return;
+                        const w = v.offsetWidth;
+                        this.drag = { active: true, startX: e.clientX, base: -this.safePage() * w, w, moved: 0, pointerId: e.pointerId };
+                        t.style.transition = 'none';
+                        v.setPointerCapture?.(e.pointerId);
+                    },
+                    onMove(e) {
+                        if (!this.drag.active) return;
+                        const dx = e.clientX - this.drag.startX;
+                        this.drag.moved = dx;
+                        let pos = this.drag.base + dx;
+                        const min = -(this.chunkCount - 1) * this.drag.w;
+                        if (pos > 0) pos = pos * 0.35;
+                        if (pos < min) pos = min + (pos - min) * 0.35;
+                        this.$refs.track.style.transform = 'translateX(' + pos + 'px)';
+                    },
+                    onUp(e) {
+                        if (!this.drag.active) return;
+                        const moved = this.drag.moved, w = this.drag.w;
+                        this.drag.active = false;
+                        this.$refs.view?.releasePointerCapture?.(this.drag.pointerId);
+                        let next = this.safePage();
+                        if (moved < -w * 0.18) next = Math.min(this.chunkCount - 1, this.safePage() + 1);
+                        else if (moved > w * 0.18) next = Math.max(0, this.safePage() - 1);
+                        this.$refs.track.style.transition = '';
+                        this.$refs.track.style.transform = '';
+                        this.animateDot(next);
+                    },
+                 }">
+                <div x-ref="view"
+                     class="overflow-hidden cursor-grab touch-pan-y active:cursor-grabbing"
+                     @pointerdown="onDown($event)"
+                     @pointermove="onMove($event)"
+                     @pointerup="onUp($event)"
+                     @pointercancel="onUp($event)">
+                    <div x-ref="track"
+                         class="flex transition-transform duration-[380ms] ease-out select-none"
+                         :style="`transform: translateX(-${safePage() * 100}%)`">
+                        @foreach($chunks as $chunk)
+                            <div class="flex-[0_0_100%] min-w-0 [&_img]:pointer-events-none [&_img]:select-none">
+                                <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
+                                    @foreach($chunk as $p)
+                                        @include('partials.position-tile', ['p' => $p])
+                                    @endforeach
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+                @if(count($chunks) > 1)
+                    @php
+                        // Strip width: last dot's left edge + dot width.
+                        $stripW = (count($chunks) - 1) * $dotStep + $dotW;
+                    @endphp
+                    <div class="flex justify-center mt-5">
+                        <div class="relative h-[7px]" style="width: {{ $stripW }}px;">
+                            @foreach($chunks as $i => $chunk)
+                                <button type="button" @click="animateDot({{ $i }})"
+                                        style="left: {{ $i * $dotStep }}px; top: 0;"
+                                        class="pcar__dot absolute appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute z-[1]"
+                                        aria-label="Page {{ $i + 1 }}"></button>
+                            @endforeach
+                            <span aria-hidden="true"
+                                  :style="`left:${dotLeft}px;width:${dotWidth}px`"
+                                  class="absolute top-0 h-[7px] rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
+                        </div>
+                    </div>
+                @endif
+            </div>
+        @endforeach
 
-                    if (this.bscs.blocked || this.bscs.band === 'critical') {
-                        return 'border-red-200 bg-red-50 text-red-800';
-                    }
+    </section>
 
-                    if (this.bscs.band === 'fragile') {
-                        return 'border-orange-200 bg-orange-50 text-orange-800';
-                    }
+    {{-- ===================== BOTTOM GRID: ACTIVITY + CONNECTIVITY + BSCS ===================== --}}
+    <div class="grid grid-cols-3 gap-5 items-start max-[1080px]:grid-cols-1">
 
-                    if (this.bscs.band === 'elevated') {
-                        return 'border-amber-200 bg-amber-50 text-amber-800';
-                    }
+        {{-- Activity feed (2 cols) --}}
+        <div class="flex flex-col gap-5 min-w-0 col-span-2 max-[1080px]:col-auto">
+            <div class="card" x-data="{ cat: 'all', showAll: false }">
+                <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
+                    <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
+                        <x-feathericon-cpu class="w-[16px] h-[16px] text-fg-3" stroke-width="1.75"/>Recent bot activity
+                    </div>
+                    <div class="flex items-center gap-1.5" x-data="{ open: false }">
+                        <button @click="open = !open" type="button" class="inline-flex items-center gap-[7px] h-[34px] bg-surface rounded-control px-[11px] font-sans text-[12.5px] font-medium whitespace-nowrap border border-line text-fg-2 transition-colors duration-fast ease-out hover:border-line-strong hover:text-fg-1 cursor-pointer">
+                            <x-feathericon-filter class="w-[14px] h-[14px] text-fg-3" stroke-width="1.75"/>
+                            <span x-text="({{ collect($activityCats)->mapWithKeys(fn($c) => [$c['id'] => $c['label']])->toJson() }})[cat]"></span>
+                            <x-feathericon-chevron-down class="w-[13px] h-[13px] opacity-60" stroke-width="1.75"/>
+                        </button>
+                        <div x-show="open" @click.outside="open = false" x-cloak x-transition.opacity
+                             class="absolute top-[calc(100%+6px)] right-5 z-[60] min-w-[184px] bg-surface border border-line rounded-control shadow-2 p-[5px] flex flex-col gap-px animate-dd-in">
+                            @foreach($activityCats as $c)
+                                <button @click="cat = '{{ $c['id'] }}'; showAll = false; open = false" type="button"
+                                        :class="cat === '{{ $c['id'] }}' ? 'text-fg-1 font-semibold' : 'text-fg-2'"
+                                        class="appearance-none cursor-pointer text-left flex items-center justify-between gap-3 bg-transparent border-0 rounded-[7px] py-[7px] px-[9px] font-sans text-[12.5px] transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">
+                                    <span>{{ $c['label'] }}</span>
+                                    <span x-show="cat === '{{ $c['id'] }}'"><x-feathericon-check class="w-[14px] h-[14px] text-accent" stroke-width="2"/></span>
+                                </button>
+                            @endforeach
+                        </div>
+                    </div>
+                </div>
+                <div class="flex flex-col">
+                    @foreach($activity as $a)
+                        <div x-show="cat === 'all' || cat === '{{ $a['cat'] }}'"
+                             class="flex items-center gap-2.5 py-[9px] px-5 border-b border-line-soft min-w-0 last:border-b-0">
+                            <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" style="background: {{ $a['dot'] }};"></span>
+                            <span class="font-mono text-[9px] font-semibold tracking-[0.07em] uppercase text-fg-mute w-14 flex-shrink-0">{{ $a['kind'] }}</span>
+                            <span class="flex-1 min-w-0 text-[12.5px] text-fg-2 whitespace-nowrap overflow-hidden text-ellipsis">{!! $a['html'] !!}</span>
+                            <span class="font-mono text-[10.5px] text-fg-mute whitespace-nowrap flex-shrink-0">{{ $a['time'] }}</span>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
+                    <span class="font-mono tabular-nums text-[11px] text-fg-mute">UPDATED 12s AGO · {{ count($activity) }} EVENTS</span>
+                    <a href="#" class="text-[12px] font-sans font-semibold no-underline text-accent inline-flex items-center gap-[5px] hover:text-accent-hover">Audit log →</a>
+                </div>
+            </div>
+        </div>
 
-                    return 'border-emerald-200 bg-emerald-50 text-emerald-800';
-                },
+        {{-- Right column: Connectivity + BSCS mini --}}
+        <div class="flex flex-col gap-5 min-w-0">
 
-                marketCheckTextClass() {
-                    if (!this.bscs) {
-                        return 'text-slate-600';
-                    }
+            {{-- Connectivity card --}}
+            <div class="card {{ $downCount > 0 ? 'card--alert' : '' }}">
+                <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
+                    <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
+                        <x-feathericon-server class="w-[16px] h-[16px] text-fg-3" stroke-width="1.75"/>Server connectivity
+                    </div>
+                    @if($downCount > 0)
+                        <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
+                              style="background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 38%, transparent); color: var(--pnl-down-fg);">
+                            <span class="w-2 h-2 rounded-chip animate-pulse-soft" style="background: var(--danger);"></span>{{ $downCount }} DOWN
+                        </span>
+                    @else
+                        <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
+                              style="background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 38%, transparent); color: var(--pnl-up-fg);">
+                            <span class="w-2 h-2 rounded-chip" style="background: var(--accent);"></span>ALL LINKED
+                        </span>
+                    @endif
+                </div>
 
-                    if (this.bscs.blocked || this.bscs.band === 'critical') {
-                        return 'text-red-700';
-                    }
+                <div>
+                    @php $listShown = $downCount > 0 ? array_filter($servers, fn($s) => $s['state'] !== 'ok') : $servers; @endphp
+                    @foreach($listShown as $s)
+                        @php $st = $s['state']; $dotClass = $st === 'ok' ? 'bg-green-500' : ($st === 'warn' ? 'bg-warn' : ($st === 'down' ? 'bg-danger animate-pulse-soft' : 'bg-fg-faint')); @endphp
+                        <div class="srv flex items-center gap-[11px] py-[9px] px-5 border-b border-line-soft transition-colors duration-fast ease-out hover:bg-hover last:border-b-0 {{ $st === 'down' ? 'is-down' : '' }}">
+                            <span class="w-[9px] h-[9px] rounded-chip flex-shrink-0 {{ $dotClass }}"></span>
+                            <span class="font-mono text-[12.5px] font-semibold text-fg-1 flex-1">{{ $s['id'] }}</span>
+                            <span class="font-mono text-[9.5px] text-fg-mute uppercase tracking-[0.08em]">{{ $s['region'] }}</span>
+                            <span class="font-mono text-[11.5px] tabular-nums flex-shrink-0 {{ $st === 'down' ? 'text-pnldown font-semibold' : 'text-fg-3' }}">{{ $st === 'ok' ? $s['latency'] : 'DOWN' }}</span>
+                        </div>
+                    @endforeach
+                    @if($downCount > 0)
+                        <div class="flex items-center gap-[9px] py-[9px] px-5 font-mono text-[11px] text-fg-mute tracking-[0.02em]">
+                            <span class="w-[9px] h-[9px] rounded-chip flex-shrink-0 bg-green-500"></span>{{ count($okServers) }} other servers linked · egress nominal
+                        </div>
+                    @endif
+                </div>
 
-                    if (this.bscs.band === 'fragile') {
-                        return 'text-orange-700';
-                    }
+                <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
+                    <span class="font-mono tabular-nums text-[11px] text-fg-mute inline-flex items-center gap-[7px]">
+                        <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>HEARTBEAT 5s
+                    </span>
+                    <a href="#" class="appearance-none bg-transparent border-0 cursor-pointer font-mono text-[11px] tracking-[0.04em] text-fg-mute no-underline inline-flex items-center transition-colors duration-fast ease-out hover:text-fg-1">whitelist →</a>
+                </div>
+            </div>
 
-                    if (this.bscs.band === 'elevated') {
-                        return 'text-amber-700';
-                    }
+            {{-- BSCS mini card --}}
+            @php
+                $clamp = fn($v) => max(0.05, min(0.98, $v));
+                $comps = [
+                    ['label' => 'BTC realized vol',    'v' => $clamp($score * 1.00)],
+                    ['label' => 'Cross-asset corr.',   'v' => $clamp($score * 1.38)],
+                    ['label' => 'Funding dispersion',  'v' => $clamp($score * 0.74)],
+                    ['label' => 'Liquidity depth',     'v' => $clamp($score * 1.12)],
+                ];
+                $barColor = fn($v) => $v < 0.5 ? 'var(--accent)' : ($v < 0.75 ? 'var(--bsi-watch)' : 'var(--bsi-cascade)');
+                $newPosLabel = $suspended ? 'NEW POS. SUSPENDED' : ($score < 0.5 ? 'NEW POS. ALLOWED' : 'NEW POS. REDUCED');
+            @endphp
+            <div class="card">
+                <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
+                    <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
+                        <x-feathericon-shield class="w-[16px] h-[16px] text-fg-3" stroke-width="1.75"/>Black Swan Composite
+                    </div>
+                    <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
+                          style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
+                        <span class="w-2 h-2 rounded-chip" style="background: {{ $r['color'] }};"></span>{{ $regime }}
+                    </span>
+                </div>
+                <div class="flex flex-col gap-[13px] pt-4 px-5 pb-[18px]">
+                    <div class="flex items-baseline gap-[9px] flex-wrap">
+                        <span class="font-mono text-[32px] font-semibold leading-none tracking-[-0.03em]" style="color: {{ $r['color'] }};">{{ number_format($score, 2) }}</span>
+                        <span class="font-mono text-[11.5px] text-fg-mute whitespace-nowrap">/ 1.00 · <span style="color: {{ $r['color'] }}; font-weight: 600;">{{ $regime }}</span></span>
+                        <span class="font-mono text-[9.5px] tracking-[0.06em] text-fg-mute ml-auto self-center">{{ $newPosLabel }}</span>
+                    </div>
+                    <div>
+                        <div class="h-[7px] rounded-chip relative" style="background: linear-gradient(90deg, var(--bsi-calm) 0%, var(--bsi-watch) 32%, var(--bsi-elevated) 55%, var(--bsi-cascade) 80%, var(--bsi-blackswan) 100%);">
+                            <span class="absolute top-1/2 w-[3px] h-[15px] bg-fg-1 border-2 border-surface rounded-chip -translate-x-1/2 -translate-y-1/2 transition-[left] duration-slow ease-snap" style="left: {{ $score * 100 }}%; box-shadow: 0 0 0 1px rgba(0,0,0,0.25);"></span>
+                        </div>
+                        <div class="flex justify-between mt-1.5">
+                            @foreach(['CALM','WATCH','ELEV','CASC','SWAN'] as $lbl)
+                                <span class="font-mono text-[9px] text-fg-mute tracking-[0.04em]">{{ $lbl }}</span>
+                            @endforeach
+                        </div>
+                    </div>
+                    @if($suspended)
+                        <div class="flex items-start gap-[9px] py-[11px] px-[13px] rounded-control bg-pnldown-bg text-pnldown text-[12px] leading-[1.45] border" style="border-color: color-mix(in srgb, var(--danger) 38%, transparent);">
+                            <x-feathericon-alert-triangle class="w-[15px] h-[15px] flex-shrink-0 mt-0.5" stroke-width="1.75"/>
+                            <span>New position openings <strong class="font-bold">suspended for 24h</strong> — until <span class="font-mono text-pnldown-strong">{{ $untilStr }}</span>. Existing positions are still managed.</span>
+                        </div>
+                    @endif
+                    <div class="flex flex-col gap-[11px] pt-[3px]">
+                        @foreach($comps as $c)
+                            <div class="grid grid-cols-[1fr_78px_36px] items-center gap-[11px]">
+                                <span class="text-[12px] text-fg-3">{{ $c['label'] }}</span>
+                                <div class="h-1 rounded-chip bg-surface-3 overflow-hidden">
+                                    <div class="h-full rounded-chip" style="width: {{ $c['v'] * 100 }}%; background: {{ $barColor($c['v']) }};"></div>
+                                </div>
+                                <span class="font-mono text-[11px] text-fg-2 text-right tabular-nums">{{ number_format($c['v'], 2) }}</span>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+                <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
+                    <span class="font-mono tabular-nums text-[11px] text-fg-mute">UPDATED 38s AGO</span>
+                    <a href="#" class="text-[12px] font-sans font-semibold no-underline text-accent inline-flex items-center gap-[5px] hover:text-accent-hover">View details →</a>
+                </div>
+            </div>
+        </div>
+    </div>
 
-                    return 'text-emerald-700';
-                },
-
-                init() {
-                    // Sysadmin always starts blank — the dashboard is a
-                    // cross-user inspection surface for them, so an
-                    // auto-restored selection from a prior session would
-                    // misrepresent which account they're looking at. They
-                    // pick explicitly every visit. For regular users we
-                    // still auto-select / restore so the UX stays one-tap.
-                    if (this.isAdmin) {
-                        this.selectedAccountId = '';
-                    } else {
-                        const stored = localStorage.getItem(this.storageKey);
-                        if (stored && this.accounts.some(a => String(a.id) === stored)) {
-                            this.selectedAccountId = stored;
-                            this.fetchData();
-                        } else if (this.accounts.length === 1) {
-                            this.selectedAccountId = String(this.accounts[0].id);
-                            this.fetchData();
-                        }
-
-                        this.$watch('selectedAccountId', (value) => {
-                            if (value) localStorage.setItem(this.storageKey, value);
-                            else       localStorage.removeItem(this.storageKey);
-                        });
-                    }
-
-                    // 10s background poll. Alpine keys the x-for on
-                    // position.id, so only the deltas patch into the DOM —
-                    // no full grid rerender, no scroll loss, no flicker.
-                    this._interval = setInterval(() => {
-                        if (this.selectedAccountId) {
-                            this.fetchData({ silent: true });
-                        }
-                    }, 10000);
-                },
-
-                get storageKey() {
-                    return 'kraite-dashboard-account-' + ({{ auth()->id() }});
-                },
-
-                optionLabel(acc) {
-                    return this.isAdmin
-                        ? acc.owner + ' · ' + acc.name
-                        : acc.exchange + ' · ' + acc.name;
-                },
-
-                selectedAccount() {
-                    return this.accounts.find(acc => String(acc.id) === String(this.selectedAccountId)) || null;
-                },
-
-                async fetchData({ silent = false } = {}) {
-                    if (!this.selectedAccountId) {
-                        this.positions = [];
-                        return;
-                    }
-
-                    // Show the spinner only on cold loads / account switch —
-                    // background polls run silent so the grid doesn't flash.
-                    if (!silent) {
-                        this.loading = this.positions.length === 0;
-                    }
-
-                    const { ok, data } = await hubUiFetch(
-                        '{{ route("dashboard.data") }}?account_id=' + this.selectedAccountId,
-                        { method: 'GET' }
-                    );
-
-                    if (ok) {
-                        this.positions = data.positions || [];
-                        this.metrics = data.metrics ?? null;
-                        this.btc = data.btc ?? null;
-                        this.bscs = data.bscs ?? null;
-                    }
-
-                    this.loading = false;
-                },
-
-                formatPrice(value) {
-                    // Server formats prices via api_format_price (per-symbol
-                    // tick_size + precision). Pass-through and just guard
-                    // null / non-numeric. Values come back as strings already.
-                    if (value === null || value === undefined || value === '') return '—';
-                    return String(value);
-                },
-
-                /**
-                 * Map a tick price to its fractional position on the bar.
-                 * Direction-aware: LONG has TP above, ladder below; SHORT
-                 * inverts. The bar always reads "TP on the left, deepest
-                 * limit on the right" regardless of direction.
-                 */
-                tickFraction(position, price) {
-                    const start = parseFloat(position.first_profit_price);
-                    const end   = parseFloat(position.last_limit_price);
-                    const p     = parseFloat(price);
-                    if (!isFinite(start) || !isFinite(end) || !isFinite(p)) return 0;
-                    if (start === end) return 0;
-                    const f = (start - p) / (start - end);
-                    return Math.max(0, Math.min(1, f));
-                },
-
-                currentPriceFraction(position) {
-                    const raw = this.tickFraction(position, position.current_price);
-                    const tp  = this.tickFraction(position, position.profit_price);
-                    // Clamp at the current TP marker. Going left-of-TP means
-                    // price is on the profit side of TP (LONG: above; SHORT:
-                    // below) — visually a "TP already hit" state that can't
-                    // be a steady state. Park the dot on the TP marker so
-                    // the operator reads "TP imminent" instead.
-                    return Math.max(raw, tp);
-                },
-
-                unfilledLimits(position) {
-                    return (position.limits || []).filter(l => !l.filled);
-                },
-
-                isTransient(position) {
-                    return position && position.status !== 'active';
-                },
-
-                pnlColor(pnl, status) {
-                    if (status && status !== 'active') return 'color: rgb(var(--ui-text-muted))';
-                    if (pnl === null || pnl === undefined) return 'color: rgb(var(--ui-text-subtle))';
-                    const v = parseFloat(pnl) || 0;
-                    if (v < 0) return 'color: rgb(var(--ui-danger))';
-                    if (v > 0) return 'color: rgb(var(--ui-success))';
-                    return 'color: rgb(var(--ui-text-muted))';
-                },
-
-                stressColor(pct, status) {
-                    if (status && status !== 'active') return 'rgb(var(--ui-text-muted))';
-                    const v = parseFloat(pct) || 0;
-                    if (v >= 75) return 'rgb(var(--ui-danger))';
-                    if (v >= 50) return 'rgb(var(--ui-warning))';
-                    return 'rgb(var(--ui-success))';
-                },
-
-                directionStyle(position) {
-                    if (this.isTransient(position)) {
-                        return 'background-color: rgb(var(--ui-bg-elevated)); color: rgb(var(--ui-text-muted))';
-                    }
-                    return position.direction === 'LONG'
-                        ? 'background-color: rgb(var(--ui-success) / 0.15); color: rgb(var(--ui-success))'
-                        : 'background-color: rgb(var(--ui-danger) / 0.15); color: rgb(var(--ui-danger))';
-                },
-
-                tpColor(position) {
-                    return this.isTransient(position)
-                        ? 'rgb(var(--ui-text-muted))'
-                        : 'rgb(var(--ui-success))';
-                },
-
-                currentPriceMarkerStyle(position) {
-                    const c = this.isTransient(position)
-                        ? 'rgb(var(--ui-text-muted))'
-                        : 'rgb(var(--ui-primary))';
-                    const ring = this.isTransient(position)
-                        ? 'rgb(var(--ui-text-muted) / 0.2)'
-                        : 'rgb(var(--ui-primary) / 0.2)';
-                    return `background-color: rgb(var(--ui-bg-card)); border-color: ${c}; box-shadow: 0 0 0 2px ${ring};`;
-                },
-
-                dotColor(direction) {
-                    if (direction === 'up')   return 'background-color: rgb(var(--ui-success)); --tw-ring-color: rgb(var(--ui-success) / 0.35);';
-                    if (direction === 'down') return 'background-color: rgb(var(--ui-danger));  --tw-ring-color: rgb(var(--ui-danger) / 0.35);';
-                    if (direction === 'flat') return 'background-color: rgb(var(--ui-text-muted)); --tw-ring-color: rgb(var(--ui-text-muted) / 0.35);';
-                    return 'background-color: rgb(var(--ui-border-light)); --tw-ring-color: rgb(var(--ui-border-light) / 0.35);';
-                },
-
-                statusLabel(status) {
-                    return ({
-                        new:        'Queued',
-                        opening:    'Opening',
-                        syncing:    'Syncing',
-                        waping:     'Adjusting',
-                        closing:    'Closing',
-                        cancelling: 'Cancelling',
-                    })[status] || status;
-                },
-
-                statusStyle(status) {
-                    const closing = ['closing', 'cancelling'].includes(status);
-                    if (closing) {
-                        return 'background-color: rgb(var(--ui-danger) / 0.15); color: rgb(var(--ui-danger))';
-                    }
-                    return 'background-color: rgb(var(--ui-warning) / 0.15); color: rgb(var(--ui-warning))';
-                },
-
-                statusDotColor(status) {
-                    return ['closing', 'cancelling'].includes(status)
-                        ? 'rgb(var(--ui-danger))'
-                        : 'rgb(var(--ui-warning))';
-                },
-            };
-        }
-    </script>
+    <style>[x-cloak] { display: none !important; }</style>
 </x-app-layout>

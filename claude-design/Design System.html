@@ -5,226 +5,264 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title>Kraite — Design System</title>
 <link rel="icon" href="assets/snake-green.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="app/tw-config.js"></script>
 <link rel="stylesheet" href="assets/colors_and_type.css"/>
 <link rel="stylesheet" href="app/shell.css"/>
-<link rel="stylesheet" href="app/ds.css"/>
 </head>
-<body data-theme="light">
+<body data-theme="light" class="bg-canvas text-fg overflow-x-hidden overflow-y-auto">
 
-<header class="ds-top">
-  <img src="assets/snake-green.svg" alt="Kraite"/>
+<header class="sticky top-0 z-50 bg-[#07090b] border-b border-ink-3 flex items-center gap-4 px-7 h-[60px] text-ink-9">
+  <img src="assets/snake-green.svg" alt="Kraite" class="h-[26px] block"/>
   <div>
-    <div class="ds-top__title">Kraite <span>Admin</span> — Design System</div>
-    <div class="ds-top__sub">Back-office surface · v4.2.1</div>
+    <div class="font-bold text-[15px] tracking-[-0.01em] whitespace-nowrap">Kraite <span class="text-green-500">Admin</span> — Design System</div>
+    <div class="font-mono text-[11px] text-ink-6 tracking-[0.04em]">Back-office surface · v4.2.1</div>
   </div>
-  <div class="ds-top__spacer"></div>
-  <a class="ds-back" href="Kraite Admin.html">
+  <div class="flex-1"></div>
+  <a class="font-sans text-[13px] font-semibold text-ink-8 no-underline border border-ink-4 rounded-control py-[7px] px-[14px] inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out hover:bg-ink-1 hover:text-ink-9" href="Kraite Admin.html">
     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
     Open the app
   </a>
 </header>
 
-<div class="ds-wrap">
+<div class="grid grid-cols-[220px_1fr] max-w-[1340px] mx-auto">
   <!-- TABLE OF CONTENTS -->
-  <nav class="ds-toc">
-    <div class="ds-toc__grp">Foundations</div>
-    <a href="#color">Color</a>
-    <a href="#type">Type</a>
-    <a href="#radius">Radius</a>
-    <a href="#spacing">Spacing</a>
-    <div class="ds-toc__grp">Components</div>
-    <a href="#buttons">Buttons</a>
-    <a href="#badges">Badges &amp; status</a>
-    <a href="#sides">Side tags</a>
-    <a href="#table">Data table</a>
-    <a href="#tiles">KPI tiles</a>
-    <a href="#inputs">Form inputs</a>
-    <a href="#tabs">Tabs</a>
-    <a href="#alerts">Alerts</a>
-    <a href="#cards">Cards</a>
-    <a href="#code">Code blocks</a>
-    <a href="#empty">Empty states</a>
+  <nav class="sticky top-[60px] self-start h-[calc(100vh-60px)] overflow-y-auto pt-8 pr-[18px] pb-10 pl-7 border-r border-line">
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-0 mb-2">Foundations</div>
+    <a href="#color" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Color</a>
+    <a href="#type" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Type</a>
+    <a href="#radius" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Radius</a>
+    <a href="#spacing" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Spacing</a>
+    <a href="#motion" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Motion</a>
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Components</div>
+    <a href="#buttons" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Buttons</a>
+    <a href="#badges" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Badges &amp; status</a>
+    <a href="#sides" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Side tags</a>
+    <a href="#table" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Data table</a>
+    <a href="#tiles" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">KPI tiles</a>
+    <a href="#positiontile" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Position tile</a>
+    <a href="#inputs" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Form inputs</a>
+    <a href="#tabs" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Tabs</a>
+    <a href="#alerts" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Alerts</a>
+    <a href="#cards" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Cards</a>
+    <a href="#code" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Code blocks</a>
+    <a href="#empty" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Empty states</a>
   </nav>
 
   <!-- CONTENT -->
-  <main class="ds-main">
-    <div class="ds-lede">
-      <h1>Design system</h1>
-      <p>The component foundation for the Kraite operator console. Dark chrome, calm light content, terminal-green accent, monospaced numbers. Trading semantics are sacred — green is long / profit / safe, red is short / loss / risk, never inverted. Surfaces use a soft radius scale; numbers are the hero.</p>
+  <main class="py-10 px-12 pb-[120px] min-w-0 max-w-[1040px]">
+    <div class="max-w-[660px] mb-3">
+      <h1 class="text-[36px] font-bold tracking-[-0.025em] mb-3 text-fg-1">Design system</h1>
+      <p class="text-[15px] leading-[1.6] text-fg-3">The component foundation for the Kraite operator console. Dark chrome, calm light content, terminal-green accent, monospaced numbers. Trading semantics are sacred — green is long / profit / safe, red is short / loss / risk, never inverted. Surfaces use a soft radius scale; numbers are the hero.</p>
     </div>
 
     <!-- ================= COLOR ================= -->
-    <section class="ds-sec" id="color">
-      <div class="ds-sec__eyebrow">Foundations</div>
-      <h2>Color</h2>
-      <p class="ds-sec__desc">One signal color — terminal green — on a neutral ink scale. A fixed P&amp;L pair and a five-step Black Swan regime palette carry all market meaning. No decorative gradients.</p>
+    <section class="pt-14 scroll-mt-[76px]" id="color">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Color</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">One signal color — terminal green — on a neutral ink scale. A fixed P&amp;L pair and a five-step Black Swan regime palette carry all market meaning. No decorative gradients.</p>
 
-      <div class="ds-block">
-        <div class="ds-block__label">Brand · accent</div>
-        <div class="ds-swatches">
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent</div><div class="ds-swatch__hex">--green-500 · #00d17a</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#1ee08e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent hover</div><div class="ds-swatch__hex">--green-600 · #1ee08e</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00a35e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent (light)</div><div class="ds-swatch__hex">--green-300 · #00a35e</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#003d24"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Accent soft</div><div class="ds-swatch__hex">--green-50 · #003d24</div></div></div>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Brand · accent</div>
+        <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3">
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#00d17a"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Accent</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--green-500 · #00d17a</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#1ee08e"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Accent hover</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--green-600 · #1ee08e</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#00a35e"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Accent (light)</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--green-300 · #00a35e</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#003d24"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Accent soft</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--green-50 · #003d24</div></div></div>
         </div>
       </div>
 
-      <div class="ds-block">
-        <div class="ds-block__label">P&amp;L semantic pair — never substitute</div>
-        <div class="ds-swatches">
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Profit / long</div><div class="ds-swatch__hex">--pnl-up-fg · #00d17a</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff4d4d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Loss / short</div><div class="ds-swatch__hex">--pnl-down-fg · #ff4d4d</div></div></div>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">P&amp;L semantic pair — never substitute</div>
+        <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3">
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#00d17a"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Profit / long</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--pnl-up-fg · #00d17a</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#ff4d4d"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Loss / short</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--pnl-down-fg · #ff4d4d</div></div></div>
         </div>
       </div>
 
-      <div class="ds-block">
-        <div class="ds-block__label">Black Swan regime — escalation</div>
-        <div class="ds-swatches">
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#00d17a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Calm</div><div class="ds-swatch__hex">--bsi-calm · #00d17a</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ffb000"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Watch</div><div class="ds-swatch__hex">--bsi-watch · #ffb000</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff7a1a"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Elevated</div><div class="ds-swatch__hex">--bsi-elevated · #ff7a1a</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#ff2d2d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Cascade</div><div class="ds-swatch__hex">--bsi-cascade · #ff2d2d</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#a020f0"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Black swan</div><div class="ds-swatch__hex">--bsi-blackswan · #a020f0</div></div></div>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Black Swan regime — escalation</div>
+        <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3">
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#00d17a"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Calm</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--bsi-calm · #00d17a</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#ffb000"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Watch</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--bsi-watch · #ffb000</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#ff7a1a"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Elevated</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--bsi-elevated · #ff7a1a</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#ff2d2d"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Cascade</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--bsi-cascade · #ff2d2d</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#a020f0"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Black swan</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--bsi-blackswan · #a020f0</div></div></div>
         </div>
       </div>
 
-      <div class="ds-block">
-        <div class="ds-block__label">Neutral ink scale</div>
-        <div class="ds-swatches">
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#050607"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Canvas</div><div class="ds-swatch__hex">--black · #050607</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#161a1e"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Elevated</div><div class="ds-swatch__hex">--ink-2 · #161a1e</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#5a636d"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Mute</div><div class="ds-swatch__hex">--ink-6 · #5a636d</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#c4cad1"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">Secondary</div><div class="ds-swatch__hex">--ink-8 · #c4cad1</div></div></div>
-          <div class="ds-swatch"><div class="ds-swatch__chip" style="background:#f1f3f5;border-bottom:1px solid var(--border)"></div><div class="ds-swatch__meta"><div class="ds-swatch__name">High emphasis</div><div class="ds-swatch__hex">--ink-9 · #f1f3f5</div></div></div>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Neutral ink scale</div>
+        <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3">
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#050607"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Canvas</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--black · #050607</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#161a1e"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Elevated</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--ink-2 · #161a1e</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#5a636d"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Mute</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--ink-6 · #5a636d</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#c4cad1"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">Secondary</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--ink-8 · #c4cad1</div></div></div>
+          <div class="border border-line rounded-control overflow-hidden bg-surface"><div class="h-[60px]" style="background:#f1f3f5;border-bottom:1px solid var(--border)"></div><div class="py-[9px] px-[11px]"><div class="text-[12.5px] font-semibold text-fg-1">High emphasis</div><div class="font-mono text-[11px] text-fg-mute mt-0.5 whitespace-nowrap">--ink-9 · #f1f3f5</div></div></div>
         </div>
       </div>
     </section>
 
     <!-- ================= TYPE ================= -->
-    <section class="ds-sec" id="type">
-      <div class="ds-sec__eyebrow">Foundations</div>
-      <h2>Type</h2>
-      <p class="ds-sec__desc">Inter Tight for UI and headings; IBM Plex Mono for every number, ticker, code block, and eyebrow. Tabular figures on by default. 12px floor for tabular data.</p>
-      <div class="ds-demo ds-demo--col" style="padding:8px 26px">
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Page title</div><div class="ds-type-row__px">Inter Tight · 28 / 700</div></div><div class="ds-type-row__spec" style="font-size:28px;font-weight:700;letter-spacing:-0.02em">Dashboard</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Section</div><div class="ds-type-row__px">Inter Tight · 24 / 700</div></div><div class="ds-type-row__spec" style="font-size:24px;font-weight:700;letter-spacing:-0.02em">Open positions</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Card title</div><div class="ds-type-row__px">Inter Tight · 14 / 600</div></div><div class="ds-type-row__spec" style="font-size:14px;font-weight:600">Exchange connectivity</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Body</div><div class="ds-type-row__px">Inter Tight · 14 / 400</div></div><div class="ds-type-row__spec" style="font-size:14px;color:var(--fg-2)">Engine runs autonomously. Drawdowns happen — cascades don't have to.</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Eyebrow</div><div class="ds-type-row__px">Plex Mono · 11 / caps</div></div><div class="ds-type-row__spec eyebrow">PORTFOLIO VALUE</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Data — large</div><div class="ds-type-row__px">Plex Mono · 30 / 600</div></div><div class="ds-type-row__spec mono" style="font-size:30px;font-weight:600;letter-spacing:-0.025em">$284,910.42</div></div>
-        <div class="ds-type-row"><div class="ds-type-row__meta"><div class="ds-type-row__tok">Data — table</div><div class="ds-type-row__px">Plex Mono · 13 / 500</div></div><div class="ds-type-row__spec mono" style="font-size:13px">68,910.50 · +2.21% · 0.850</div></div>
+    <section class="pt-14 scroll-mt-[76px]" id="type">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Type</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Space Grotesk for everything in the UI — headings, body, and labels; its slightly technical, geometric character suits a trading console. A monospaced system stack (SF&nbsp;Mono / Menlo) carries every number, ticker, code block, and eyebrow, with tabular figures on by default. 12px floor for tabular data.</p>
+      <div class="bg-surface border border-line rounded-surface flex flex-col items-stretch py-2 px-[26px]">
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Page title</div><div class="font-mono text-[11px] text-fg-mute">Space Grotesk · 28 / 700</div></div><div class="text-fg-1 min-w-0" style="font-size:28px;font-weight:700;letter-spacing:-0.02em">Dashboard</div></div>
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Section</div><div class="font-mono text-[11px] text-fg-mute">Space Grotesk · 24 / 700</div></div><div class="text-fg-1 min-w-0" style="font-size:24px;font-weight:700;letter-spacing:-0.02em">Open positions</div></div>
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Card title</div><div class="font-mono text-[11px] text-fg-mute">Space Grotesk · 14 / 600</div></div><div class="text-fg-1 min-w-0" style="font-size:14px;font-weight:600">Exchange connectivity</div></div>
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Body</div><div class="font-mono text-[11px] text-fg-mute">Space Grotesk · 14 / 400</div></div><div class="min-w-0" style="font-size:14px;color:var(--fg-2)">Engine runs autonomously. Drawdowns happen — cascades don't have to.</div></div>
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Eyebrow</div><div class="font-mono text-[11px] text-fg-mute">Mono · 11 / caps</div></div><div class="min-w-0 font-mono text-[11px] font-medium uppercase tracking-[0.12em] text-fg-3">PORTFOLIO VALUE</div></div>
+        <div class="flex items-baseline gap-5 py-3.5 border-b border-line-soft"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Data — large</div><div class="font-mono text-[11px] text-fg-mute">Mono · 30 / 600</div></div><div class="min-w-0 font-mono tabular-nums" style="font-size:30px;font-weight:600;letter-spacing:-0.025em">$284,910.42</div></div>
+        <div class="flex items-baseline gap-5 py-3.5"><div class="w-[130px] flex-shrink-0"><div class="font-mono text-[12px] text-fg-1 font-semibold">Data — table</div><div class="font-mono text-[11px] text-fg-mute">Mono · 13 / 500</div></div><div class="min-w-0 font-mono tabular-nums" style="font-size:13px">68,910.50 · +2.21% · 0.850</div></div>
       </div>
     </section>
 
     <!-- ================= RADIUS ================= -->
-    <section class="ds-sec" id="radius">
-      <div class="ds-sec__eyebrow">Foundations</div>
-      <h2>Radius</h2>
-      <p class="ds-sec__desc">A soft, modern radius scale — distinct from the marketing site's hard edges. Surfaces are generous, controls are gentle, chips and avatars are fully round. No sharp 0px corners anywhere in the back office.</p>
-      <div class="ds-demo">
-        <div class="ds-tokens">
-          <div class="ds-token"><div class="ds-token__box" style="border-radius:14px"></div><div class="ds-token__name">--ar-surface</div><div class="ds-token__val">14px · cards, panels</div></div>
-          <div class="ds-token"><div class="ds-token__box" style="border-radius:10px"></div><div class="ds-token__name">--ar-control</div><div class="ds-token__val">10px · buttons, inputs, tiles</div></div>
-          <div class="ds-token"><div class="ds-token__box" style="border-radius:999px;width:64px"></div><div class="ds-token__name">--ar-chip</div><div class="ds-token__val">999px · badges, pills</div></div>
-          <div class="ds-token"><div class="ds-token__box" style="border-radius:50%;width:64px"></div><div class="ds-token__name">circle</div><div class="ds-token__val">50% · avatars, dots</div></div>
+    <section class="pt-14 scroll-mt-[76px]" id="radius">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Radius</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">A soft, modern radius scale — distinct from the marketing site's hard edges. Surfaces are generous, controls are gentle, chips and avatars are fully round. No sharp 0px corners anywhere in the back office.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+        <div class="flex flex-wrap gap-[18px]">
+          <div class="text-center"><div class="bg-accent-soft border border-accent w-[88px] h-[64px]" style="border-radius:14px"></div><div class="font-mono text-[11px] text-fg-1 mt-2 font-semibold">--ar-surface</div><div class="font-mono text-[10.5px] text-fg-mute">14px · cards, panels</div></div>
+          <div class="text-center"><div class="bg-accent-soft border border-accent w-[88px] h-[64px]" style="border-radius:10px"></div><div class="font-mono text-[11px] text-fg-1 mt-2 font-semibold">--ar-control</div><div class="font-mono text-[10.5px] text-fg-mute">10px · buttons, inputs, tiles</div></div>
+          <div class="text-center"><div class="bg-accent-soft border border-accent h-[64px]" style="border-radius:999px;width:64px"></div><div class="font-mono text-[11px] text-fg-1 mt-2 font-semibold">--ar-chip</div><div class="font-mono text-[10.5px] text-fg-mute">999px · badges, pills</div></div>
+          <div class="text-center"><div class="bg-accent-soft border border-accent h-[64px]" style="border-radius:50%;width:64px"></div><div class="font-mono text-[11px] text-fg-1 mt-2 font-semibold">circle</div><div class="font-mono text-[10.5px] text-fg-mute">50% · avatars, dots</div></div>
         </div>
       </div>
     </section>
 
     <!-- ================= SPACING ================= -->
-    <section class="ds-sec" id="spacing">
-      <div class="ds-sec__eyebrow">Foundations</div>
-      <h2>Spacing</h2>
-      <p class="ds-sec__desc">A 4px base unit. Density over comfort in product UI — compact mode tightens table rows and tile padding further.</p>
-      <div class="ds-demo">
-        <div class="ds-space">
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:4px"></div><div class="ds-space__name">sp-2 · 4</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:8px"></div><div class="ds-space__name">sp-3 · 8</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:12px"></div><div class="ds-space__name">sp-4 · 12</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:16px"></div><div class="ds-space__name">sp-5 · 16</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:20px"></div><div class="ds-space__name">sp-6 · 20</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:24px"></div><div class="ds-space__name">sp-7 · 24</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:32px"></div><div class="ds-space__name">sp-8 · 32</div></div>
-          <div class="ds-space__col"><div class="ds-space__bar" style="height:48px"></div><div class="ds-space__name">sp-9 · 48</div></div>
+    <section class="pt-14 scroll-mt-[76px]" id="spacing">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Spacing</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">A 4px base unit. Density over comfort in product UI — compact mode tightens table rows and tile padding further.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+        <div class="flex items-end gap-3.5 flex-wrap">
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:4px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-2 · 4</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:8px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-3 · 8</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:12px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-4 · 12</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:16px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-5 · 16</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:20px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-6 · 20</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:24px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-7 · 24</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:32px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-8 · 32</div></div>
+          <div class="text-center"><div class="bg-accent rounded-[3px] w-[26px]" style="height:48px"></div><div class="font-mono text-[10px] text-fg-mute mt-1.5">sp-9 · 48</div></div>
         </div>
       </div>
     </section>
 
     <!-- ================= BUTTONS ================= -->
-    <section class="ds-sec" id="buttons">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Buttons</h2>
-      <p class="ds-sec__desc">Primary green for the single most-likely action; secondary outline and ghost for everything else. Press nudges down 1px — no scale, no bounce.</p>
-      <div class="ds-demo">
-        <button class="btn btn--primary">Deploy strategy</button>
-        <button class="btn btn--secondary">View projections</button>
-        <button class="btn btn--ghost">Cancel</button>
-        <button class="btn btn--danger">Halt trading</button>
-        <button class="btn btn--secondary btn--sm">
+    <section class="pt-14 scroll-mt-[76px]" id="buttons">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Buttons</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Primary green for the single most-likely action; secondary outline and ghost for everything else. Press nudges down 1px — no scale, no bounce.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center [&_svg]:w-[15px] [&_svg]:h-[15px]">
+        <button class="appearance-none font-sans font-semibold text-[13px] py-2 px-[14px] rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px bg-accent text-accent-on hover:bg-accent-hover">Deploy strategy</button>
+        <button class="appearance-none font-sans font-semibold text-[13px] py-2 px-[14px] rounded-control border border-line-strong cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px bg-transparent text-fg-1 hover:bg-hover">View projections</button>
+        <button class="appearance-none font-sans font-semibold text-[13px] py-2 px-[14px] rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px bg-transparent text-fg-3 hover:bg-hover hover:text-fg-1">Cancel</button>
+        <button class="appearance-none font-sans font-semibold text-[13px] py-2 px-[14px] rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px bg-danger text-white hover:shadow-danger">Halt trading</button>
+        <button class="appearance-none font-sans font-semibold rounded-control border border-line-strong cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px bg-transparent text-fg-1 hover:bg-hover h-[34px] px-3 text-[12px]">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5"/></svg>
           Sync
         </button>
-        <button class="minibtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg></button>
+        <button class="appearance-none bg-transparent border border-line rounded-control text-fg-3 cursor-pointer w-[30px] h-[30px] inline-flex items-center justify-center transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 5h18l-7 8v6l-4 2v-8z"/></svg></button>
       </div>
     </section>
 
     <!-- ================= BADGES ================= -->
-    <section class="ds-sec" id="badges">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Badges &amp; status</h2>
-      <p class="ds-sec__desc">Fully pill-shaped. Regime pills and status indicators pair a colored dot with an ALL-CAPS mono label — cascade and black-swan states pulse.</p>
-      <div class="ds-block">
-        <div class="ds-block__label">Regime pills</div>
-        <div class="ds-demo">
-          <span class="pill" style="background:color-mix(in srgb,#00a35e 12%,transparent);border-color:color-mix(in srgb,#00a35e 38%,transparent);color:#00a35e"><span class="pill__dot" style="background:#00a35e"></span>CALM 0.31</span>
-          <span class="pill" style="background:color-mix(in srgb,#ffb000 14%,transparent);border-color:color-mix(in srgb,#ffb000 40%,transparent);color:#b07a00"><span class="pill__dot" style="background:#ffb000"></span>WATCH 0.42</span>
-          <span class="pill" style="background:color-mix(in srgb,#ff7a1a 14%,transparent);border-color:color-mix(in srgb,#ff7a1a 40%,transparent);color:#d4590a"><span class="pill__dot" style="background:#ff7a1a"></span>ELEVATED 0.63</span>
-          <span class="pill" style="background:color-mix(in srgb,#ff2d2d 12%,transparent);border-color:color-mix(in srgb,#ff2d2d 40%,transparent);color:#d12020"><span class="pill__dot" style="background:#ff2d2d;animation:kr-pulse 1.4s ease-in-out infinite"></span>CASCADE 0.82</span>
-          <span class="pill" style="background:color-mix(in srgb,#a020f0 12%,transparent);border-color:color-mix(in srgb,#a020f0 40%,transparent);color:#8810d8"><span class="pill__dot" style="background:#a020f0;animation:kr-pulse 1.4s ease-in-out infinite"></span>BLACK SWAN 0.94</span>
+    <section class="pt-14 scroll-mt-[76px]" id="badges">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Badges &amp; status</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Fully pill-shaped. Regime pills and status indicators pair a colored dot with an ALL-CAPS mono label — cascade and black-swan states pulse.</p>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Regime pills</div>
+        <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+          <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap" style="background:color-mix(in srgb,#00a35e 12%,transparent);border-color:color-mix(in srgb,#00a35e 38%,transparent);color:#00a35e"><span class="w-2 h-2 rounded-chip" style="background:#00a35e"></span>CALM 0.31</span>
+          <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap" style="background:color-mix(in srgb,#ffb000 14%,transparent);border-color:color-mix(in srgb,#ffb000 40%,transparent);color:#b07a00"><span class="w-2 h-2 rounded-chip" style="background:#ffb000"></span>WATCH 0.42</span>
+          <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap" style="background:color-mix(in srgb,#ff7a1a 14%,transparent);border-color:color-mix(in srgb,#ff7a1a 40%,transparent);color:#d4590a"><span class="w-2 h-2 rounded-chip" style="background:#ff7a1a"></span>ELEVATED 0.63</span>
+          <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap" style="background:color-mix(in srgb,#ff2d2d 12%,transparent);border-color:color-mix(in srgb,#ff2d2d 40%,transparent);color:#d12020"><span class="w-2 h-2 rounded-chip animate-pulse-soft" style="background:#ff2d2d"></span>CASCADE 0.82</span>
+          <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap" style="background:color-mix(in srgb,#a020f0 12%,transparent);border-color:color-mix(in srgb,#a020f0 40%,transparent);color:#8810d8"><span class="w-2 h-2 rounded-chip animate-pulse-soft" style="background:#a020f0"></span>BLACK SWAN 0.94</span>
         </div>
       </div>
-      <div class="ds-block">
-        <div class="ds-block__label">Status indicators &amp; badges</div>
-        <div class="ds-demo">
-          <span class="stat stat--ok"><span class="stat__dot"></span>LINKED</span>
-          <span class="stat stat--warn"><span class="stat__dot"></span>DEGRADED</span>
-          <span class="stat stat--down"><span class="stat__dot"></span>DOWN</span>
-          <span class="stat stat--idle"><span class="stat__dot"></span>IDLE</span>
-          <span class="badge badge--green">+8.96%</span>
-          <span class="badge badge--red">-2.35%</span>
-          <span class="badge badge--amber">FUNDING</span>
-          <span class="badge badge--neutral">FUTURES</span>
+      <div class="mb-[30px]">
+        <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Status indicators &amp; badges</div>
+        <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+          <span class="inline-flex items-center gap-[7px] font-mono text-[11px] font-semibold tracking-[0.06em] uppercase text-pnlup"><span class="w-2 h-2 rounded-chip flex-shrink-0 bg-green-500"></span>LINKED</span>
+          <span class="inline-flex items-center gap-[7px] font-mono text-[11px] font-semibold tracking-[0.06em] uppercase text-warn"><span class="w-2 h-2 rounded-chip flex-shrink-0 bg-warn"></span>DEGRADED</span>
+          <span class="inline-flex items-center gap-[7px] font-mono text-[11px] font-semibold tracking-[0.06em] uppercase text-pnldown"><span class="w-2 h-2 rounded-chip flex-shrink-0 bg-danger animate-pulse-soft"></span>DOWN</span>
+          <span class="inline-flex items-center gap-[7px] font-mono text-[11px] font-semibold tracking-[0.06em] uppercase text-fg-mute"><span class="w-2 h-2 rounded-chip flex-shrink-0 bg-fg-faint"></span>IDLE</span>
+          <span class="font-mono text-[10px] font-semibold tracking-[0.06em] uppercase py-[3px] px-[9px] rounded-chip border border-transparent inline-flex items-center gap-[5px] bg-pnlup-bg text-pnlup">+8.96%</span>
+          <span class="font-mono text-[10px] font-semibold tracking-[0.06em] uppercase py-[3px] px-[9px] rounded-chip border border-transparent inline-flex items-center gap-[5px] bg-pnldown-bg text-pnldown">-2.35%</span>
+          <span class="font-mono text-[10px] font-semibold tracking-[0.06em] uppercase py-[3px] px-[9px] rounded-chip border border-transparent inline-flex items-center gap-[5px] text-warn bg-[color-mix(in_srgb,var(--warn)_14%,transparent)]">FUNDING</span>
+          <span class="font-mono text-[10px] font-semibold tracking-[0.06em] uppercase py-[3px] px-[9px] rounded-chip border border-line inline-flex items-center gap-[5px] bg-surface-3 text-fg-3">FUTURES</span>
         </div>
       </div>
     </section>
 
     <!-- ================= SIDE TAGS ================= -->
-    <section class="ds-sec" id="sides">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Side tags</h2>
-      <p class="ds-sec__desc">Long and short carry the P&amp;L color pair with a leading dot for instant scan. Leverage sits in a quiet outlined chip beside the market.</p>
-      <div class="ds-demo">
-        <span class="side side--long">LONG</span>
-        <span class="side side--short">SHORT</span>
-        <span style="display:inline-flex;align-items:center"><span class="sym" style="font-family:var(--font-mono);font-weight:600;color:var(--fg-1)">BTC-PERP</span><span class="lev">3×</span></span>
-        <span class="side-mini side-mini--long">LONG</span>
-        <span class="side-mini side-mini--short">SHORT</span>
+    <section class="pt-14 scroll-mt-[76px]" id="sides">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Side tags</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Long and short carry the P&amp;L color pair with a leading dot for instant scan. Leverage sits in a quiet outlined chip beside the market.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+        <span class="inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase py-1 px-2.5 rounded-chip bg-pnlup-bg text-pnlup before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">LONG</span>
+        <span class="inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase py-1 px-2.5 rounded-chip bg-pnldown-bg text-pnldown before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">SHORT</span>
+        <span class="inline-flex items-center"><span class="font-mono font-semibold text-fg-1">BTC-PERP</span><span class="font-mono text-[10px] text-fg-mute border border-line rounded-chip py-0.5 px-[7px] ml-[7px]">3×</span></span>
+        <span class="font-mono text-[9.5px] font-bold tracking-[0.06em] py-px px-[7px] rounded-chip uppercase bg-pnlup-bg text-pnlup">LONG</span>
+        <span class="font-mono text-[9.5px] font-bold tracking-[0.06em] py-px px-[7px] rounded-chip uppercase bg-pnldown-bg text-pnldown">SHORT</span>
       </div>
     </section>
 
     <!-- ================= TABLE ================= -->
-    <section class="ds-sec" id="table">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Data table</h2>
-      <p class="ds-sec__desc">The workhorse. Mono tabular figures, right-aligned numerics, sticky header, row hover, and a 600ms green/red cell flash when a value updates. P&amp;L and percent columns read one step larger.</p>
+    <section class="pt-14 scroll-mt-[76px]" id="table">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Data table</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">The workhorse. Mono tabular figures, right-aligned numerics, sticky header, row hover, and a 600ms green/red cell flash when a value updates. P&amp;L and percent columns read one step larger.</p>
       <div class="card">
-        <div class="tbl-wrap">
-          <table class="tbl">
-            <thead><tr><th>Market</th><th>Side</th><th class="num">Size</th><th class="num">Entry</th><th class="num">Mark</th><th class="num">Unreal. P&amp;L</th><th class="num">%</th></tr></thead>
+        <div class="w-full overflow-x-auto">
+          <table class="w-full border-collapse text-[13px]">
+            <thead><tr>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-left py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap">Market</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-left py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap">Side</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Size</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Entry</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Mark</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Unreal. P&amp;L</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">%</th>
+            </tr></thead>
             <tbody>
-              <tr><td><span class="sym">BTC-PERP</span><span class="lev">3×</span></td><td><span class="side side--long">LONG</span></td><td class="num mono">0.850</td><td class="num mono dim">67,420.00</td><td class="num mono">68,910.50</td><td class="num mono mono-lg pnl-up">+$1,266.93</td><td class="num mono mono-lg pnl-up">+2.21%</td></tr>
-              <tr class="flash-up"><td><span class="sym">SOL-PERP</span><span class="lev">2×</span></td><td><span class="side side--short">SHORT</span></td><td class="num mono">220.0</td><td class="num mono dim">168.40</td><td class="num mono">162.10</td><td class="num mono mono-lg pnl-up">+$1,386.00</td><td class="num mono mono-lg pnl-up">+3.74%</td></tr>
-              <tr><td><span class="sym">ARB-PERP</span><span class="lev">4×</span></td><td><span class="side side--long">LONG</span></td><td class="num mono">5,400</td><td class="num mono dim">0.8920</td><td class="num mono">0.8710</td><td class="num mono mono-lg pnl-down">−$113.40</td><td class="num mono mono-lg pnl-down">−2.35%</td></tr>
+              <tr class="transition-colors hover:bg-hover">
+                <td class="py-[14px] px-4 border-b border-line-soft text-fg-2 whitespace-nowrap h-12"><span class="font-mono font-semibold text-[13.5px] text-fg-1 tracking-[0.01em]">BTC-PERP</span><span class="font-mono text-[10px] text-fg-mute border border-line rounded-chip py-0.5 px-[7px] ml-[7px]">3×</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12"><span class="inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase py-1 px-2.5 rounded-chip bg-pnlup-bg text-pnlup before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">LONG</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">0.850</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-mute">67,420.00</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">68,910.50</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnlup">+$1,266.93</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnlup">+2.21%</td>
+              </tr>
+              <tr class="transition-colors hover:bg-hover animate-flash-up">
+                <td class="py-[14px] px-4 border-b border-line-soft text-fg-2 whitespace-nowrap h-12"><span class="font-mono font-semibold text-[13.5px] text-fg-1 tracking-[0.01em]">SOL-PERP</span><span class="font-mono text-[10px] text-fg-mute border border-line rounded-chip py-0.5 px-[7px] ml-[7px]">2×</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12"><span class="inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase py-1 px-2.5 rounded-chip bg-pnldown-bg text-pnldown before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">SHORT</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">220.0</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-mute">168.40</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">162.10</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnlup">+$1,386.00</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnlup">+3.74%</td>
+              </tr>
+              <tr class="transition-colors hover:bg-hover">
+                <td class="py-[14px] px-4 border-b border-line-soft text-fg-2 whitespace-nowrap h-12 last:border-b-0"><span class="font-mono font-semibold text-[13.5px] text-fg-1 tracking-[0.01em]">ARB-PERP</span><span class="font-mono text-[10px] text-fg-mute border border-line rounded-chip py-0.5 px-[7px] ml-[7px]">4×</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12"><span class="inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase py-1 px-2.5 rounded-chip bg-pnlup-bg text-pnlup before:content-[''] before:w-1.5 before:h-1.5 before:rounded-chip before:bg-current before:opacity-90">LONG</span></td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">5,400</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-mute">0.8920</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-fg-1">0.8710</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnldown">−$113.40</td>
+                <td class="py-[14px] px-4 border-b border-line-soft whitespace-nowrap h-12 text-right tabular-nums font-mono text-[14px] font-semibold text-pnldown">−2.35%</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -232,110 +270,225 @@
     </section>
 
     <!-- ================= TILES ================= -->
-    <section class="ds-sec" id="tiles">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>KPI tiles</h2>
-      <p class="ds-sec__desc">Eyebrow, then the loud mono value, then a tight delta pill and a sparkline. The value is always the dominant element on the tile.</p>
-      <div class="ds-demo" style="gap:16px">
-        <div class="tile" style="width:260px">
-          <div class="tile__eyebrow"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 6h18v12H3zM3 10h18"/></svg>PORTFOLIO VALUE</div>
-          <div class="tile__value">$284,910.42</div>
-          <div class="tile__metrow"><div class="tile__metleft"><span class="tile__delta pnl-up">↑ +1.84%</span><span class="tile__sub">NET EQUITY · USD</span></div></div>
+    <section class="pt-14 scroll-mt-[76px]" id="tiles">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">KPI tiles</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Eyebrow, then the loud mono value, then a tight delta pill and a sparkline. The four dashboard KPI tiles use an <strong class="text-fg-1 font-semibold">inverted</strong> treatment so they pop off the canvas — vivid green with white numerals on light content, bright white tiles on dark content. The value is always the dominant element.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+        <!-- light-content invert: vivid green hero tile -->
+        <div class="rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative" style="width:260px;background:#00a35e">
+          <div class="font-mono text-[10px] font-medium tracking-[0.11em] uppercase flex items-center gap-[7px]" style="color:#c4ecd8"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 6h18v12H3zM3 10h18"/></svg>PORTFOLIO VALUE</div>
+          <div class="font-mono font-semibold text-[24px] tracking-[-0.025em] tabular-nums leading-none text-white">$284,910.42</div>
+          <div class="flex items-center justify-between gap-2.5"><div class="flex items-center gap-2 min-w-0"><span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip text-white" style="background:rgba(255,255,255,0.18)">↑ +1.84%</span><span class="font-mono text-[10.5px] tracking-[0.04em] whitespace-nowrap" style="color:#aee3ca">NET EQUITY · USD</span></div></div>
         </div>
-        <div class="tile" style="width:260px">
-          <div class="tile__eyebrow"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"/></svg>P&amp;L — 30 DAY</div>
-          <div class="tile__value">+$23,418.06</div>
-          <div class="tile__metrow"><div class="tile__metleft"><span class="tile__delta pnl-up">↑ +8.96%</span><span class="tile__sub">NET OF FEES</span></div></div>
+        <!-- dark-content invert: bright white tile -->
+        <div class="rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative border" style="width:260px;background:#ffffff;border-color:#e2e0da">
+          <div class="font-mono text-[10px] font-medium tracking-[0.11em] uppercase flex items-center gap-[7px]" style="color:#4a525c"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"/></svg>P&amp;L — 30 DAY</div>
+          <div class="font-mono font-semibold text-[24px] tracking-[-0.025em] tabular-nums leading-none" style="color:#0a0c0e">+$23,418.06</div>
+          <div class="flex items-center justify-between gap-2.5"><div class="flex items-center gap-2 min-w-0"><span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip" style="color:#008a4f;background:#e0f5eb">↑ +8.96%</span><span class="font-mono text-[10.5px] tracking-[0.04em] whitespace-nowrap" style="color:#6e7680">NET OF FEES</span></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= POSITION TILE ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="positiontile">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Position tile</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[660px] mb-[26px]">The hero working component. Direction governs the whole tile: <strong style="color:#00a35e">green for longs, red for shorts</strong> — applied to the 2px border, the inverted ribbon header, the lifecycle track, the metric labels, and the accent values. The header band carries the market, side tag, leverage and ETA; the lifecycle track shows current price (PX) heading toward the take-profit target (TP) along a limit-order ladder; two metric rows below read the position's progress and prices. Every metric label has a <code class="font-mono text-[12px]" style="color:var(--accent)">?</code> affordance with a styled hover tooltip. An <em>opening</em> tile is desaturated until the position is established.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] grid grid-cols-2 gap-5 max-[900px]:grid-cols-1">
+
+        <!-- LONG (green) -->
+        <div class="rounded-surface overflow-hidden border-2 bg-surface" style="border-color:color-mix(in srgb,#00a35e 40%,transparent);--mc:#00a35e">
+          <div class="px-[18px] pt-4 pb-3.5 border-b flex items-start gap-[11px]" style="background:#0e3f2a;border-color:color-mix(in srgb,#00a35e 30%,transparent)">
+            <div class="w-[30px] h-[30px] rounded-full flex items-center justify-center font-mono font-bold text-[12px] text-white flex-shrink-0" style="background:#f7931a">B</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-[7px]"><span class="font-sans font-bold text-[14px] tracking-[-0.01em]" style="color:#eafff5">BTC</span><span class="text-[12px]" style="color:#8fd9b4">Bitcoin</span></div>
+              <div class="flex items-center gap-[9px] mt-1.5">
+                <span class="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-1 px-2.5" style="background:rgba(255,255,255,0.1);color:#aef0cf">▲ LONG 3×</span>
+                <span class="font-mono text-[11px] inline-flex items-center gap-[5px]" style="color:#8fd9b4">⦿ 2h from now</span>
+              </div>
+            </div>
+            <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]"><i class="block w-1.5 h-1.5 rounded-chip bg-pnlup"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnlup"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnldown"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnlup"></i></div>
+          </div>
+          <div class="pt-0 px-[18px] pb-4">
+            <div class="relative mt-[22px] mx-0.5 mb-4 h-[30px]">
+              <div class="absolute left-0 right-0 top-[21px] h-px" style="background:color-mix(in srgb,var(--mc) 45%,transparent)"></div>
+              <div class="absolute top-[19px] h-1 rounded-chip" style="left:26%;width:44%;background:var(--mc)"></div>
+              <span class="absolute top-[15px] -translate-x-1/2 font-mono text-[10px] bg-surface px-1 leading-[1.4]" style="left:62%;color:var(--mc)">3</span>
+              <span class="absolute top-[15px] -translate-x-1/2 font-mono text-[10px] bg-surface px-1 leading-[1.4]" style="left:80%;color:var(--mc)">4</span>
+              <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left:70%"><span class="font-mono text-[9px] font-bold tracking-[0.06em]" style="color:var(--mc)">TP</span><span class="w-[11px] h-[11px] rounded-[50%_50%_50%_0] rotate-45 mt-[3px]" style="background:var(--mc)"></span></div>
+              <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left:26%"><span class="font-mono text-[9px] font-bold text-fg-2 tracking-[0.06em]">PX</span><span class="w-[10px] h-[10px] rounded-full bg-fg-1 mt-[3px]"></span></div>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" style="color:var(--mc)">⚐ Path <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px]" style="color:var(--mc)">4.3%</div></div>
+              <div class="text-center"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" style="color:var(--mc)">Limit <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px] text-fg-1">16.7%</div></div>
+              <div class="text-right"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" style="color:var(--mc)">Filled <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px] text-fg-1">1 / 4</div></div>
+            </div>
+            <div class="h-px bg-line-soft my-[13px]"></div>
+            <div class="grid grid-cols-3 gap-2">
+              <div><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">Open</div><div class="font-mono font-semibold text-[13px] text-fg-1">67,420.00</div></div>
+              <div class="text-center"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">TP</div><div class="font-mono font-semibold text-[13px]" style="color:var(--mc)">70,250.00</div></div>
+              <div class="text-right"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">Next</div><div class="font-mono font-semibold text-[13px] text-fg-1">66,310.00</div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SHORT (red) -->
+        <div class="rounded-surface overflow-hidden border-2 bg-surface" style="border-color:color-mix(in srgb,#d12020 42%,transparent);--mc:#d12020">
+          <div class="px-[18px] pt-4 pb-3.5 border-b flex items-start gap-[11px]" style="background:#3f1212;border-color:color-mix(in srgb,#d12020 32%,transparent)">
+            <div class="w-[30px] h-[30px] rounded-full flex items-center justify-center font-mono font-bold text-[12px] text-white flex-shrink-0" style="background:#9945ff">S</div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-[7px]"><span class="font-sans font-bold text-[14px] tracking-[-0.01em]" style="color:#ffecec">SOL</span><span class="text-[12px]" style="color:#e0a3a3">Solana</span></div>
+              <div class="flex items-center gap-[9px] mt-1.5">
+                <span class="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-1 px-2.5" style="background:rgba(255,255,255,0.1);color:#ffc9c9">▼ SHORT 2×</span>
+                <span class="font-mono text-[11px] inline-flex items-center gap-[5px]" style="color:#e0a3a3">⦿ 40m from now</span>
+              </div>
+            </div>
+            <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]"><i class="block w-1.5 h-1.5 rounded-chip bg-pnldown"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnldown"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnlup"></i><i class="block w-1.5 h-1.5 rounded-chip bg-pnldown"></i></div>
+          </div>
+          <div class="pt-0 px-[18px] pb-4">
+            <div class="relative mt-[22px] mx-0.5 mb-4 h-[30px]">
+              <div class="absolute left-0 right-0 top-[21px] h-px" style="background:color-mix(in srgb,var(--mc) 45%,transparent)"></div>
+              <div class="absolute top-[19px] h-1 rounded-chip" style="left:55%;width:25%;background:var(--mc)"></div>
+              <span class="absolute top-[15px] -translate-x-1/2 font-mono text-[10px] bg-surface px-1 leading-[1.4]" style="left:80%;color:var(--mc)">4</span>
+              <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left:55%"><span class="font-mono text-[9px] font-bold tracking-[0.06em]" style="color:var(--mc)">TP</span><span class="w-[11px] h-[11px] rounded-[50%_50%_50%_0] rotate-45 mt-[3px]" style="background:var(--mc)"></span></div>
+              <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left:80%"><span class="font-mono text-[9px] font-bold text-fg-2 tracking-[0.06em]">PX</span><span class="w-[10px] h-[10px] rounded-full bg-fg-1 mt-[3px]"></span></div>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" style="color:var(--mc)">⚐ Path <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px]" style="color:var(--mc)">2.2%</div></div>
+              <div class="text-center"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" style="color:var(--mc)">Limit <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px] text-fg-1">8.6%</div></div>
+              <div class="text-right"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" style="color:var(--mc)">Filled <span class="inline-flex items-center justify-center w-[11px] h-[11px] rounded-full border border-current text-[7px] font-bold opacity-45">?</span></div><div class="font-mono font-semibold text-[14px] text-fg-1">2 / 4</div></div>
+            </div>
+            <div class="h-px bg-line-soft my-[13px]"></div>
+            <div class="grid grid-cols-3 gap-2">
+              <div><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">Open</div><div class="font-mono font-semibold text-[13px] text-fg-1">168.40</div></div>
+              <div class="text-center"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">TP</div><div class="font-mono font-semibold text-[13px]" style="color:var(--mc)">162.10</div></div>
+              <div class="text-right"><div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase mb-[5px]" style="color:var(--mc)">Next</div><div class="font-mono font-semibold text-[13px] text-fg-1">171.20</div></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ================= MOTION ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="motion">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Motion</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[660px] mb-[26px]">Motion is purposeful and quick — it confirms a state change, never decorates. Two signature movements: a single highlight that <strong class="text-fg-1 font-semibold">slides</strong> to the selected target (sidebar rail, segmented control) and a content <strong class="text-fg-1 font-semibold">crossfade</strong> on route change. Both decelerate into place with an expo-out curve and no overshoot.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] grid grid-cols-2 gap-5 max-[900px]:grid-cols-1">
+        <div>
+          <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3">Easing &amp; duration</div>
+          <div class="flex flex-col gap-2.5 font-mono text-[12.5px]">
+            <div class="flex items-baseline justify-between gap-4"><span class="text-fg-2">Sliding highlight</span><span class="text-fg-mute">expo-out · 420ms</span></div>
+            <div class="flex items-baseline justify-between gap-4"><span class="text-fg-2">Content crossfade</span><span class="text-fg-mute">ease-out · 200ms</span></div>
+            <div class="flex items-baseline justify-between gap-4"><span class="text-fg-2">Hover / color</span><span class="text-fg-mute">ease-out · 140ms</span></div>
+            <div class="flex items-baseline justify-between gap-4"><span class="text-fg-2">Risk pulse</span><span class="text-fg-mute">ease-in-out · 1.4s loop</span></div>
+          </div>
+        </div>
+        <div>
+          <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3">Slide curve</div>
+          <div class="font-mono text-[12px] bg-surface-3 border border-line rounded-control py-3 px-[14px] text-fg-2">cubic-bezier(0.16, 1, 0.3, 1)</div>
+          <div class="text-[12.5px] text-fg-3 mt-3 leading-[1.5]">Fast off the mark, easing gently into the destination — the highlight feels responsive without bouncing past its target.</div>
         </div>
       </div>
     </section>
 
     <!-- ================= INPUTS ================= -->
-    <section class="ds-sec" id="inputs">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Form inputs</h2>
-      <p class="ds-sec__desc">Rounded controls with a green focus ring. Used sparingly — the trader surface is mostly read-only; inputs live in account setup, billing, and admin tools.</p>
-      <div class="ds-demo" style="gap:24px">
-        <label class="ds-label"><span class="ds-label__t">API key label</span><input class="ds-input" placeholder="binance-main"/></label>
-        <label class="ds-label"><span class="ds-label__t">Max notional</span><input class="ds-input mono" value="3.0×" style="width:120px"/></label>
-        <label class="ds-label"><span class="ds-label__t">Focused</span><input class="ds-input" value="0xA1b2…f9" style="border-color:var(--border-focus);box-shadow:var(--shadow-glow)"/></label>
+    <section class="pt-14 scroll-mt-[76px]" id="inputs">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Form inputs</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Rounded controls with a green focus ring. Used sparingly — the trader surface is mostly read-only; inputs live in account setup, billing, and admin tools.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-6 items-center">
+        <label class="flex flex-col gap-[7px]"><span class="text-[12px] font-semibold text-fg-2">API key label</span><input class="appearance-none w-[240px] h-[38px] px-3 border border-line rounded-control bg-input text-fg-1 font-sans text-[13px] outline-none transition-[border-color,box-shadow] duration-fast ease-out focus:border-line-focus focus:shadow-glow placeholder:text-fg-mute" placeholder="binance-main"/></label>
+        <label class="flex flex-col gap-[7px]"><span class="text-[12px] font-semibold text-fg-2">Max notional</span><input class="appearance-none h-[38px] px-3 border border-line rounded-control bg-input text-fg-1 font-mono tabular-nums text-[13px] outline-none transition-[border-color,box-shadow] duration-fast ease-out focus:border-line-focus focus:shadow-glow" value="3.0×" style="width:120px"/></label>
+        <label class="flex flex-col gap-[7px]"><span class="text-[12px] font-semibold text-fg-2">Focused</span><input class="appearance-none w-[240px] h-[38px] px-3 border rounded-control bg-input text-fg-1 font-sans text-[13px] outline-none border-line-focus shadow-glow" value="0xA1b2…f9"/></label>
       </div>
     </section>
 
     <!-- ================= TABS ================= -->
-    <section class="ds-sec" id="tabs">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Tabs &amp; segmented control</h2>
-      <p class="ds-sec__desc">A compact rounded segmented control for filtering tables and switching views. The active segment lifts onto an elevated surface.</p>
-      <div class="ds-demo">
-        <div class="seg"><button class="is-active">ALL</button><button>LONG</button><button>SHORT</button></div>
-        <div class="seg"><button>1D</button><button class="is-active">1W</button><button>1M</button><button>ALL</button></div>
+    <section class="pt-14 scroll-mt-[76px]" id="tabs">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Tabs &amp; segmented control</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">A compact rounded segmented control for filtering tables and switching views. The active segment carries a solid green pill that <strong class="text-fg-1 font-semibold">slides</strong> to the clicked option (420ms expo-out), matching the sidebar rail's motion.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-wrap gap-4 items-center">
+        <div class="inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
+          <button class="appearance-none border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out bg-accent text-accent-on shadow-1">ALL</button>
+          <button class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out text-fg-3 hover:text-fg-1">LONG</button>
+          <button class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out text-fg-3 hover:text-fg-1">SHORT</button>
+        </div>
+        <div class="inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
+          <button class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out text-fg-3 hover:text-fg-1">1D</button>
+          <button class="appearance-none border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out bg-accent text-accent-on shadow-1">1W</button>
+          <button class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out text-fg-3 hover:text-fg-1">1M</button>
+          <button class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer transition-colors duration-fast ease-out text-fg-3 hover:text-fg-1">ALL</button>
+        </div>
       </div>
     </section>
 
     <!-- ================= ALERTS ================= -->
-    <section class="ds-sec" id="alerts">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Alerts</h2>
-      <p class="ds-sec__desc">Inline alerts borrow the regime palette. The critical exchange-disconnect alert escalates to a full-width red banner that drops between the top bar and content.</p>
-      <div class="ds-demo ds-demo--stack">
-        <div class="ds-alert ds-alert--danger"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 2v3M15 2v3M7 6h10v5a5 5 0 0 1-5 5 5 5 0 0 1-5-5V6zM12 16v6M3 3l18 18"/></svg><span><strong>OKX (arb)</strong> lost connectivity to its exchange — bot management paused for this account.</span></div>
-        <div class="ds-alert ds-alert--warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M12 3l10 18H2L12 3zM12 9v5M12 18h.01"/></svg><span><strong>Watch regime.</strong> Position sizing tightened — max notional 4.0× → 3.0×.</span></div>
-        <div class="ds-alert ds-alert--ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M4 12l5 5 11-11"/></svg><span><strong>All exchanges linked.</strong> Heartbeat nominal across 4 accounts.</span></div>
+    <section class="pt-14 scroll-mt-[76px]" id="alerts">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Alerts</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Inline alerts borrow the regime palette. The critical exchange-disconnect alert escalates to a full-width red banner that drops between the top bar and content.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-col gap-3.5 items-start [&_svg]:w-[18px] [&_svg]:h-[18px] [&_svg]:flex-shrink-0">
+        <div class="flex items-center gap-3 w-full py-[13px] px-4 rounded-control border text-[13px] bg-pnldown-bg border-pnldown text-pnldown-strong"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 2v3M15 2v3M7 6h10v5a5 5 0 0 1-5 5 5 5 0 0 1-5-5V6zM12 16v6M3 3l18 18"/></svg><span><strong class="font-bold">OKX (arb)</strong> lost connectivity to its exchange — bot management paused for this account.</span></div>
+        <div class="flex items-center gap-3 w-full py-[13px] px-4 rounded-control border text-[13px] border-warn text-warn bg-[color-mix(in_srgb,var(--warn)_12%,transparent)]"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M12 3l10 18H2L12 3zM12 9v5M12 18h.01"/></svg><span><strong class="font-bold">Watch regime.</strong> Position sizing tightened — max notional 4.0× → 3.0×.</span></div>
+        <div class="flex items-center gap-3 w-full py-[13px] px-4 rounded-control border text-[13px] bg-pnlup-bg border-pnlup text-pnlup-strong"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M4 12l5 5 11-11"/></svg><span><strong class="font-bold">All exchanges linked.</strong> Heartbeat nominal across 4 accounts.</span></div>
       </div>
     </section>
 
     <!-- ================= CARDS ================= -->
-    <section class="ds-sec" id="cards">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Cards</h2>
-      <p class="ds-sec__desc">1px border on an elevated surface, 14px radius, no drop shadow. A header row (title + actions), a body, and an optional dense footer.</p>
+    <section class="pt-14 scroll-mt-[76px]" id="cards">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Cards</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">1px border on an elevated surface, 14px radius, no drop shadow. A header row (title + actions), a body, and an optional dense footer.</p>
       <div style="max-width:420px">
         <div class="card">
-          <div class="card__head">
-            <div class="card__title">
+          <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
+            <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap [&_svg]:w-4 [&_svg]:h-4 [&_svg]:text-fg-3">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 2v4M15 2v4M7 6h10v6a5 5 0 0 1-10 0V6z"/></svg>
               Exchange connectivity
             </div>
-            <span class="stat stat--down"><span class="stat__dot"></span>1 DOWN</span>
+            <span class="inline-flex items-center gap-[7px] font-mono text-[11px] font-semibold tracking-[0.06em] uppercase text-pnldown"><span class="w-2 h-2 rounded-chip flex-shrink-0 bg-danger animate-pulse-soft"></span>1 DOWN</span>
           </div>
           <div>
-            <div class="acct"><span class="acct__dot acct__dot--ok"></span><span class="acct__name">Binance<span class="acct__tag">MAIN</span></span><span class="acct__lat">12ms</span></div>
-            <div class="acct is-down"><span class="acct__dot acct__dot--down"></span><span class="acct__name">OKX<span class="acct__tag">ARB</span></span><span class="acct__lat acct__lat--down">DOWN</span></div>
+            <div class="flex items-center gap-[11px] py-[9px] px-5 border-b border-line-soft"><span class="w-[9px] h-[9px] rounded-chip flex-shrink-0 bg-green-500"></span><span class="flex-1 font-mono text-[12.5px] font-semibold text-fg-1 flex items-center gap-2">Binance<span class="font-mono text-[9px] text-fg-mute uppercase tracking-wide">MAIN</span></span><span class="font-mono text-[11.5px] text-fg-3 tabular-nums">12ms</span></div>
+            <div class="flex items-center gap-[11px] py-[9px] px-5"><span class="w-[9px] h-[9px] rounded-chip flex-shrink-0 bg-danger animate-pulse-soft"></span><span class="flex-1 font-mono text-[12.5px] font-semibold text-fg-1 flex items-center gap-2">OKX<span class="font-mono text-[9px] text-fg-mute uppercase tracking-wide">ARB</span></span><span class="font-mono text-[11.5px] tabular-nums text-pnldown font-semibold">DOWN</span></div>
           </div>
-          <div class="card__foot">
-            <span class="mono" style="font-size:11px;color:var(--fg-mute)">HEARTBEAT 5s</span>
-            <a href="#" class="link-arrow">View details →</a>
+          <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
+            <span class="font-mono tabular-nums text-[11px] text-fg-mute">HEARTBEAT 5s</span>
+            <a href="#" class="text-[12px] font-sans font-semibold no-underline text-accent inline-flex items-center gap-[5px] hover:text-accent-hover">View details →</a>
           </div>
         </div>
       </div>
     </section>
 
     <!-- ================= CODE ================= -->
-    <section class="ds-sec" id="code">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Code blocks</h2>
-      <p class="ds-sec__desc">For the SQL console, command runner, and audit log. Mono, rounded, on an elevated surface with green keywords and green numerics.</p>
-      <div class="ds-demo ds-demo--col">
-<div class="ds-code"><span class="c">-- step-dispatcher: positions opened in window</span>
-<span class="k">SELECT</span> market, side, size, entry_px
-<span class="k">FROM</span> positions
-<span class="k">WHERE</span> opened_at > now() - <span class="n">interval</span> <span class="n">'1 hour'</span>
-<span class="k">ORDER BY</span> opened_at <span class="k">DESC</span>;</div>
+    <section class="pt-14 scroll-mt-[76px]" id="code">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Code blocks</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">For the SQL console, command runner, and audit log. Mono, rounded, on an elevated surface with green keywords and green numerics.</p>
+      <div class="bg-surface border border-line rounded-surface p-[26px] flex flex-col items-stretch gap-4">
+<div class="font-mono text-[12.5px] leading-[1.65] bg-surface-3 border border-line rounded-control py-4 px-[18px] text-fg-2 overflow-x-auto whitespace-pre w-full"><span class="text-fg-mute">-- step-dispatcher: positions opened in window</span>
+<span class="text-accent">SELECT</span> market, side, size, entry_px
+<span class="text-accent">FROM</span> positions
+<span class="text-accent">WHERE</span> opened_at > now() - <span class="text-pnlup">interval</span> <span class="text-pnlup">'1 hour'</span>
+<span class="text-accent">ORDER BY</span> opened_at <span class="text-accent">DESC</span>;</div>
       </div>
     </section>
 
     <!-- ================= EMPTY ================= -->
-    <section class="ds-sec" id="empty">
-      <div class="ds-sec__eyebrow">Components</div>
-      <h2>Empty states</h2>
-      <p class="ds-sec__desc">Calm, centered, never cute. A bordered icon, a terse line, and a single quiet action. Used on pages still in the build queue and for genuinely empty tables.</p>
-      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:64px 20px;border:1px dashed var(--border);border-radius:var(--ar-surface);background:var(--bg-elev-1)">
-        <div style="width:48px;height:48px;border-radius:var(--ar-control);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--fg-mute);margin-bottom:16px">
+    <section class="pt-14 scroll-mt-[76px]" id="empty">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Empty states</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[640px] mb-[26px]">Calm, centered, never cute. A bordered icon, a terse line, and a single quiet action. Used on pages still in the build queue and for genuinely empty tables.</p>
+      <div class="flex flex-col items-center justify-center text-center py-16 px-5 border border-dashed border-line rounded-surface bg-surface">
+        <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4">
           <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>
         </div>
-        <h4 style="margin-bottom:6px;font-size:18px">No open positions</h4>
-        <p style="font-size:14px;color:var(--fg-3);max-width:380px">The engine is flat. New positions resume automatically when the regime clears and a setup qualifies.</p>
+        <h4 class="mb-1.5 font-sans font-semibold text-[18px] text-fg-1">No open positions</h4>
+        <p class="text-[14px] text-fg-3 max-w-[380px]">The engine is flat. New positions resume automatically when the regime clears and a setup qualifies.</p>
       </div>
     </section>
 

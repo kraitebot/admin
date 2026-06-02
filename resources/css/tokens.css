@@ -1,0 +1,374 @@
+/* =========================================================================
+   KRAITE — Colors & Type
+   Trader-pro dark UI; equal polish in light. Terminal-green accent system.
+   Aggressive, terse, capital-preservation tone. Dense data, mono everywhere
+   numbers happen.
+   ========================================================================= */
+
+/* ---- FONTS ----
+   Inter Tight (display + UI body, weights 400/500/600/700/800)
+   IBM Plex Mono (data, ticker tape, code, weights 400/500/600/700)
+   Both via Google Fonts. If you self-host, drop ttf into /fonts and update
+   src URLs. */
+
+:root {
+  /* ============ FONT FAMILIES ============ */
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+
+  /* ============ TYPE SCALE ============
+     Trader UIs run small + dense. Floor at 12px for tabular data.
+     Display sizes are aggressive — Kraite headlines shout. */
+  --fs-xs:    11px;   /* micro labels, ticker caps */
+  --fs-sm:    12px;   /* tabular data, default density */
+  --fs-base:  14px;   /* body */
+  --fs-md:    16px;   /* prose body */
+  --fs-lg:    18px;
+  --fs-xl:    22px;
+  --fs-2xl:   28px;
+  --fs-3xl:   40px;
+  --fs-4xl:   60px;
+  --fs-5xl:   88px;
+  --fs-6xl:   128px;  /* "SURVIVE THE CASCADE" hero */
+
+  --lh-tight: 1.05;
+  --lh-snug:  1.2;
+  --lh-base:  1.45;
+  --lh-loose: 1.6;
+
+  --tracking-tight: -0.03em;
+  --tracking-snug:  -0.01em;
+  --tracking-base:   0;
+  --tracking-wide:   0.04em;
+  --tracking-caps:   0.12em;   /* ALL CAPS labels */
+
+  /* ============ COLOR PRIMITIVES — DARK (default) ============
+     Near-black background — no pure #000 (too harsh on OLED tabular data).
+     Single accent: terminal green. Red/green semantic for P&L. */
+
+  /* Greyscale (dark) */
+  --black:       #050607;   /* canvas */
+  --ink-0:       #0a0c0e;   /* surface base */
+  --ink-1:       #0f1215;   /* card / panel */
+  --ink-2:       #161a1e;   /* elevated card, hover */
+  --ink-3:       #1d2228;   /* border-strong, input bg */
+  --ink-4:       #2a3037;   /* divider/muted border */
+  --ink-5:       #3a424b;   /* disabled border */
+  --ink-6:       #5a636d;   /* mute text */
+  --ink-7:       #8b939c;   /* secondary text */
+  --ink-8:       #c4cad1;   /* primary text */
+  --ink-9:       #f1f3f5;   /* high-emphasis */
+  --bone:        #e8e8e8;   /* near-white, "paper" */
+
+  /* Brand / accent */
+  --green-25:   #002e1c;
+  --green-50:   #003d24;
+  --green-100:  #005a36;
+  --green-300:  #00a35e;
+  --green-500:  #00d17a;   /* PRIMARY ACCENT — terminal green */
+  --green-600:  #1ee08e;
+  --green-700:  #4ce8a4;
+
+  /* Semantic — P&L */
+  --pnl-up-bg:    #00321f;
+  --pnl-up-fg:    #00d17a;
+  --pnl-up-strong:#1ee08e;
+  --pnl-down-bg:  #3a0a0a;
+  --pnl-down-fg:  #ff4d4d;
+  --pnl-down-strong:#ff6b6b;
+
+  /* Semantic — risk regime / Black Swan */
+  --bsi-calm:     #00d17a;   /* green: trade allowed */
+  --bsi-watch:    #ffb000;   /* amber: caution */
+  --bsi-elevated: #ff7a1a;   /* orange: reduced exposure */
+  --bsi-cascade:  #ff2d2d;   /* red: trading halted */
+  --bsi-blackswan:#a020f0;   /* violet: BSI tripped, lock */
+
+  /* Status */
+  --info:    #4a9eff;
+  --warn:    #ffb000;
+  --danger:  #ff2d2d;
+  --success: #00d17a;
+
+  /* ============ SEMANTIC ROLES (DARK) ============ */
+  --bg:           var(--black);
+  --bg-elev-1:    var(--ink-0);
+  --bg-elev-2:    var(--ink-1);
+  --bg-elev-3:    var(--ink-2);
+  --bg-input:     var(--ink-1);
+  --bg-hover:     var(--ink-2);
+  --bg-active:    var(--ink-3);
+
+  --fg:           var(--ink-9);   /* primary */
+  --fg-1:         var(--ink-9);
+  --fg-2:         var(--ink-8);
+  --fg-3:         var(--ink-7);   /* secondary text */
+  --fg-mute:      var(--ink-6);   /* muted */
+  --fg-faint:     var(--ink-5);
+  --fg-on-accent: var(--black);   /* text on green */
+
+  --border:       var(--ink-3);
+  --border-soft:  var(--ink-2);
+  --border-strong:var(--ink-4);
+  --border-focus: var(--green-500);
+
+  --accent:       var(--green-500);
+  --accent-hover: var(--green-600);
+  --accent-press: var(--green-300);
+  --accent-soft:  var(--green-50);
+  --on-accent:    #001008;
+
+  /* Grid lines for charts */
+  --grid:         #161a1e;
+  --grid-strong:  #1d2228;
+  --crosshair:    #4ce8a4;
+
+  /* ============ SHADOWS / ELEVATION ============
+     Trader UI is FLAT. Shadows only on overlays (menus, modals, tooltips).
+     "Hard" border-shadow style — no soft blur drama. */
+  --shadow-0:  none;
+  --shadow-1:  0 0 0 1px var(--ink-3);
+  --shadow-2:  0 0 0 1px var(--ink-3), 0 4px 12px rgba(0,0,0,0.5);
+  --shadow-3:  0 0 0 1px var(--ink-3), 0 12px 32px rgba(0,0,0,0.7);
+  --shadow-glow: 0 0 0 1px var(--green-500), 0 0 24px rgba(0,209,122,0.25);
+  --shadow-danger: 0 0 0 1px var(--pnl-down-fg), 0 0 24px rgba(255,77,77,0.25);
+  --shadow-inset: inset 0 0 0 1px var(--ink-3);
+
+  /* ============ RADII ============
+     Sharp. Trader tools are not toy software. */
+  --r-0: 0;
+  --r-1: 2px;        /* default */
+  --r-2: 4px;        /* cards */
+  --r-3: 6px;        /* buttons */
+  --r-pill: 999px;   /* status pills only */
+
+  /* ============ SPACING (4px base) ============ */
+  --sp-0: 0;
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 8px;
+  --sp-4: 12px;
+  --sp-5: 16px;
+  --sp-6: 20px;
+  --sp-7: 24px;
+  --sp-8: 32px;
+  --sp-9: 48px;
+  --sp-10: 64px;
+  --sp-11: 96px;
+  --sp-12: 128px;
+
+  /* ============ MOTION ============ */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in:  cubic-bezier(0.6, 0, 0.8, 0.2);
+  --ease-snap: cubic-bezier(0.4, 1.6, 0.4, 1); /* slight overshoot */
+  --dur-instant: 80ms;
+  --dur-fast:    140ms;
+  --dur-base:    200ms;
+  --dur-slow:    320ms;
+
+  /* ============ LAYOUT ============ */
+  --max-w-prose:   68ch;
+  --max-w-content: 1200px;
+  --max-w-wide:    1440px;
+  --header-h:      56px;
+  --ticker-h:      28px;
+}
+
+/* ============ LIGHT MODE ============
+   Equal polish. Paper-feel. Same accent green works on white. */
+[data-theme="light"], :root[data-theme="light"] {
+  --bg:           #fafaf8;
+  --bg-elev-1:    #ffffff;
+  --bg-elev-2:    #ffffff;
+  --bg-elev-3:    #f4f4f0;
+  --bg-input:     #ffffff;
+  --bg-hover:     #f0efea;
+  --bg-active:    #e6e5df;
+
+  --fg:           #0a0c0e;
+  --fg-1:         #0a0c0e;
+  --fg-2:         #1d2228;
+  --fg-3:         #4a525c;
+  --fg-mute:      #6e7680;
+  --fg-faint:     #a8aeb6;
+  --fg-on-accent: #001008;
+
+  --border:       #d8d6d0;
+  --border-soft:  #e8e6e0;
+  --border-strong:#b8b6b0;
+  --border-focus: #00a35e;
+
+  --accent:       #00a35e;
+  --accent-hover: #008a4f;
+  --accent-press: #006e3f;
+  --accent-soft:  #e0f5eb;
+  --on-accent:    #ffffff;
+
+  --pnl-up-bg:    #e0f5eb;
+  --pnl-up-fg:    #008a4f;
+  --pnl-up-strong:#006e3f;
+  --pnl-down-bg:  #fce4e4;
+  --pnl-down-fg:  #d12020;
+  --pnl-down-strong:#a51a1a;
+
+  --grid:         #ececea;
+  --grid-strong:  #d8d6d0;
+  --crosshair:    #00a35e;
+
+  --shadow-1:  0 0 0 1px var(--border);
+  --shadow-2:  0 0 0 1px var(--border), 0 4px 16px rgba(10,12,14,0.06);
+  --shadow-3:  0 0 0 1px var(--border), 0 16px 40px rgba(10,12,14,0.10);
+  --shadow-glow: 0 0 0 1px var(--accent), 0 0 0 4px rgba(0,163,94,0.15);
+  --shadow-danger: 0 0 0 1px var(--pnl-down-fg), 0 0 0 4px rgba(209,32,32,0.12);
+}
+
+/* ============================================================
+   SEMANTIC ELEMENT STYLES
+   ============================================================ */
+
+html { font-family: var(--font-sans); color: var(--fg); background: var(--bg); }
+body {
+  font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  color: var(--fg);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv11", "cv02";
+}
+
+/* Display — the "SURVIVE THE CASCADE" treatment */
+.display, h1.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(56px, 9vw, var(--fs-6xl));
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  color: var(--fg-1);
+}
+
+h1 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-4xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-1);
+  margin: 0;
+}
+h2 {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--fs-3xl);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tracking-tight);
+  color: var(--fg-1);
+  margin: 0;
+}
+h3 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-2xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-snug);
+  color: var(--fg-1);
+  margin: 0;
+}
+h4 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-xl);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tracking-snug);
+  color: var(--fg-1);
+  margin: 0;
+}
+h5 {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: var(--fs-lg);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+  margin: 0;
+}
+
+p {
+  font-size: var(--fs-md);
+  line-height: var(--lh-base);
+  color: var(--fg-2);
+  margin: 0;
+  text-wrap: pretty;
+}
+
+/* Eyebrow / kicker — ALL CAPS mono */
+.eyebrow, .kicker {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-caps);
+  color: var(--fg-3);
+}
+
+/* Data / tabular — IBM Plex Mono with tnum */
+.mono, code, .data, .num {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum", "zero", "ss01";
+  font-variant-numeric: tabular-nums;
+}
+
+code {
+  font-size: 0.92em;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  padding: 1px 5px;
+  border-radius: var(--r-1);
+  color: var(--fg-1);
+}
+
+/* Ticker / price */
+.ticker {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: var(--fs-sm);
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.ticker--up   { color: var(--pnl-up-fg); }
+.ticker--down { color: var(--pnl-down-fg); }
+
+/* Links — sharp underline, accent on hover */
+a {
+  color: var(--fg-1);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+  transition: color var(--dur-fast) var(--ease-out),
+              text-decoration-color var(--dur-fast) var(--ease-out);
+}
+a:hover { color: var(--accent); text-decoration-color: var(--accent); }
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: var(--sp-7) 0;
+}
+
+::selection { background: var(--accent); color: var(--on-accent); }
+
+/* Focus ring — sharp, accent green */
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--r-1);
+}
+
+/* Scrollbar — thin, terminal */
+* { scrollbar-width: thin; scrollbar-color: var(--ink-4) transparent; }
+*::-webkit-scrollbar { width: 8px; height: 8px; }
+*::-webkit-scrollbar-thumb { background: var(--ink-4); border-radius: var(--r-1); }
+*::-webkit-scrollbar-thumb:hover { background: var(--ink-6); }
+*::-webkit-scrollbar-track { background: transparent; }

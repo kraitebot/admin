@@ -14,9 +14,9 @@
 
 :root {
   /* ============ FONT FAMILIES ============ */
-  --font-sans: 'Inter Tight', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
-  --font-display: 'Inter Tight', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Space Grotesk', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
 
   /* ============ TYPE SCALE ============
      Trader UIs run small + dense. Floor at 12px for tabular data.

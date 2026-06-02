@@ -1,10 +1,15 @@
-@tailwind base;
+/* Vite-bundled font weights for Space Grotesk (the active UI typeface). */
+@import '@fontsource/space-grotesk/400.css';
+@import '@fontsource/space-grotesk/500.css';
+@import '@fontsource/space-grotesk/600.css';
+@import '@fontsource/space-grotesk/700.css';
+
+/* Design tokens own CSS variables + base typography (Tailwind Preflight is OFF). */
+@import './tokens.css';
+
+/* Shell residue: reset bits, .card variants, content[data-theme] rules. */
+@import './shell.css';
+
+/* Tailwind utilities — components/utilities only; base reset stays in tokens.css/shell.css. */
 @tailwind components;
 @tailwind utilities;
-
-@layer base {
-    body {
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-    }
-}
