@@ -393,6 +393,15 @@
 
     </section>
 
+    {{-- Section separator between positions and the monitoring row --}}
+    <div class="flex items-center gap-4 my-7" role="separator" aria-label="Monitoring">
+        <span class="h-px flex-1 bg-line"></span>
+        <span class="font-mono text-[10px] font-medium tracking-[0.14em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
+            <x-feathericon-activity class="w-[13px] h-[13px]" stroke-width="1.75"/>Monitoring
+        </span>
+        <span class="h-px flex-1 bg-line"></span>
+    </div>
+
     {{-- ===================== BOTTOM GRID: ACTIVITY + CONNECTIVITY + BSCS ===================== --}}
     <div class="grid grid-cols-3 gap-5 items-start max-[1080px]:grid-cols-1">
 
