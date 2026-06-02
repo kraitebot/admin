@@ -221,7 +221,8 @@
                 per: {{ $per }},
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
-                setFilter(f) { this.filter = f; this.page = 0; },
+                segHl: null,
+                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => this.measureSeg()); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -231,7 +232,13 @@
                     const to = Math.min(from + this.per - 1, total);
                     return total + ' positions · showing ' + from + '–' + to + ' · max ' + this.per + ' per page';
                 },
-             }">
+                measureSeg() {
+                    const el = this.$refs.seg?.querySelector('[data-seg-active]');
+                    if (!el) { this.segHl = null; return; }
+                    this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
+                },
+             }"
+             x-init="$nextTick(() => measureSeg()); window.addEventListener('resize', () => measureSeg()); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg())">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
                 <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
@@ -240,11 +247,17 @@
                 <div class="text-[12.5px] text-fg-3 mt-1 whitespace-nowrap" x-text="rangeLabel()"></div>
             </div>
             <div class="flex items-center gap-4 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
-                {{-- Segmented control --}}
-                <div class="relative inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
+                {{-- Segmented control with sliding green pill --}}
+                <div x-ref="seg" class="relative inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
+                    <span aria-hidden="true"
+                          x-show="segHl"
+                          x-cloak
+                          :style="segHl ? `left:${segHl.left}px;top:${segHl.top}px;width:${segHl.width}px;height:${segHl.height}px` : ''"
+                          class="absolute z-0 bg-accent rounded-[7px] shadow-1 pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]"></span>
                     @foreach(['ALL','LONG','SHORT'] as $opt)
                         <button type="button" @click="setFilter('{{ $opt }}')"
-                                :class="filter === '{{ $opt }}' ? 'bg-accent text-accent-on shadow-1' : 'text-fg-3 hover:text-fg-1'"
+                                :data-seg-active="filter === '{{ $opt }}' ? '' : null"
+                                :class="filter === '{{ $opt }}' ? 'text-accent-on' : 'text-fg-3 hover:text-fg-1'"
                                 class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer relative z-[1] transition-colors duration-fast ease-out">{{ $opt }}</button>
                     @endforeach
                 </div>
@@ -279,13 +292,28 @@
                     </div>
                 </div>
                 @if(count($chunks) > 1)
-                    <div class="flex justify-center items-center gap-[7px] mt-5">
+                    <div class="relative flex justify-center items-center gap-[7px] mt-5"
+                         x-data="{
+                            thumb: null,
+                            measure() {
+                                const el = this.$el.querySelector('[data-dot-active]');
+                                if (!el) { this.thumb = null; return; }
+                                this.thumb = { left: el.offsetLeft, width: el.offsetWidth };
+                            },
+                         }"
+                         x-init="$nextTick(() => measure())"
+                         x-effect="page; safePage(); $nextTick(() => measure())">
                         @foreach($chunks as $i => $chunk)
                             <button type="button" @click="page = {{ $i }}"
-                                    :class="safePage() === {{ $i }} ? 'bg-accent w-[18px]' : 'bg-line-strong hover:bg-fg-mute'"
-                                    class="appearance-none cursor-pointer p-0 border-0 h-[7px] w-[7px] rounded-chip transition-all duration-base ease-out"
+                                    :data-dot-active="safePage() === {{ $i }} ? '' : null"
+                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out z-[1] hover:bg-fg-mute"
                                     aria-label="Page {{ $i + 1 }}"></button>
                         @endforeach
+                        <span aria-hidden="true"
+                              x-show="thumb"
+                              x-cloak
+                              :style="thumb ? `left:${thumb.left}px;width:${thumb.width}px` : ''"
+                              class="absolute top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
                     </div>
                 @endif
             </div>
