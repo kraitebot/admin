@@ -218,12 +218,14 @@
              x-data="{
                 filter: 'ALL',
                 page: 0,
+                prevPage: 0,
                 per: {{ $per }},
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
                 segHl: null,
                 dotThumb: null,
-                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => { this.measureSeg(); this.measureDot(); }); },
+                _settleTimer: null,
+                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.$nextTick(() => { this.measureSeg(); this.animateDot(); }); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -238,20 +240,33 @@
                     if (!el) { this.segHl = null; return; }
                     this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
                 },
-                measureDot() {
+                animateDot() {
                     const wrap = this.$el.querySelector('[data-dots-active]');
                     if (!wrap) { this.dotThumb = null; return; }
-                    const el = wrap.querySelector('[data-dot-active]');
-                    if (!el) { this.dotThumb = null; return; }
-                    this.dotThumb = { left: el.offsetLeft, width: el.offsetWidth };
+                    const dots = wrap.querySelectorAll('.pcar__dot');
+                    const cur = dots[this.safePage()];
+                    const prev = dots[this.prevPage] || cur;
+                    if (!cur) { this.dotThumb = null; return; }
+                    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                    if (prev !== cur) {
+                        const lo = Math.min(prev.offsetLeft, cur.offsetLeft);
+                        const hi = Math.max(prev.offsetLeft + prev.offsetWidth, cur.offsetLeft + cur.offsetWidth);
+                        this.dotThumb = { left: lo, width: hi - lo };
+                        this._settleTimer = setTimeout(() => {
+                            this.dotThumb = { left: cur.offsetLeft, width: cur.offsetWidth };
+                        }, 190);
+                    } else {
+                        this.dotThumb = { left: cur.offsetLeft, width: cur.offsetWidth };
+                    }
+                    this.prevPage = this.safePage();
                 },
              }"
              x-init="
-                $nextTick(() => { measureSeg(); measureDot(); });
-                $watch('page', () => $nextTick(() => measureDot()));
-                $watch('filter', () => $nextTick(() => measureDot()));
-                window.addEventListener('resize', () => { measureSeg(); measureDot(); });
-                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureSeg(); measureDot(); });
+                $nextTick(() => { measureSeg(); animateDot(); });
+                $watch('page', () => $nextTick(() => animateDot()));
+                $watch('filter', () => $nextTick(() => animateDot()));
+                window.addEventListener('resize', () => { measureSeg(); animateDot(); });
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureSeg(); animateDot(); });
              ">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
@@ -290,12 +305,53 @@
             $tracks = ['ALL' => $chunksAll, 'LONG' => $chunksLong, 'SHORT' => $chunksShort];
         @endphp
         @foreach($tracks as $filterKey => $chunks)
-            <div x-show="filter === '{{ $filterKey }}'" x-cloak>
-                <div class="overflow-hidden">
-                    <div class="flex transition-transform duration-[380ms] ease-out select-none"
+            <div x-show="filter === '{{ $filterKey }}'" x-cloak
+                 x-data="{
+                    chunkCount: {{ count($chunks) }},
+                    drag: { active: false, startX: 0, base: 0, w: 0, moved: 0, pointerId: null },
+                    onDown(e) {
+                        if (this.chunkCount <= 1 || e.button === 1 || e.button === 2) return;
+                        const v = this.$refs.view, t = this.$refs.track;
+                        if (!v || !t) return;
+                        const w = v.offsetWidth;
+                        this.drag = { active: true, startX: e.clientX, base: -this.safePage() * w, w, moved: 0, pointerId: e.pointerId };
+                        t.style.transition = 'none';
+                        v.setPointerCapture?.(e.pointerId);
+                    },
+                    onMove(e) {
+                        if (!this.drag.active) return;
+                        const dx = e.clientX - this.drag.startX;
+                        this.drag.moved = dx;
+                        let pos = this.drag.base + dx;
+                        const min = -(this.chunkCount - 1) * this.drag.w;
+                        if (pos > 0) pos = pos * 0.35;
+                        if (pos < min) pos = min + (pos - min) * 0.35;
+                        this.$refs.track.style.transform = 'translateX(' + pos + 'px)';
+                    },
+                    onUp(e) {
+                        if (!this.drag.active) return;
+                        const moved = this.drag.moved, w = this.drag.w;
+                        this.drag.active = false;
+                        this.$refs.view?.releasePointerCapture?.(this.drag.pointerId);
+                        let next = this.safePage();
+                        if (moved < -w * 0.18) next = Math.min(this.chunkCount - 1, this.safePage() + 1);
+                        else if (moved > w * 0.18) next = Math.max(0, this.safePage() - 1);
+                        this.$refs.track.style.transition = '';
+                        this.$refs.track.style.transform = '';
+                        this.page = next;
+                    },
+                 }">
+                <div x-ref="view"
+                     class="overflow-hidden cursor-grab touch-pan-y active:cursor-grabbing"
+                     @pointerdown="onDown($event)"
+                     @pointermove="onMove($event)"
+                     @pointerup="onUp($event)"
+                     @pointercancel="onUp($event)">
+                    <div x-ref="track"
+                         class="flex transition-transform duration-[380ms] ease-out select-none"
                          :style="`transform: translateX(-${safePage() * 100}%)`">
                         @foreach($chunks as $chunk)
-                            <div class="flex-[0_0_100%] min-w-0">
+                            <div class="flex-[0_0_100%] min-w-0 [&_img]:pointer-events-none [&_img]:select-none">
                                 <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
                                     @foreach($chunk as $p)
                                         @include('partials.position-tile', ['p' => $p])
