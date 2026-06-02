@@ -214,18 +214,25 @@
     </div>
 
     {{-- ===================== POSITIONS SECTION ===================== --}}
+    @php
+        // Dot geometry: each dot is 7px wide + a 7px flex gap = 14px center-to-center.
+        $dotW = 7; $dotGap = 7; $dotStep = $dotW + $dotGap;
+    @endphp
     <section class="mb-6"
              x-data="{
                 filter: 'ALL',
                 page: 0,
                 prevPage: 0,
                 per: {{ $per }},
+                dotW: {{ $dotW }},
+                dotStep: {{ $dotStep }},
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
                 segHl: null,
-                dotThumb: null,
+                dotLeft: 0,
+                dotWidth: 7,
                 _settleTimer: null,
-                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.$nextTick(() => { this.measureSeg(); this.animateDot(); }); },
+                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => this.measureSeg()); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -240,33 +247,30 @@
                     if (!el) { this.segHl = null; return; }
                     this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
                 },
-                animateDot() {
-                    const wrap = this.$el.querySelector('[data-dots-active]');
-                    if (!wrap) { this.dotThumb = null; return; }
-                    const dots = wrap.querySelectorAll('.pcar__dot');
-                    const cur = dots[this.safePage()];
-                    const prev = dots[this.prevPage] || cur;
-                    if (!cur) { this.dotThumb = null; return; }
+                animateDot(next) {
                     if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
-                    if (prev !== cur) {
-                        const lo = Math.min(prev.offsetLeft, cur.offsetLeft);
-                        const hi = Math.max(prev.offsetLeft + prev.offsetWidth, cur.offsetLeft + cur.offsetWidth);
-                        this.dotThumb = { left: lo, width: hi - lo };
-                        this._settleTimer = setTimeout(() => {
-                            this.dotThumb = { left: cur.offsetLeft, width: cur.offsetWidth };
-                        }, 190);
-                    } else {
-                        this.dotThumb = { left: cur.offsetLeft, width: cur.offsetWidth };
+                    const cur = this.safePage();
+                    const lo = Math.min(cur, next);
+                    const hi = Math.max(cur, next);
+                    if (lo !== hi) {
+                        // Stage 1: stretch thumb to span both current and target dot.
+                        this.dotLeft = lo * this.dotStep;
+                        this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
                     }
-                    this.prevPage = this.safePage();
+                    this.prevPage = cur;
+                    this.page = next;
+                    // Stage 2: settle on the target dot after the stretch tween peaks.
+                    this._settleTimer = setTimeout(() => {
+                        this.dotLeft = this.safePage() * this.dotStep;
+                        this.dotWidth = this.dotW;
+                        this._settleTimer = null;
+                    }, lo !== hi ? 190 : 0);
                 },
              }"
              x-init="
-                $nextTick(() => { measureSeg(); animateDot(); });
-                $watch('page', () => $nextTick(() => animateDot()));
-                $watch('filter', () => $nextTick(() => animateDot()));
-                window.addEventListener('resize', () => { measureSeg(); animateDot(); });
-                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureSeg(); animateDot(); });
+                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; });
+                window.addEventListener('resize', () => measureSeg());
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg());
              ">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
@@ -338,7 +342,7 @@
                         else if (moved > w * 0.18) next = Math.max(0, this.safePage() - 1);
                         this.$refs.track.style.transition = '';
                         this.$refs.track.style.transform = '';
-                        this.page = next;
+                        this.animateDot(next);
                     },
                  }">
                 <div x-ref="view"
@@ -362,19 +366,17 @@
                     </div>
                 </div>
                 @if(count($chunks) > 1)
-                    <div :data-dots-active="filter === '{{ $filterKey }}' ? '' : null"
-                         class="relative flex justify-center items-center gap-[7px] mt-5">
-                        @foreach($chunks as $i => $chunk)
-                            <button type="button" @click="page = {{ $i }}"
-                                    :data-dot-active="safePage() === {{ $i }} ? '' : null"
-                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute"
-                                    aria-label="Page {{ $i + 1 }}"></button>
-                        @endforeach
-                        <span aria-hidden="true"
-                              x-show="filter === '{{ $filterKey }}' && dotThumb"
-                              x-cloak
-                              :style="dotThumb ? `left:${dotThumb.left}px;width:${dotThumb.width}px` : ''"
-                              class="absolute top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
+                    <div class="flex justify-center mt-5">
+                        <div class="relative inline-flex items-center gap-[7px]">
+                            @foreach($chunks as $i => $chunk)
+                                <button type="button" @click="animateDot({{ $i }})"
+                                        class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute"
+                                        aria-label="Page {{ $i + 1 }}"></button>
+                            @endforeach
+                            <span aria-hidden="true"
+                                  :style="`left:${dotLeft}px;width:${dotWidth}px`"
+                                  class="absolute top-1/2 h-[7px] -translate-y-1/2 rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
+                        </div>
                     </div>
                 @endif
             </div>
