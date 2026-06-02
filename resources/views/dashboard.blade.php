@@ -234,8 +234,7 @@
                 dotLeft: 0,
                 dotWidth: {{ $dotW }},
                 _settleTimer: null,
-                _debug(label, extra) { try { console.log('[positions]', label, { page: this.page, prev: this.prevPage, dotLeft: this.dotLeft, dotWidth: this.dotWidth, ...(extra || {}) }); } catch (e) {} },
-                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => { this.measureSeg(); this._debug('setFilter ' + f); }); },
+                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => this.measureSeg()); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -261,7 +260,6 @@
                         // own width.
                         this.dotLeft = lo * this.dotStep;
                         this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
-                        this._debug('stretch', { lo, hi, target: next });
                     }
                     this.prevPage = cur;
                     this.page = next;
@@ -270,12 +268,11 @@
                         this.dotLeft = this.safePage() * this.dotStep;
                         this.dotWidth = this.dotW;
                         this._settleTimer = null;
-                        this._debug('settle');
                     }, lo !== hi ? 190 : 0);
                 },
              }"
              x-init="
-                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; _debug('init'); });
+                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; });
                 window.addEventListener('resize', () => measureSeg());
                 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg());
              ">
