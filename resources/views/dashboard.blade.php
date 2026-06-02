@@ -222,7 +222,8 @@
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
                 segHl: null,
-                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => this.measureSeg()); },
+                dotThumb: null,
+                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => { this.measureSeg(); this.measureDot(); }); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -237,8 +238,21 @@
                     if (!el) { this.segHl = null; return; }
                     this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
                 },
+                measureDot() {
+                    const wrap = this.$el.querySelector('[data-dots-active]');
+                    if (!wrap) { this.dotThumb = null; return; }
+                    const el = wrap.querySelector('[data-dot-active]');
+                    if (!el) { this.dotThumb = null; return; }
+                    this.dotThumb = { left: el.offsetLeft, width: el.offsetWidth };
+                },
              }"
-             x-init="$nextTick(() => measureSeg()); window.addEventListener('resize', () => measureSeg()); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg())">
+             x-init="
+                $nextTick(() => { measureSeg(); measureDot(); });
+                $watch('page', () => $nextTick(() => measureDot()));
+                $watch('filter', () => $nextTick(() => measureDot()));
+                window.addEventListener('resize', () => { measureSeg(); measureDot(); });
+                if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { measureSeg(); measureDot(); });
+             ">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
                 <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
@@ -292,27 +306,18 @@
                     </div>
                 </div>
                 @if(count($chunks) > 1)
-                    <div class="relative flex justify-center items-center gap-[7px] mt-5"
-                         x-data="{
-                            thumb: null,
-                            measure() {
-                                const el = this.$el.querySelector('[data-dot-active]');
-                                if (!el) { this.thumb = null; return; }
-                                this.thumb = { left: el.offsetLeft, width: el.offsetWidth };
-                            },
-                         }"
-                         x-init="$nextTick(() => measure())"
-                         x-effect="page; safePage(); $nextTick(() => measure())">
+                    <div :data-dots-active="filter === '{{ $filterKey }}' ? '' : null"
+                         class="relative flex justify-center items-center gap-[7px] mt-5">
                         @foreach($chunks as $i => $chunk)
                             <button type="button" @click="page = {{ $i }}"
                                     :data-dot-active="safePage() === {{ $i }} ? '' : null"
-                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out z-[1] hover:bg-fg-mute"
+                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute"
                                     aria-label="Page {{ $i + 1 }}"></button>
                         @endforeach
                         <span aria-hidden="true"
-                              x-show="thumb"
+                              x-show="filter === '{{ $filterKey }}' && dotThumb"
                               x-cloak
-                              :style="thumb ? `left:${thumb.left}px;width:${thumb.width}px` : ''"
+                              :style="dotThumb ? `left:${dotThumb.left}px;width:${dotThumb.width}px` : ''"
                               class="absolute top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
                     </div>
                 @endif
