@@ -31,7 +31,22 @@
         ['sym' => 'ARB',  'name' => 'Arbitrum',  'cmcId' => 11841, 'color' => '#28a0f0', 'osc' => ['down','down','up','down'], 'side' => 'long',  'lev' => '4×', 'eta' => '3h from now',  'path' => 1.9, 'limit' => 7.2,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 20, 'open' => '0.8920',    'tp' => '0.9180',    'next' => '0.8710'],
         ['sym' => 'AVAX', 'name' => 'Avalanche', 'cmcId' => 5805,  'color' => '#e84142', 'osc' => ['up','down','down','up'],  'side' => 'short', 'lev' => '2×', 'eta' => '1h from now',  'path' => 1.5, 'limit' => 6.0,  'filled' => '1 / 4', 'fillN' => 1, 'trackTp' => 26, 'trackPx' => 37, 'open' => '38.20',     'tp' => '36.40',     'next' => '39.05'],
         ['sym' => 'DOGE', 'name' => 'Dogecoin',  'cmcId' => 74,    'color' => '#c2a633', 'osc' => ['up','up','down','up'],    'side' => 'long',  'lev' => '3×', 'eta' => '5h from now',  'path' => 1.2, 'limit' => 4.8,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 16, 'open' => '0.16200',   'tp' => '0.16850',   'next' => '0.15900'],
+        ['sym' => 'LINK', 'name' => 'Chainlink', 'cmcId' => 1975,  'color' => '#2a5ada', 'osc' => ['up','down','up','up'],    'side' => 'long',  'lev' => '3×', 'eta' => '2h from now',  'path' => 2.7, 'limit' => 9.4,  'filled' => '1 / 4', 'fillN' => 1, 'trackTp' => 26, 'trackPx' => 33, 'open' => '18.92',     'tp' => '20.10',     'next' => '18.20'],
+        ['sym' => 'OP',   'name' => 'Optimism',  'cmcId' => 11840, 'color' => '#ff0420', 'osc' => ['down','up','up','down'],  'side' => 'long',  'lev' => '4×', 'eta' => '4h from now',  'path' => 1.6, 'limit' => 6.4,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 19, 'open' => '2.480',     'tp' => '2.610',     'next' => '2.395'],
+        ['sym' => 'XRP',  'name' => 'XRP',       'cmcId' => 52,    'color' => '#23292f', 'osc' => ['down','down','up','down'], 'side' => 'short', 'lev' => '2×', 'eta' => '1h from now',  'path' => 2.0, 'limit' => 7.8,  'filled' => '2 / 4', 'fillN' => 2, 'trackTp' => 44, 'trackPx' => 53, 'open' => '0.5420',    'tp' => '0.5180',    'next' => '0.5560'],
+        ['sym' => 'INJ',  'name' => 'Injective', 'cmcId' => 7226,  'color' => '#00a3ff', 'osc' => ['up','down','down','up'],  'side' => 'short', 'lev' => '2×', 'eta' => '3h from now',  'path' => 1.1, 'limit' => 5.2,  'filled' => '0 / 4', 'fillN' => 0, 'trackTp' => 5,  'trackPx' => 15, 'open' => '24.80',     'tp' => '23.40',     'next' => '25.50'],
     ];
+
+    // Pagination preparation. PER = 6 positions per page. Chunked per filter
+    // so each filter (ALL/LONG/SHORT) gets its own page set; switching filter
+    // resets Alpine's page state back to 0.
+    $per = 6;
+    $longs  = array_values(array_filter($positions, fn ($p) => $p['side'] === 'long'));
+    $shorts = array_values(array_filter($positions, fn ($p) => $p['side'] === 'short'));
+    $chunksAll   = array_chunk($positions, $per);
+    $chunksLong  = array_chunk($longs,  $per);
+    $chunksShort = array_chunk($shorts, $per);
+    $countsByFilter = ['ALL' => count($chunksAll), 'LONG' => count($chunksLong), 'SHORT' => count($chunksShort)];
 
     $servers = [
         ['id' => 'kr-fra-01', 'region' => 'fra', 'state' => 'ok',   'latency' => '11ms'],
@@ -199,19 +214,36 @@
     </div>
 
     {{-- ===================== POSITIONS SECTION ===================== --}}
-    <section class="mb-6" x-data="{ filter: 'ALL' }">
+    <section class="mb-6"
+             x-data="{
+                filter: 'ALL',
+                page: 0,
+                per: {{ $per }},
+                counts: @js($countsByFilter),
+                totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
+                setFilter(f) { this.filter = f; this.page = 0; },
+                pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
+                safePage() { return Math.min(this.page, this.pageCount() - 1); },
+                rangeLabel() {
+                    const total = this.totals[this.filter] || 0;
+                    if (total <= this.per) return total + ' positions managed across the lifecycle · no manual orders';
+                    const from = this.safePage() * this.per + 1;
+                    const to = Math.min(from + this.per - 1, total);
+                    return total + ' positions · showing ' + from + '–' + to + ' · max ' + this.per + ' per page';
+                },
+             }">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
                 <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
                     <x-feathericon-layers class="w-[17px] h-[17px] text-fg-3" stroke-width="1.75"/>Open positions
                 </div>
-                <div class="text-[12.5px] text-fg-3 mt-1 whitespace-nowrap">{{ count($positions) }} positions managed across the lifecycle · no manual orders</div>
+                <div class="text-[12.5px] text-fg-3 mt-1 whitespace-nowrap" x-text="rangeLabel()"></div>
             </div>
             <div class="flex items-center gap-4 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
                 {{-- Segmented control --}}
                 <div class="relative inline-flex items-center h-[34px] bg-surface-3 border border-line rounded-control px-[3px] gap-0.5">
                     @foreach(['ALL','LONG','SHORT'] as $opt)
-                        <button type="button" @click="filter = '{{ $opt }}'"
+                        <button type="button" @click="setFilter('{{ $opt }}')"
                                 :class="filter === '{{ $opt }}' ? 'bg-accent text-accent-on shadow-1' : 'text-fg-3 hover:text-fg-1'"
                                 class="appearance-none bg-transparent border-0 rounded-[7px] h-[26px] inline-flex items-center px-3 font-mono text-[11px] font-semibold tracking-[0.04em] cursor-pointer relative z-[1] transition-colors duration-fast ease-out">{{ $opt }}</button>
                     @endforeach
@@ -225,133 +257,40 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
-            @foreach($positions as $p)
-                @php
-                    $long = $p['side'] === 'long';
-                    $status = $p['status'] ?? null;
-                    $waped = $status === 'waped';
-                    $rib = $long
-                        ? ['bg' => '#0e3f2a', 'border' => 'color-mix(in srgb, var(--pnl-up-fg) 30%, transparent)', 'sym' => 'text-[#eafff5]', 'mute' => 'text-[#8fd9b4]', 'chip' => 'text-[#aef0cf]']
-                        : ['bg' => '#3f1212', 'border' => 'color-mix(in srgb, var(--pnl-down-fg) 32%, transparent)', 'sym' => 'text-[#ffecec]', 'mute' => 'text-[#e0a3a3]', 'chip' => 'text-[#ffc9c9]'];
-                    $ladder = [26, 44, 62, 80];
-                    $gainL = min($p['trackPx'], $p['trackTp']);
-                    $gainW = abs($p['trackTp'] - $p['trackPx']);
-                    $mc = $long ? 'text-accent' : 'text-pnldown';
-                @endphp
-                <div class="ptile bg-surface border-2 rounded-surface overflow-hidden transition-colors duration-fast ease-out {{ $long ? 'ptile--long' : 'ptile--short' }} {{ $waped ? 'ptile--waped' : '' }}">
-                    <div class="{{ $status === 'opening' ? 'grayscale opacity-[0.62]' : '' }} pt-4 px-[18px] pb-[14px]">
-                        {{-- Ribbon header --}}
-                        <div class="flex items-start gap-[11px] -mt-4 -mx-[18px] mb-4 px-[18px] pt-4 pb-3.5 border-b"
-                             style="background: {{ $rib['bg'] }}; border-color: {{ $rib['border'] }};">
-                            <div class="w-[30px] h-[30px] rounded-full flex items-center justify-center font-mono font-bold text-[12px] text-white flex-shrink-0 overflow-hidden">
-                                <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/{{ $p['cmcId'] }}.png" alt="{{ $p['sym'] }}" class="block w-full h-full object-cover"/>
-                            </div>
-                            <div class="flex-1 min-w-0">
-                                <div class="flex items-center gap-[7px]">
-                                    <span class="font-sans font-bold text-[14px] tracking-[-0.01em] flex-shrink-0 {{ $rib['sym'] }}">{{ $p['sym'] }}</span>
-                                    <span class="text-[12px] whitespace-nowrap overflow-hidden text-ellipsis min-w-0 {{ $rib['mute'] }}">{{ $p['name'] }}</span>
-                                    @if($status === 'opening')
-                                        <span class="ml-auto flex-shrink-0 inline-flex items-center gap-[5px] font-mono text-[9px] font-bold tracking-[0.08em] uppercase py-0.5 px-2 rounded-chip whitespace-nowrap bg-surface-3 text-fg-3">
-                                            <span class="w-1.5 h-1.5 rounded-chip bg-fg-3 animate-pulse-soft"></span>Opening
-                                        </span>
-                                    @endif
-                                    @if($waped)
-                                        <span class="ml-auto flex-shrink-0 inline-flex items-center gap-[5px] font-mono text-[9px] font-bold tracking-[0.08em] uppercase py-0.5 px-2 rounded-chip whitespace-nowrap text-warn" style="background: color-mix(in srgb, var(--warn) 16%, transparent);">
-                                            <x-feathericon-layers class="w-[10px] h-[10px]" stroke-width="2"/>WAP'd
-                                        </span>
-                                    @endif
-                                </div>
-                                <div class="flex items-center gap-[9px] mt-1.5">
-                                    <span class="inline-flex items-center gap-1 font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-1 px-2.5 bg-white/10 {{ $rib['chip'] }}">
-                                        @if($long)
-                                            <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="2"/>
-                                        @else
-                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="2"/>
-                                        @endif
-                                        {{ $p['side'] }} {{ $p['lev'] }}
-                                    </span>
-                                    <span class="font-mono text-[11px] inline-flex items-center gap-[5px] {{ $rib['mute'] }}">
-                                        <x-feathericon-clock class="w-[12px] h-[12px]" stroke-width="1.75"/>{{ $p['eta'] }}
-                                    </span>
+        @php
+            // Render one sliding-page carousel per filter so the dot count
+            // adapts to filter. Visibility is toggled by Alpine (x-show).
+            $tracks = ['ALL' => $chunksAll, 'LONG' => $chunksLong, 'SHORT' => $chunksShort];
+        @endphp
+        @foreach($tracks as $filterKey => $chunks)
+            <div x-show="filter === '{{ $filterKey }}'" x-cloak>
+                <div class="overflow-hidden">
+                    <div class="flex transition-transform duration-[380ms] ease-out select-none"
+                         :style="`transform: translateX(-${safePage() * 100}%)`">
+                        @foreach($chunks as $chunk)
+                            <div class="flex-[0_0_100%] min-w-0">
+                                <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
+                                    @foreach($chunk as $p)
+                                        @include('partials.position-tile', ['p' => $p])
+                                    @endforeach
                                 </div>
                             </div>
-                            <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]">
-                                @foreach($p['osc'] as $d)
-                                    <i class="block w-1.5 h-1.5 rounded-chip {{ $d === 'up' ? 'bg-pnlup' : ($d === 'down' ? 'bg-pnldown' : 'bg-line-strong') }}"></i>
-                                @endforeach
-                            </div>
-                        </div>
-
-                        {{-- Lifecycle track --}}
-                        <div class="relative mt-[22px] mx-0.5 mb-4 h-[30px]"
-                             style="--mc: {{ $long ? 'var(--accent)' : 'var(--pnl-down-fg)' }}; --mc-soft: {{ $long ? 'var(--accent-soft)' : 'color-mix(in srgb, var(--pnl-down-fg) 22%, transparent)' }};">
-                            <div class="absolute left-0 right-0 top-[21px] h-px" style="background: color-mix(in srgb, var(--mc) 45%, transparent);"></div>
-                            <div class="absolute top-[19px] h-1 rounded-chip" style="left: {{ $gainL }}%; width: {{ $gainW }}%; background: var(--mc);"></div>
-                            @foreach($ladder as $i => $pos)
-                                @if($i >= $p['fillN'])
-                                    <span class="absolute top-[15px] -translate-x-1/2 font-mono text-[10px] bg-surface px-1 leading-[1.4]" style="left: {{ $pos }}%; color: var(--mc);">{{ $i + 1 }}</span>
-                                @endif
-                            @endforeach
-                            <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left: {{ $p['trackTp'] }}%;">
-                                <span class="font-mono text-[9px] font-bold tracking-[0.06em]" style="color: var(--mc);">TP</span>
-                                <span class="w-[11px] h-[11px] rotate-45 mt-[3px]" style="background: var(--mc); border-radius: 50% 50% 50% 0; box-shadow: 0 0 0 3px var(--mc-soft);"></span>
-                            </div>
-                            <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" style="left: {{ $p['trackPx'] }}%;">
-                                <span class="font-mono text-[9px] font-bold tracking-[0.06em] text-fg-2">PX</span>
-                                <span class="w-[10px] h-[10px] rounded-full bg-fg-1 mt-[3px]" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-1) 20%, transparent);"></span>
-                            </div>
-                        </div>
-
-                        {{-- Metrics row 1: Path / Limit / Filled --}}
-                        <div class="grid grid-cols-3 gap-2">
-                            <div>
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center gap-[5px] mb-[5px]">
-                                    <x-feathericon-flag class="w-[11px] h-[11px]" stroke-width="1.75"/>Path
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] {{ $mc }}">{{ number_format($p['path'], 1) }}%</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center justify-center gap-[5px] mb-[5px]">
-                                    <x-feathericon-arrow-right class="w-[11px] h-[11px]" stroke-width="1.75"/>Limit
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1">{{ number_format($p['limit'], 1) }}%</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center justify-end gap-[5px] mb-[5px]">
-                                    <x-feathericon-check class="w-[11px] h-[11px]" stroke-width="1.75"/>Filled
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1">{{ $p['filled'] }}</div>
-                            </div>
-                        </div>
-
-                        <div class="h-px bg-line-soft my-[13px]"></div>
-
-                        {{-- Metrics row 2: Open / TP / Next --}}
-                        <div class="grid grid-cols-3 gap-2">
-                            <div>
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center gap-[5px] mb-[5px]">
-                                    <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span>Open
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1">{{ $p['open'] }}</div>
-                            </div>
-                            <div class="text-center">
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center justify-center gap-[5px] mb-[5px]">
-                                    <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="1.75"/>TP
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] {{ $mc }}">{{ $p['tp'] }}</div>
-                            </div>
-                            <div class="text-right">
-                                <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase {{ $mc }} flex items-center justify-end gap-[5px] mb-[5px]">
-                                    <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/>Next
-                                </div>
-                                <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1">{{ $p['next'] }}</div>
-                            </div>
-                        </div>
+                        @endforeach
                     </div>
                 </div>
-            @endforeach
-        </div>
+                @if(count($chunks) > 1)
+                    <div class="flex justify-center items-center gap-[7px] mt-5">
+                        @foreach($chunks as $i => $chunk)
+                            <button type="button" @click="page = {{ $i }}"
+                                    :class="safePage() === {{ $i }} ? 'bg-accent w-[18px]' : 'bg-line-strong hover:bg-fg-mute'"
+                                    class="appearance-none cursor-pointer p-0 border-0 h-[7px] w-[7px] rounded-chip transition-all duration-base ease-out"
+                                    aria-label="Page {{ $i + 1 }}"></button>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+        @endforeach
+
     </section>
 
     {{-- ===================== BOTTOM GRID: ACTIVITY + CONNECTIVITY + BSCS ===================== --}}
