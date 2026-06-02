@@ -214,15 +214,28 @@
     </div>
 
     {{-- ===================== POSITIONS SECTION ===================== --}}
+    @php
+        // Dot geometry. Render the rail as an absolute-positioned strip: each
+        // dot lives at left = i * dotStep, so the thumb's position math uses
+        // the same formula and can't drift relative to the dots.
+        $dotW = 7; $dotGap = 7; $dotStep = $dotW + $dotGap;
+    @endphp
     <section class="mb-6"
              x-data="{
                 filter: 'ALL',
                 page: 0,
+                prevPage: 0,
                 per: {{ $per }},
+                dotW: {{ $dotW }},
+                dotStep: {{ $dotStep }},
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
                 segHl: null,
-                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => this.measureSeg()); },
+                dotLeft: 0,
+                dotWidth: {{ $dotW }},
+                _settleTimer: null,
+                _debug(label, extra) { try { console.log('[positions]', label, { page: this.page, prev: this.prevPage, dotLeft: this.dotLeft, dotWidth: this.dotWidth, ...(extra || {}) }); } catch (e) {} },
+                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => { this.measureSeg(); this._debug('setFilter ' + f); }); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -237,10 +250,32 @@
                     if (!el) { this.segHl = null; return; }
                     this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
                 },
-                animateDot(next) { this.page = next; },
+                animateDot(next) {
+                    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                    const cur = this.safePage();
+                    const lo = Math.min(cur, next);
+                    const hi = Math.max(cur, next);
+                    if (lo !== hi) {
+                        // Stage 1: stretch — thumb spans from the leftmost dot
+                        // (lo) to the rightmost (hi), inclusive of the dot's
+                        // own width.
+                        this.dotLeft = lo * this.dotStep;
+                        this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
+                        this._debug('stretch', { lo, hi, target: next });
+                    }
+                    this.prevPage = cur;
+                    this.page = next;
+                    // Stage 2: settle on the target dot after the stretch peaks.
+                    this._settleTimer = setTimeout(() => {
+                        this.dotLeft = this.safePage() * this.dotStep;
+                        this.dotWidth = this.dotW;
+                        this._settleTimer = null;
+                        this._debug('settle');
+                    }, lo !== hi ? 190 : 0);
+                },
              }"
              x-init="
-                $nextTick(() => measureSeg());
+                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; _debug('init'); });
                 window.addEventListener('resize', () => measureSeg());
                 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg());
              ">
@@ -338,13 +373,22 @@
                     </div>
                 </div>
                 @if(count($chunks) > 1)
-                    <div class="flex justify-center items-center gap-[7px] mt-5">
-                        @foreach($chunks as $i => $chunk)
-                            <button type="button" @click="animateDot({{ $i }})"
-                                    :class="safePage() === {{ $i }} ? 'bg-accent' : 'bg-line-strong hover:bg-fg-mute'"
-                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip transition-colors duration-base ease-out"
-                                    aria-label="Page {{ $i + 1 }}"></button>
-                        @endforeach
+                    @php
+                        // Strip width: last dot's left edge + dot width.
+                        $stripW = (count($chunks) - 1) * $dotStep + $dotW;
+                    @endphp
+                    <div class="flex justify-center mt-5">
+                        <div class="relative h-[7px]" style="width: {{ $stripW }}px;">
+                            @foreach($chunks as $i => $chunk)
+                                <button type="button" @click="animateDot({{ $i }})"
+                                        style="left: {{ $i * $dotStep }}px; top: 0;"
+                                        class="pcar__dot absolute appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute z-[1]"
+                                        aria-label="Page {{ $i + 1 }}"></button>
+                            @endforeach
+                            <span aria-hidden="true"
+                                  :style="`left:${dotLeft}px;width:${dotWidth}px`"
+                                  class="absolute top-0 h-[7px] rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
+                        </div>
                     </div>
                 @endif
             </div>
