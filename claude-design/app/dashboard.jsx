@@ -584,6 +584,15 @@ const Dashboard = ({ regime, score, serverFault, paginate }) => {
 
     <PositionsSection paginate={paginate}/>
 
+    {/* section separator between positions and the monitoring row */}
+    <div className="flex items-center gap-4 my-7" role="separator" aria-label="Monitoring">
+      <span className="h-px flex-1 bg-line"/>
+      <span className="font-mono text-[10px] font-medium tracking-[0.14em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
+        <UIcon name="activity" size={13}/>Monitoring
+      </span>
+      <span className="h-px flex-1 bg-line"/>
+    </div>
+
     <div className="grid grid-cols-3 gap-5 items-start max-[1080px]:grid-cols-1">
       <div className="flex flex-col gap-5 min-w-0 col-span-2 max-[1080px]:col-auto">
         <ActivityCard/>
