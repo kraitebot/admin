@@ -214,25 +214,15 @@
     </div>
 
     {{-- ===================== POSITIONS SECTION ===================== --}}
-    @php
-        // Dot geometry: each dot is 7px wide + a 7px flex gap = 14px center-to-center.
-        $dotW = 7; $dotGap = 7; $dotStep = $dotW + $dotGap;
-    @endphp
     <section class="mb-6"
              x-data="{
                 filter: 'ALL',
                 page: 0,
-                prevPage: 0,
                 per: {{ $per }},
-                dotW: {{ $dotW }},
-                dotStep: {{ $dotStep }},
                 counts: @js($countsByFilter),
                 totals: @js(['ALL' => count($positions), 'LONG' => count($longs), 'SHORT' => count($shorts)]),
                 segHl: null,
-                dotLeft: 0,
-                dotWidth: 7,
-                _settleTimer: null,
-                setFilter(f) { this.filter = f; this.prevPage = 0; this.page = 0; this.dotLeft = 0; this.dotWidth = this.dotW; this.$nextTick(() => this.measureSeg()); },
+                setFilter(f) { this.filter = f; this.page = 0; this.$nextTick(() => this.measureSeg()); },
                 pageCount() { return Math.max(1, this.counts[this.filter] || 1); },
                 safePage() { return Math.min(this.page, this.pageCount() - 1); },
                 rangeLabel() {
@@ -247,28 +237,10 @@
                     if (!el) { this.segHl = null; return; }
                     this.segHl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight };
                 },
-                animateDot(next) {
-                    if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
-                    const cur = this.safePage();
-                    const lo = Math.min(cur, next);
-                    const hi = Math.max(cur, next);
-                    if (lo !== hi) {
-                        // Stage 1: stretch thumb to span both current and target dot.
-                        this.dotLeft = lo * this.dotStep;
-                        this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
-                    }
-                    this.prevPage = cur;
-                    this.page = next;
-                    // Stage 2: settle on the target dot after the stretch tween peaks.
-                    this._settleTimer = setTimeout(() => {
-                        this.dotLeft = this.safePage() * this.dotStep;
-                        this.dotWidth = this.dotW;
-                        this._settleTimer = null;
-                    }, lo !== hi ? 190 : 0);
-                },
+                animateDot(next) { this.page = next; },
              }"
              x-init="
-                $nextTick(() => { measureSeg(); dotLeft = safePage() * dotStep; dotWidth = dotW; });
+                $nextTick(() => measureSeg());
                 window.addEventListener('resize', () => measureSeg());
                 if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measureSeg());
              ">
@@ -366,17 +338,13 @@
                     </div>
                 </div>
                 @if(count($chunks) > 1)
-                    <div class="flex justify-center mt-5">
-                        <div class="relative inline-flex items-center gap-[7px]">
-                            @foreach($chunks as $i => $chunk)
-                                <button type="button" @click="animateDot({{ $i }})"
-                                        class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute"
-                                        aria-label="Page {{ $i + 1 }}"></button>
-                            @endforeach
-                            <span aria-hidden="true"
-                                  :style="`left:${dotLeft}px;width:${dotWidth}px`"
-                                  class="absolute top-1/2 h-[7px] -translate-y-1/2 rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
-                        </div>
+                    <div class="flex justify-center items-center gap-[7px] mt-5">
+                        @foreach($chunks as $i => $chunk)
+                            <button type="button" @click="animateDot({{ $i }})"
+                                    :class="safePage() === {{ $i }} ? 'bg-accent' : 'bg-line-strong hover:bg-fg-mute'"
+                                    class="pcar__dot appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip transition-colors duration-base ease-out"
+                                    aria-label="Page {{ $i + 1 }}"></button>
+                        @endforeach
                     </div>
                 @endif
             </div>
