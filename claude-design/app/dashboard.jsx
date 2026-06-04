@@ -636,4 +636,8 @@ const Placeholder = ({ route }) => {
   );
 };
 
-Object.assign(window, { Dashboard, Placeholder });
+Object.assign(window, {
+  Dashboard, Placeholder, Segmented, TipLayer, StatusPill, PositionTile,
+  CARD_HEAD, CARD_TITLE, CARD_FOOT, FOOT_MONO, LINK_ARROW, LINK_QUIET,
+  BTN, BTN_PRIMARY, BTN_SECONDARY, PAGEHEAD, PH_EYEBROW, PH_H1, PH_SUB, dotCls,
+});
