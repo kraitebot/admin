@@ -1,13 +1,29 @@
 @props(['active' => 'dashboard'])
 @php
-    $items = [
-        ['id' => 'dashboard',   'label' => 'Dash',      'route' => 'dashboard',         'icon' => 'home'],
-        ['id' => 'positions',   'label' => 'Positions', 'route' => 'accounts.positions','icon' => 'trending-up'],
-        ['id' => 'projections', 'label' => 'Project',   'route' => 'projections',       'icon' => 'activity'],
-        ['id' => 'bscs',        'label' => 'BSCS',      'route' => 'bscs',              'icon' => 'layers'],
-        ['id' => 'accounts',    'label' => 'Accounts',  'route' => 'accounts.edit',     'icon' => 'users'],
-        ['id' => 'billing',     'label' => 'Billing',   'route' => null,                'icon' => 'credit-card'],
-    ];
+    // Surface follows the host: the console domain gets the sysadmin
+    // rail, every other host gets the trader rail. Same component, same
+    // styling — only the item set differs. Console items are provisional
+    // until the console surface gets its design pass.
+    $console = request()->getHost() === config('domains.console');
+
+    $items = $console
+        ? [
+            ['id' => 'dashboard',   'label' => 'Dashboard',   'route' => 'system.dashboard',     'params' => [],          'icon' => 'grid'],
+            ['id' => 'users',       'label' => 'Users',       'route' => 'system.users',         'params' => [],          'icon' => 'users'],
+            ['id' => 'commands',    'label' => 'Commands',    'route' => 'system.commands',      'params' => [],          'icon' => 'terminal'],
+            ['id' => 'steps',       'label' => 'Steps',       'route' => 'system.steps',         'params' => ['default'], 'icon' => 'git-branch'],
+            ['id' => 'backtesting', 'label' => 'Backtesting', 'route' => 'system.backtesting',   'params' => [],          'icon' => 'bar-chart-2'],
+            ['id' => 'billing',     'label' => 'Billing',     'route' => 'system.billing.plans', 'params' => [],          'icon' => 'credit-card'],
+            ['id' => 'sql',         'label' => 'SQL',         'route' => 'system.sql-query',     'params' => [],          'icon' => 'database'],
+        ]
+        : [
+            ['id' => 'dashboard',   'label' => 'Dashboard',   'route' => 'dashboard',         'params' => [], 'icon' => 'grid'],
+            ['id' => 'positions',   'label' => 'Positions',   'route' => 'accounts.positions','params' => [], 'icon' => 'layers'],
+            ['id' => 'projections', 'label' => 'Projections', 'route' => 'projections',       'params' => [], 'icon' => 'trending-up'],
+            ['id' => 'accounts',    'label' => 'Accounts',    'route' => 'accounts.edit',     'params' => [], 'icon' => 'link'],
+            ['id' => 'billing',     'label' => 'Billing',     'route' => 'billing',           'params' => [], 'icon' => 'credit-card'],
+            ['id' => 'profile',     'label' => 'Profile',     'route' => 'profile.edit',      'params' => [], 'icon' => 'user'],
+        ];
 @endphp
 <nav x-data="{ hl: null, measure() { const el = this.$el.querySelector('[data-rail-active]'); if (!el) return; this.hl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }; } }"
      x-init="$nextTick(() => measure()); window.addEventListener('resize', () => measure()); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => measure())"
@@ -23,20 +39,20 @@
               x-show="hl"
               x-cloak
               :style="hl ? `left:${hl.left}px;top:${hl.top}px;width:${hl.width}px;height:${hl.height}px` : ''"
-              class="absolute z-0 bg-green-25 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
+              class="absolute z-0 bg-green-500 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
                      before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-green-500 before:rounded-chip
                      max-[640px]:before:hidden"></span>
 
         @foreach($items as $item)
             @php $on = $item['id'] === $active; @endphp
-            <a href="{{ $item['route'] ? route($item['route']) : '#' }}"
+            <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
                @if($on) data-rail-active @endif
                class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-fast ease-out no-underline
                       max-[640px]:flex-1 max-[640px]:py-2 max-[640px]:px-0.5 max-[640px]:text-[9px]
                       max-[420px]:p-0
-                      {{ $on ? 'text-green-500' : 'text-ink-7 hover:text-ink-9' }}">
+                      {{ $on ? 'text-fg-on-accent' : 'text-ink-7 hover:text-ink-9' }}">
                 <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
-                <span class="max-[420px]:hidden">{{ $item['label'] }}</span>
+                <span class="whitespace-nowrap max-[420px]:hidden">{{ $item['label'] }}</span>
             </a>
         @endforeach
     </div>

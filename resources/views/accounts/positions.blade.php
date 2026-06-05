@@ -312,17 +312,17 @@
                 <table class="w-full border-collapse min-w-[920px]" x-ref="table">
                     <thead>
                         <tr>
-                            @include('partials.sort-th', ['id' => 'sym',      'label' => 'Market',   'align' => 'left', 'w' => '200px'])
-                            @include('partials.sort-th', ['id' => 'side',     'label' => 'Side',     'align' => 'left', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'entry',    'label' => 'Entry',    'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'mark',     'label' => 'Mark',     'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'liq',      'label' => 'Liq.',     'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'notional', 'label' => 'Notional', 'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'margin',   'label' => 'Margin',   'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'pnl',      'label' => 'P&L',      'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'roe',      'label' => 'ROE',      'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'age',      'label' => 'Age',      'align' => 'right', 'w' => null])
-                            <th class="w-9 border-b border-line"></th>
+                            @include('partials.sort-th', ['id' => 'sym',      'label' => 'Market',   'w' => '200px'])
+                            @include('partials.sort-th', ['id' => 'side',     'label' => 'Side',     'w' => null])
+                            @include('partials.sort-th', ['id' => 'entry',    'label' => 'Entry',    'w' => null])
+                            @include('partials.sort-th', ['id' => 'mark',     'label' => 'Mark',     'w' => null])
+                            @include('partials.sort-th', ['id' => 'liq',      'label' => 'Liq.',     'w' => null])
+                            @include('partials.sort-th', ['id' => 'notional', 'label' => 'Notional', 'w' => null])
+                            @include('partials.sort-th', ['id' => 'margin',   'label' => 'Margin',   'w' => null])
+                            @include('partials.sort-th', ['id' => 'pnl',      'label' => 'P&L',      'w' => null])
+                            @include('partials.sort-th', ['id' => 'roe',      'label' => 'ROE',      'w' => null])
+                            @include('partials.sort-th', ['id' => 'age',      'label' => 'Age',      'w' => null])
+                            <th class="w-9 bg-accent"></th>
                         </tr>
                     </thead>
                     @foreach($positions as $p)
@@ -419,15 +419,15 @@
                 <table class="w-full border-collapse min-w-[860px]" x-ref="table">
                     <thead>
                         <tr>
-                            @include('partials.sort-th', ['id' => 'sym',    'label' => 'Market',       'align' => 'left', 'w' => '200px'])
-                            @include('partials.sort-th', ['id' => 'side',   'label' => 'Side',         'align' => 'left', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'entry',  'label' => 'Entry',        'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'exit',   'label' => 'Exit',         'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'dur',    'label' => 'Held',         'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'pnl',    'label' => 'Realized P&L', 'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'roe',    'label' => 'ROE',          'align' => 'right', 'w' => null])
-                            @include('partials.sort-th', ['id' => 'reason', 'label' => 'Closed',       'align' => 'left', 'w' => null])
-                            <th class="w-9 border-b border-line"></th>
+                            @include('partials.sort-th', ['id' => 'sym',    'label' => 'Market',       'w' => '200px'])
+                            @include('partials.sort-th', ['id' => 'side',   'label' => 'Side',         'w' => null])
+                            @include('partials.sort-th', ['id' => 'entry',  'label' => 'Entry',        'w' => null])
+                            @include('partials.sort-th', ['id' => 'exit',   'label' => 'Exit',         'w' => null])
+                            @include('partials.sort-th', ['id' => 'dur',    'label' => 'Held',         'w' => null])
+                            @include('partials.sort-th', ['id' => 'pnl',    'label' => 'Realized P&L', 'w' => null])
+                            @include('partials.sort-th', ['id' => 'roe',    'label' => 'ROE',          'w' => null])
+                            @include('partials.sort-th', ['id' => 'reason', 'label' => 'Closed',       'w' => null])
+                            <th class="w-9 bg-accent"></th>
                         </tr>
                     </thead>
                     @foreach($closed as $i => $p)
