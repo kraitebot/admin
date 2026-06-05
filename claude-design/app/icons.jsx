@@ -9,6 +9,7 @@ const KI = {
   bscs: 'M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z M12 9v4 M12 16h.01',
   accounts: 'M9 2v4 M15 2v4 M7 6h10v6a5 5 0 0 1-10 0V6z M12 17v5',
   positions: 'M3 12l9-5 9 5-9 5z M3 17l9 5 9-5',
+  profile: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M5 21v-1a7 7 0 0 1 14 0v1',
 };
 
 // path-based simple icons (single or multi path via array)
@@ -38,6 +39,7 @@ const KI_UI = {
   zap: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M13 3L4 14h7l-1 7 9-11h-7l1-7z"/></svg>),
   wallet: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M3 6h15v12H3zM18 10h3v4h-3a2 2 0 0 1 0-4z"/></svg>),
   layers: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>),
+  projections: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M3 3v18h18"/><path d="M7 14l4-5 3 3 5-7"/></svg>),
   gauge: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M12 14l4-4"/><circle cx="12" cy="14" r="0.6" fill="currentColor"/><path d="M3.5 16a9 9 0 1 1 17 0"/></svg>),
   scissors: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4L8.5 15.5M14.5 14.5L20 20M8.5 8.5L11 11"/></svg>),
   coins: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><ellipse cx="9" cy="7" rx="6" ry="3"/><path d="M3 7v5c0 1.7 2.7 3 6 3s6-1.3 6-3V7M9 12v5c0 1.7 2.7 3 6 3s6-1.3 6-3v-5"/></svg>),

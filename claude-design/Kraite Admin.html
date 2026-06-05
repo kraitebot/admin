@@ -26,6 +26,7 @@
 <script type="text/babel" src="app/shell.jsx"></script>
 <script type="text/babel" src="app/dashboard.jsx"></script>
 <script type="text/babel" src="app/positions.jsx"></script>
+<script type="text/babel" src="app/projections.jsx"></script>
 
 <script type="text/babel">
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -36,7 +37,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "showBanner": true,
   "serverFault": true,
   "paginatePositions": true,
-  "uiFont": "grotesk"
+  "uiFont": "grotesk",
+  "projState": "normal"
 }/*EDITMODE-END*/;
 
 const REGIME_SCORES = { CALM: 0.31, WATCH: 0.42, ELEVATED: 0.63, CASCADE: 0.82, 'BLACK SWAN': 0.94 };
@@ -99,7 +101,7 @@ function App() {
   React.useEffect(() => { setBannerOpen(true); }, [t.showBanner]);
 
   return (
-    <div className="grid grid-cols-[88px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
+    <div className="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
       <Rail active={active} setActive={go}/>
       <div className="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]">
         <TopBar contentDark={contentDark} setContentDark={setContentDark} onBell={() => {}}/>
@@ -111,6 +113,8 @@ function App() {
               ? <Dashboard regime={regime} score={score} serverFault={t.serverFault} paginate={t.paginatePositions}/>
               : displayed === 'positions'
               ? <Positions regime={regime} score={score}/>
+              : displayed === 'projections'
+              ? <Projections regime={regime} score={score} projState={t.projState}/>
               : <Placeholder route={displayed}/>}
           </div>
         </div>
@@ -131,6 +135,10 @@ function App() {
           onChange={(v) => setTweak('serverFault', v)}/>
         <TweakToggle label="Paginate positions (>6)" value={t.paginatePositions}
           onChange={(v) => setTweak('paginatePositions', v)}/>
+        <TweakSection label="Projections"/>
+        <TweakSelect label="Page state" value={t.projState}
+          options={[{value:'normal',label:'Normal'},{value:'no-closes',label:'Days with no closes'},{value:'loading',label:'Loading'},{value:'no-account',label:'No account selected'},{value:'zero-data',label:'Zero-data month'}]}
+          onChange={(v) => setTweak('projState', v)}/>
       </TweaksPanel>
     </div>
   );

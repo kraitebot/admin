@@ -614,6 +614,7 @@ const Placeholder = ({ route }) => {
     bscs:        { icon: 'bscs',         title: 'Black Swan Composite Score', desc: 'Market-risk regime detail, component breakdown, and trip history.' },
     accounts:    { icon: 'accounts',     title: 'Accounts', desc: 'Exchange credentials, connectivity testing, and per-account equity.' },
     billing:     { icon: 'billing',      title: 'Billing', desc: 'Balance, plan, wallet history, and top-up.' },
+    profile:     { icon: 'user',         title: 'Profile', desc: 'Trader identity, sessions, notification and security settings.' },
   }[route] || { icon: 'dashboard', title: route, desc: '' };
   return (
     <>

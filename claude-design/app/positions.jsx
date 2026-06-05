@@ -53,11 +53,11 @@ const Th = ({ id, label, align = 'right', sort, setSort, w }) => {
   const onClick = () => setSort(s => ({ key: id, dir: s.key === id ? (s.dir === 'asc' ? 'desc' : 'asc') : 'desc' }));
   return (
     <th style={w ? { width: w } : undefined}
-      className={"font-mono text-[9.5px] font-semibold tracking-[0.1em] uppercase text-fg-mute py-[11px] px-3 border-b border-line whitespace-nowrap select-none cursor-pointer transition-colors duration-fast ease-out hover:text-fg-2 first:pl-5 last:pr-5 " + (align === 'right' ? 'text-right' : 'text-left') + (active ? ' text-fg-1' : '')}
+      className="font-mono text-[9.5px] font-semibold tracking-[0.1em] uppercase bg-accent text-accent-on py-[11px] px-3 whitespace-nowrap select-none cursor-pointer text-center first:pl-5 last:pr-5 transition-colors duration-fast ease-out hover:bg-accent-hover"
       onClick={onClick}>
-      <span className={"inline-flex items-center gap-1 " + (align === 'right' ? 'flex-row-reverse' : '')}>
+      <span className="inline-flex items-center justify-center gap-1">
         {label}
-        <span className={"inline-flex transition-opacity duration-fast " + (active ? 'opacity-100 text-accent' : 'opacity-0')}>
+        <span className={"inline-flex transition-opacity duration-fast text-accent-on " + (active ? 'opacity-100' : 'opacity-0')}>
           <UIcon name={active && sort.dir === 'asc' ? 'chevronUp' : 'chevronDown'} size={12}/>
         </span>
       </span>
@@ -449,7 +449,7 @@ const OpenTable = () => {
                 <Th id="pnl" label="P&amp;L" {...thProps}/>
                 <Th id="roe" label="ROE" {...thProps}/>
                 <Th id="age" label="Age" {...thProps}/>
-                <th className="w-9 border-b border-line"/>
+                <th className="w-9 bg-accent"/>
               </tr>
             </thead>
             <tbody>
@@ -587,7 +587,7 @@ const ClosedTable = () => {
                 <Th id="pnl" label="Realized P&amp;L" {...thProps}/>
                 <Th id="roe" label="ROE" {...thProps}/>
                 <Th id="reason" label="Closed" align="left" {...thProps}/>
-                <th className="w-9 border-b border-line"/>
+                <th className="w-9 bg-accent"/>
               </tr>
             </thead>
             <tbody>
@@ -665,4 +665,4 @@ const Positions = ({ regime, score }) => (
   </>
 );
 
-Object.assign(window, { Positions });
+Object.assign(window, { Positions, Coin, SideTag });

@@ -12,6 +12,20 @@
 <script src="app/tw-config.js"></script>
 <link rel="stylesheet" href="assets/colors_and_type.css"/>
 <link rel="stylesheet" href="app/shell.css"/>
+<style>
+  /* dark-theme token island so the Projections (dark-content) components render
+     faithfully inside this light Design System page. Pair with class "content"
+     + data-theme="dark" to also pick up the accent card-border behaviour. */
+  .ds-dark{
+    --bg:#0a0e12;--bg-elev-1:#1d242d;--bg-elev-2:#1d242d;--bg-elev-3:#283139;
+    --bg-input:#1d242d;--bg-hover:#283139;--bg-active:#2a3037;
+    --fg-1:#f1f3f5;--fg-2:#c4cad1;--fg-3:#aab1ba;--fg-mute:#828b95;--fg-faint:#3a424b;
+    --border:#1d2228;--border-soft:#161a1e;--border-strong:#2a3037;
+    --pnl-up-fg:#00d17a;--pnl-up-bg:#00321f;--pnl-down-fg:#ff4d4d;--pnl-down-bg:#3a0a0a;
+    --accent:#00d17a;--accent-hover:#1ee08e;--on-accent:#001008;--info:#4a9eff;
+    background:#0a0e12;color:#f1f3f5;
+  }
+</style>
 </head>
 <body data-theme="light" class="bg-canvas text-fg overflow-x-hidden overflow-y-auto">
 
@@ -54,6 +68,11 @@
     <a href="#cards" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Cards</a>
     <a href="#code" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Code blocks</a>
     <a href="#empty" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Empty states</a>
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Projections</div>
+    <a href="#calendar" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Revenue calendar</a>
+    <a href="#scenario" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Scenario switch</a>
+    <a href="#pickers" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Account &amp; month pickers</a>
+    <a href="#totalsstrip" class="block text-[13px] text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px transition-colors duration-fast ease-out hover:bg-hover hover:text-fg-1">Totals strip &amp; card--flat</a>
   </nav>
 
   <!-- CONTENT -->
@@ -290,18 +309,18 @@
     <section class="pt-14 scroll-mt-[76px]" id="table">
       <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Components</div>
       <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Data table</h2>
-      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[660px] mb-[26px]">The workhorse. Mono tabular figures, right-aligned numerics, sticky header, row hover, and a 600ms green/red cell flash when a value updates. P&amp;L and percent columns read one step larger. On the Positions page the headers become <strong class="text-fg-1 font-semibold">sortable</strong> — the active column lifts to full-emphasis text with a green direction chevron — and each row is clickable to expand an inline detail record (chevron rotates 180°).</p>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[660px] mb-[26px]">The workhorse. Mono tabular figures, right-aligned numerics, sticky header, row hover, and a 600ms green/red cell flash when a value updates. P&amp;L and percent columns read one step larger. The header is a solid <strong class="text-fg-1 font-semibold">inverted-green band</strong> with centered, all-caps labels. On the Positions page the columns are <strong class="text-fg-1 font-semibold">sortable</strong> — the active column shows a direction chevron — and each row is clickable to expand an inline detail record (chevron rotates 180°).</p>
       <div class="card">
         <div class="w-full overflow-x-auto">
           <table class="w-full border-collapse text-[13px]">
             <thead><tr>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-left py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap">Market</th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-left py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap">Side</th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Size</th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Entry</th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">Mark</th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-1 text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums cursor-pointer select-none"><span class="inline-flex items-center gap-1 flex-row-reverse">Unreal. P&amp;L<span class="inline-flex text-accent"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M6 9l6 6 6-6"/></svg></span></span></th>
-              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute text-right py-[11px] px-4 bg-surface-3 border-b border-line whitespace-nowrap tabular-nums">%</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">Market</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">Side</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">Size</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">Entry</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">Mark</th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover"><span class="inline-flex items-center justify-center gap-1">Unreal. P&amp;L<span class="inline-flex text-accent-on"><svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square"><path d="M6 9l6 6 6-6"/></svg></span></span></th>
+              <th class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase bg-accent text-accent-on text-center py-[11px] px-4 whitespace-nowrap cursor-pointer select-none transition-colors duration-fast ease-out hover:bg-accent-hover">%</th>
             </tr></thead>
             <tbody>
               <tr class="transition-colors hover:bg-hover">
@@ -712,6 +731,166 @@
         </div>
         <h4 class="mb-1.5 font-sans font-semibold text-[18px] text-fg-1">No open positions</h4>
         <p class="text-[14px] text-fg-3 max-w-[380px]">The engine is flat. New positions resume automatically when the regime clears and a setup qualifies.</p>
+      </div>
+    </section>
+
+    <!-- ================= PROJECTIONS: CALENDAR ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="calendar">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Projections</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Revenue calendar</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-2">The Projections surface is a monthly calendar of daily revenue. Past days show <strong class="text-fg-1 font-semibold">realized</strong> P&amp;L (strict green/red); future days show <strong class="text-fg-1 font-semibold">projected</strong> revenue, compounded forward from today's wallet at an observed daily rate. The current month is hybrid (realized → projected); past months are pure realized; future months are pure projection.</p>
+      <p class="text-[13px] leading-[1.55] text-fg-mute max-w-[680px] mb-[22px]">Hard rule — green/red are reserved for <em>realized</em> money. Projected cells carry the scenario tone (neutral = info-blue, pessimistic = red, optimistic = green) but desaturated, <span class="font-mono">medium</span> weight, and <span class="font-mono">PROJ</span>-tagged, so they're never confused with realized P&amp;L. Today is the anchor — a neutral ink ring, never green. Amounts use compact notation (<span class="font-mono">$1.20K · $3.45M · $1.2e26</span>); two decimals on suffixed forms.</p>
+      <div class="content ds-dark rounded-surface p-5" data-theme="dark">
+        <div class="grid grid-cols-3 gap-x-3 gap-y-4 max-w-[560px]">
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control border border-line-soft min-h-[88px] p-2.5 flex flex-col" style="background:color-mix(in srgb,var(--pnl-up-fg) 7%,transparent)"><span class="font-mono text-[10.5px] tabular-nums leading-none text-fg-mute" style="font-weight:500">01</span><div class="flex-1 flex items-end"><span class="font-mono font-semibold tabular-nums leading-none text-pnlup" style="font-size:19px">+$2.77K</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">Realized gain</span>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control border border-line-soft min-h-[88px] p-2.5 flex flex-col" style="background:color-mix(in srgb,var(--pnl-down-fg) 7%,transparent)"><span class="font-mono text-[10.5px] tabular-nums leading-none text-fg-mute" style="font-weight:500">03</span><div class="flex-1 flex items-end"><span class="font-mono font-semibold tabular-nums leading-none text-pnldown" style="font-size:19px">−$904</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">Realized loss</span>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control border border-line-soft bg-transparent min-h-[88px] p-2.5 flex flex-col"><span class="font-mono text-[10.5px] tabular-nums leading-none text-fg-mute" style="font-weight:500">02</span><div class="flex-1 flex flex-col items-center justify-center gap-1 -mt-1"><span class="font-mono text-[15px] text-fg-faint leading-none">—</span><span class="font-mono text-[8.5px] tracking-[0.1em] uppercase text-fg-faint">no closes</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">No closes</span>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control min-h-[88px] p-2.5 flex flex-col" style="background:color-mix(in srgb,var(--fg-1) 7%,transparent);box-shadow:inset 0 0 0 1.5px var(--fg-2)"><div class="flex items-start justify-between"><span class="font-mono text-[10.5px] tabular-nums leading-none" style="color:var(--fg-1);font-weight:700">05</span><span class="font-mono text-[8px] font-bold tracking-[0.12em] uppercase px-1.5 py-[2px] rounded-chip" style="background:var(--fg-1);color:var(--bg-elev-1)">TODAY</span></div><div class="flex-1 flex flex-col justify-end"><span class="font-mono font-semibold tabular-nums leading-none text-pnlup" style="font-size:19px">+$3.70K</span><span class="font-mono text-[8.5px] tracking-[0.08em] uppercase text-fg-mute mt-1">realized so far</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">Today · anchor</span>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control border border-line-soft min-h-[88px] p-2.5 flex flex-col" style="background:color-mix(in srgb,var(--info) 7%,transparent)"><div class="flex items-start justify-between"><span class="font-mono text-[10.5px] tabular-nums leading-none" style="color:color-mix(in srgb,var(--info) 55%,var(--fg-mute));font-weight:500">06</span><span class="font-mono text-[8px] font-bold tracking-[0.1em] uppercase" style="color:color-mix(in srgb,var(--info) 70%,var(--fg-mute))">PROJ</span></div><div class="flex-1 flex items-end"><span class="font-mono font-medium tabular-nums leading-none" style="font-size:18px;color:color-mix(in srgb,var(--info) 60%,var(--fg-2))">+$1.19K</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">Projected · neutral</span>
+          </div>
+          <div class="flex flex-col gap-1.5">
+            <div class="relative rounded-control border border-line-soft min-h-[88px] p-2.5 flex flex-col" style="background:color-mix(in srgb,var(--pnl-down-fg) 7%,transparent)"><div class="flex items-start justify-between"><span class="font-mono text-[10.5px] tabular-nums leading-none" style="color:color-mix(in srgb,var(--pnl-down-fg) 55%,var(--fg-mute));font-weight:500">07</span><span class="font-mono text-[8px] font-bold tracking-[0.1em] uppercase" style="color:color-mix(in srgb,var(--pnl-down-fg) 70%,var(--fg-mute))">PROJ</span></div><div class="flex-1 flex items-end"><span class="font-mono font-medium tabular-nums leading-none" style="font-size:18px;color:color-mix(in srgb,var(--pnl-down-fg) 60%,var(--fg-2))">−$1.38K</span></div></div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">Projected · pessimistic</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PROJECTIONS: SCENARIO SWITCH ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="scenario">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Projections</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Scenario switch</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-2">A three-segment control (same family as the toolbar segmented control) that repaints all projected cells and totals. Each segment is self-documenting — it carries its anchor daily rate, so the operator sees the spread before clicking. <strong class="text-fg-1 font-semibold">Pessimistic</strong> = worst observed daily %, <strong class="text-fg-1 font-semibold">Neutral</strong> = midpoint of the observed range, <strong class="text-fg-1 font-semibold">Optimistic</strong> = best observed daily %.</p>
+      <p class="text-[13px] leading-[1.55] text-fg-mute max-w-[680px] mb-[22px]">The active pill takes the scenario tone (red / info-blue / green). Disabled + dimmed on past months (which carry no projection). Implementation note: the pill slides via a pure-percentage <span class="font-mono">left</span> transition — this engine won't interpolate a transition between <span class="font-mono">calc()</span> values, so width/inset are static and only <span class="font-mono">left</span> animates.</p>
+      <div class="content ds-dark rounded-surface p-6" data-theme="dark">
+        <div class="flex flex-col gap-5">
+          <div class="flex items-center gap-4">
+            <div class="relative inline-grid grid-cols-3 h-[44px] min-w-[330px] bg-surface-3 border border-line rounded-control">
+              <span class="absolute top-[3px] bottom-[3px] z-0 rounded-[7px] shadow-1" style="left:0%;margin-left:3px;width:calc(33.3333% - 6px);background:var(--pnl-down-fg)"></span>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:#fff">Pessimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:#fff;opacity:.82">−0.75%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Neutral</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">+0.65%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Optimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">+2.05%/d</span></button>
+            </div>
+            <span class="font-mono text-[10px] tracking-[0.08em] uppercase text-fg-mute">Pessimistic active</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="relative inline-grid grid-cols-3 h-[44px] min-w-[330px] bg-surface-3 border border-line rounded-control">
+              <span class="absolute top-[3px] bottom-[3px] z-0 rounded-[7px] shadow-1" style="left:33.3333%;margin-left:3px;width:calc(33.3333% - 6px);background:var(--info)"></span>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Pessimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">−0.75%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:#fff">Neutral</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:#fff;opacity:.82">+0.65%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Optimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">+2.05%/d</span></button>
+            </div>
+            <span class="font-mono text-[10px] tracking-[0.08em] uppercase text-fg-mute">Neutral active · default</span>
+          </div>
+          <div class="flex items-center gap-4">
+            <div class="relative inline-grid grid-cols-3 h-[44px] min-w-[330px] bg-surface-3 border border-line rounded-control">
+              <span class="absolute top-[3px] bottom-[3px] z-0 rounded-[7px] shadow-1" style="left:66.6667%;margin-left:3px;width:calc(33.3333% - 6px);background:var(--pnl-up-fg)"></span>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Pessimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">−0.75%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:var(--fg-3)">Neutral</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:var(--fg-mute)">+0.65%/d</span></button>
+              <button class="appearance-none bg-transparent border-0 rounded-[7px] flex flex-col items-center justify-center gap-[2px] px-1 relative z-[1]"><span class="font-mono text-[11px] font-semibold tracking-[0.03em] leading-none" style="color:#04140d">Optimistic</span><span class="font-mono text-[8.5px] tabular-nums leading-none" style="color:#04140d;opacity:.82">+2.05%/d</span></button>
+            </div>
+            <span class="font-mono text-[10px] tracking-[0.08em] uppercase text-fg-mute">Optimistic active</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PROJECTIONS: PICKERS ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="pickers">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Projections</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Account &amp; month pickers</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Projections run per exchange account. The account picker (left) is a rich popover with per-account equity + link status; it's hidden entirely for single-account users. The month picker (right) steps a year and exposes a 3×4 month grid — past months are realized history, future reach up to six years out where compounding turns dramatic. The current month carries a dot.</p>
+      <div class="content ds-dark rounded-surface p-6" data-theme="dark">
+        <div class="flex flex-wrap gap-8 items-start">
+          <div class="flex flex-col gap-3">
+            <button class="inline-flex items-center gap-2.5 h-[34px] border border-accent rounded-control bg-surface pl-2 pr-3 self-start">
+              <span class="w-[24px] h-[24px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10px] flex items-center justify-center">B</span>
+              <span class="flex flex-col items-start leading-[1.15]"><span class="text-[12.5px] font-semibold text-fg-1">Binance <span class="text-fg-mute font-normal">· main</span></span><span class="font-mono text-[10px] text-fg-mute tabular-nums">$184,210.08</span></span>
+              <span class="w-[8px] h-[8px] rounded-chip bg-green-500"></span>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--fg-mute)" stroke-width="1.75" stroke-linecap="square"><path d="M5 9l7 7 7-7"/></svg>
+            </button>
+            <div class="w-[280px] bg-surface border border-line rounded-control shadow-2 p-[5px] flex flex-col gap-px">
+              <div class="font-mono text-[9px] font-semibold tracking-[0.12em] uppercase text-fg-mute px-[9px] pt-1.5 pb-1">Exchange accounts · 4</div>
+              <button class="text-left flex items-center gap-2.5 bg-hover border-0 rounded-[7px] py-2 px-[9px]"><span class="w-[26px] h-[26px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10.5px] flex items-center justify-center">B</span><span class="flex flex-col leading-[1.2] flex-1"><span class="text-[12.5px] font-semibold text-fg-1">Binance <span class="text-fg-mute font-normal">· main</span></span><span class="font-mono text-[10px] text-fg-mute">Futures · cross</span></span><span class="flex flex-col items-end gap-1"><span class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums">$184,210.08</span><span class="inline-flex items-center gap-[5px] font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase" style="color:var(--pnl-up-fg)"><span class="w-[8px] h-[8px] rounded-chip bg-green-500"></span>Linked</span></span><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linecap="square"><path d="M4 12l5 5 11-11"/></svg></button>
+              <button class="text-left flex items-center gap-2.5 bg-transparent border-0 rounded-[7px] py-2 px-[9px]"><span class="w-[26px] h-[26px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10.5px] flex items-center justify-center">BY</span><span class="flex flex-col leading-[1.2] flex-1"><span class="text-[12.5px] font-semibold text-fg-1">Bybit <span class="text-fg-mute font-normal">· hedge</span></span><span class="font-mono text-[10px] text-fg-mute">Perp · isolated</span></span><span class="flex flex-col items-end gap-1"><span class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums">$62,840.12</span><span class="inline-flex items-center gap-[5px] font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase" style="color:var(--pnl-up-fg)"><span class="w-[8px] h-[8px] rounded-chip bg-green-500"></span>Linked</span></span></button>
+              <button class="text-left flex items-center gap-2.5 bg-transparent border-0 rounded-[7px] py-2 px-[9px]"><span class="w-[26px] h-[26px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10.5px] flex items-center justify-center">O</span><span class="flex flex-col leading-[1.2] flex-1"><span class="text-[12.5px] font-semibold text-fg-1">OKX <span class="text-fg-mute font-normal">· arb</span></span><span class="font-mono text-[10px] text-fg-mute">Last seen 4m ago</span></span><span class="flex flex-col items-end gap-1"><span class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums">$24,980.55</span><span class="inline-flex items-center gap-[5px] font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase" style="color:var(--danger)"><span class="w-[8px] h-[8px] rounded-chip bg-danger animate-pulse-soft"></span>Down</span></span></button>
+              <button class="text-left flex items-center gap-2.5 bg-transparent border-0 rounded-[7px] py-2 px-[9px]"><span class="w-[26px] h-[26px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10.5px] flex items-center justify-center">D</span><span class="flex flex-col leading-[1.2] flex-1"><span class="text-[12.5px] font-semibold text-fg-1">Deribit <span class="text-fg-mute font-normal">· options</span></span><span class="font-mono text-[10px] text-fg-mute">Options · portfolio</span></span><span class="flex flex-col items-end gap-1"><span class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums">$12,879.67</span><span class="inline-flex items-center gap-[5px] font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase" style="color:var(--pnl-up-fg)"><span class="w-[8px] h-[8px] rounded-chip bg-green-500"></span>Linked</span></span></button>
+            </div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Account picker · open</span>
+          </div>
+          <div class="flex flex-col gap-3">
+            <button class="inline-flex items-center justify-center gap-2 h-[34px] px-3.5 min-w-[156px] rounded-control border border-accent bg-surface font-sans font-semibold text-[13.5px] text-fg-1 self-start">June 2026<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="var(--fg-mute)" stroke-width="1.75" stroke-linecap="square"><path d="M5 9l7 7 7-7"/></svg></button>
+            <div class="w-[280px] bg-surface border border-line rounded-control shadow-2 p-3">
+              <div class="flex items-center justify-between mb-3">
+                <button class="w-[28px] h-[28px] inline-flex items-center justify-center rounded-control border border-line bg-surface text-fg-2"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M15 5l-7 7 7 7"/></svg></button>
+                <span class="font-mono text-[14px] font-semibold text-fg-1 tabular-nums">2026</span>
+                <button class="w-[28px] h-[28px] inline-flex items-center justify-center rounded-control border border-line bg-surface text-fg-2"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M9 5l7 7-7 7"/></svg></button>
+              </div>
+              <div class="grid grid-cols-3 gap-1.5">
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Jan</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Feb</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Mar</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Apr</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">May</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border-transparent bg-accent text-accent-on">Jun</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Jul</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Aug</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Sep</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Oct</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Nov</button>
+                <button class="relative h-[38px] rounded-[7px] font-mono text-[12px] font-semibold border border-line bg-surface-3 text-fg-2">Dec</button>
+              </div>
+              <div class="mt-3 pt-2.5 border-t border-line-soft font-mono text-[9.5px] text-fg-mute tracking-[0.04em] text-center">PROJECT UP TO 6 YEARS FORWARD</div>
+            </div>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Month picker · open</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PROJECTIONS: TOTALS STRIP ================= -->
+    <section class="pt-14 scroll-mt-[76px]" id="totalsstrip">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase text-accent mb-2.5">Projections</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Totals strip &amp; card--flat</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-2">A five-cell summary whose labels adapt to the month type. Current: <span class="font-mono text-fg-2">started · made so far · projected (rest) · expected end · monthly %</span>. The monthly-return value takes the scenario tone (not green) and a <span class="font-mono">REAL · PROJ</span> split sub so a positive figure is never misread as all-realized. Future months gain a cumulative-from-today band; past months swap to <span class="font-mono">realized / ended at</span>.</p>
+      <div class="content ds-dark rounded-surface p-5" data-theme="dark">
+        <div class="card card--flat">
+          <div class="flex items-stretch">
+            <div class="flex-1 min-w-[150px] py-[15px] px-5 flex flex-col gap-1.5"><span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Started month at</span><span class="font-mono text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em]" style="color:var(--fg-1)">$181,149</span><span class="font-mono text-[9px] tracking-[0.07em] text-fg-mute uppercase">Opening balance</span></div>
+            <div class="flex-1 min-w-[150px] py-[15px] px-5 flex flex-col gap-1.5 border-l border-line-soft"><span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Made so far</span><span class="font-mono text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-pnlup">+$3,061</span><span class="font-mono text-[9px] tracking-[0.07em] text-fg-mute uppercase">Realized</span></div>
+            <div class="flex-1 min-w-[150px] py-[15px] px-5 flex flex-col gap-1.5 border-l border-line-soft"><span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Projected · rest of month</span><span class="font-mono text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em]" style="color:var(--info)">+$32,296</span><span class="font-mono text-[9px] tracking-[0.07em] text-fg-mute uppercase">Neutral · proj</span></div>
+            <div class="flex-1 min-w-[150px] py-[15px] px-5 flex flex-col gap-1.5 border-l border-line-soft"><span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Expected end balance</span><span class="font-mono text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em]" style="color:var(--fg-1)">$216,506</span><span class="font-mono text-[9px] tracking-[0.07em] text-fg-mute uppercase">Expected</span></div>
+            <div class="flex-1 min-w-[150px] py-[15px] px-5 flex flex-col gap-1.5 border-l border-line-soft"><span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Monthly return</span><span class="font-mono text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em]" style="color:var(--info)">+19.52%</span><span class="font-mono text-[9px] tracking-[0.07em] text-fg-mute uppercase">+1.7% REAL · +17.5% PROJ</span></div>
+          </div>
+          <div class="flex items-center gap-3 py-[13px] px-5 border-t border-line-soft" style="background:color-mix(in srgb,var(--info) 6%,transparent)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="var(--info)" stroke-width="1.75" stroke-linecap="square"><path d="M3 3v18h18"/><path d="M7 14l4-5 3 3 5-7"/></svg>
+            <span class="text-[12.5px] text-fg-2">Cumulative from <span class="font-semibold text-fg-1">today</span> → end of <span class="font-semibold text-fg-1">Dec 2026</span></span>
+            <span class="flex-1"></span>
+            <span class="font-mono text-[17px] font-semibold tabular-nums" style="color:var(--info)">+$214,820</span>
+            <span class="font-mono text-[9px] tracking-[0.08em] uppercase" style="color:color-mix(in srgb,var(--info) 70%,var(--fg-mute))">Projected</span>
+          </div>
+        </div>
+      </div>
+      <p class="text-[13px] leading-[1.55] text-fg-mute max-w-[680px] mt-[18px]"><span class="font-mono text-fg-2">.card--flat</span> — in dark content theme, all cards take a brand-accent (green) border so they read as raised panels. Since accent green is the same hue as the gain-green, the Projections data cards (totals strip + calendar) opt out via <span class="font-mono">.card--flat</span>, which restores a neutral border while keeping the depth shadow — so a card full of projected money never reads as a gain. Below: default accent border vs <span class="font-mono">.card--flat</span>.</p>
+      <div class="content ds-dark rounded-surface p-5 mt-3" data-theme="dark">
+        <div class="grid grid-cols-2 gap-4 max-[820px]:grid-cols-1">
+          <div class="flex flex-col gap-2"><div class="card h-[64px] flex items-center px-5"><span class="font-mono text-[11px] tracking-[0.06em] uppercase text-fg-3">Default · accent border</span></div><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">.card</span></div>
+          <div class="flex flex-col gap-2"><div class="card card--flat h-[64px] flex items-center px-5"><span class="font-mono text-[11px] tracking-[0.06em] uppercase text-fg-3">Neutral border</span></div><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute text-center">.card.card--flat</span></div>
+        </div>
       </div>
     </section>
 
