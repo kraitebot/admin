@@ -212,6 +212,70 @@ const OSTATUS = {
   CANCELLED: { c: 'var(--fg-mute)' },
 };
 
+// Shared FIXED column template so the sync reconcile panel (a nested table that
+// slides open inside a colSpan cell) lines up exactly with the orders columns.
+const O_COLW = ['36px', '16%', '8%', '13%', '10%', '13%', '20%', '20%'];
+const OColGroup = () => (<colgroup>{O_COLW.map((w, i) => <col key={i} style={{ width: w }}/>)}</colgroup>);
+// exchange-cell styling: highlight a value that DISAGREES with the DB (amber),
+// mute one that matches so the eye lands on the diffs.
+const oCmp = (diff) => diff
+  ? { color: 'var(--warn)', fontWeight: 600, background: 'color-mix(in srgb, var(--warn) 12%, transparent)' }
+  : { color: 'var(--fg-mute)' };
+const oDbMark = (diff) => diff ? { textDecoration: 'underline dotted', textDecorationColor: 'var(--warn)', textUnderlineOffset: '3px' } : undefined;
+
+// Slide-animated reconcile panel for an out-of-sync order. Rendered as ONE
+// colSpan row whose inner content height animates open/closed via useSlide
+// (same slide the position detail uses), so it stays mounted to animate BOTH
+// directions. The nested table reuses O_COLW to stay column-aligned.
+const OrderSyncPanel = ({ isOpen, oc, ex, exchange, diffNames, dq, dp, df, dood, dsd, dst, exSt, syncing, onResync }) => {
+  const { wrapRef, contentRef } = useSlide(isOpen);
+  return (
+    <tr aria-hidden={!isOpen}>
+      <td colSpan={8} className="p-0 border-0">
+        <div ref={wrapRef} style={{ overflow: 'hidden' }}>
+          <div ref={contentRef} style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
+            <table className="w-full border-collapse table-fixed"><OColGroup/>
+              <tbody>
+                <tr>
+                  <td className={oc + " px-1.5"}><span className="font-mono text-[13px] leading-none" style={{ color: 'var(--fg-faint)' }}>↳</span></td>
+                  <td className={oc}>
+                    <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold tracking-[0.06em] rounded-chip py-[3px] px-2" style={{ color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)' }}>
+                      <UIcon name="server" size={10} style={{ width: 10, height: 10 }}/>EXCHANGE
+                    </span>
+                  </td>
+                  <td className={oc} style={oCmp(dsd)}>{ex.side}</td>
+                  <td className={oc}>
+                    <span className="inline-flex items-center gap-[6px] text-[10.5px] font-semibold tracking-[0.04em]" style={dst ? oCmp(true) : { color: 'var(--fg-mute)' }}>
+                      <span className="w-1.5 h-1.5 rounded-chip" style={{ background: dst ? 'var(--warn)' : exSt.c }}/>{ex.status}
+                    </span>
+                  </td>
+                  <td className={oc} style={oCmp(dq)}>{ex.qty}</td>
+                  <td className={oc} style={oCmp(dp)}>{ex.price}</td>
+                  <td className={oc + " text-[10.5px]"} style={oCmp(dood)}>{fmtTime(ex.opened)}</td>
+                  <td className={oc + " text-[10.5px]"} style={oCmp(df)}>{fmtTime(ex.filled)}</td>
+                </tr>
+              </tbody>
+            </table>
+            <div className="px-3 py-2.5 border-b border-line-soft flex items-center gap-3 flex-wrap">
+              <span className="inline-flex items-center gap-2 text-[11.5px] text-fg-2 leading-snug">
+                <UIcon name="alert" size={13} style={{ color: 'var(--warn)', flexShrink: 0 }}/>
+                Out of sync with <span className="font-semibold text-fg-1 whitespace-nowrap">{exchange}</span> · differs on <span className="font-semibold" style={{ color: 'var(--warn)' }}>{diffNames.join(' · ')}</span>. Kraite's record is shown on top; exchange values are highlighted.
+              </span>
+              <span className="flex-1"/>
+              <button onClick={(e) => { e.stopPropagation(); onResync(); }} disabled={syncing}
+                className="appearance-none cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface-3 text-fg-1 font-sans text-[11.5px] font-semibold py-[6px] px-3 transition-colors duration-fast ease-out hover:border-line-strong disabled:opacity-60 disabled:cursor-default">
+                {syncing
+                  ? <><span className="w-[12px] h-[12px] rounded-full border-2 border-line-strong border-t-fg-1 animate-spin"/>Syncing…</>
+                  : <><UIcon name="refresh" size={13}/>Re-sync order</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+};
+
 const OrdersTable = ({ orders, exchange }) => {
   const oh = "font-mono text-[9px] font-bold tracking-[0.1em] uppercase py-[7px] px-2.5 text-center whitespace-nowrap";
   const oc = "py-[9px] px-2.5 border-b border-line-soft text-center whitespace-nowrap font-mono text-[11.5px] tabular-nums text-fg-1";
@@ -219,21 +283,21 @@ const OrdersTable = ({ orders, exchange }) => {
   const [syncing, setSyncing] = React.useState({});
   const [resolved, setResolved] = React.useState({});
   const toggle = (i) => setOpen(s => ({ ...s, [i]: !s[i] }));
+  // re-sync: spin briefly, slide the panel up, then resolve to the in-sync check.
   const resync = (i) => {
     setSyncing(s => ({ ...s, [i]: true }));
-    setTimeout(() => { setSyncing(s => ({ ...s, [i]: false })); setResolved(s => ({ ...s, [i]: true })); setOpen(s => ({ ...s, [i]: false })); }, 1000);
+    setTimeout(() => {
+      setSyncing(s => ({ ...s, [i]: false }));
+      setOpen(s => ({ ...s, [i]: false }));                              // slide up
+      setTimeout(() => setResolved(s => ({ ...s, [i]: true })), 380);   // resolve after the slide
+    }, 1000);
   };
-  // exchange-cell styling: highlight a value that DISAGREES with the DB (amber),
-  // mute one that matches so the eye lands on the diffs.
-  const cmp = (diff) => diff
-    ? { color: 'var(--warn)', fontWeight: 600, background: 'color-mix(in srgb, var(--warn) 12%, transparent)' }
-    : { color: 'var(--fg-mute)' };
-  const dbMark = (diff) => diff ? { textDecoration: 'underline dotted', textDecorationColor: 'var(--warn)', textUnderlineOffset: '3px' } : undefined;
 
   return (
     <div className="rounded-control border border-line-soft bg-surface overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse min-w-[660px]">
+        <table className="w-full border-collapse table-fixed min-w-[700px]">
+          <OColGroup/>
           <thead><tr style={{ background: 'var(--fg-1)', color: 'var(--bg-elev-1)' }}>
             <th className={oh + " w-[36px]"} aria-label="Sync"/>
             <th className={oh}>Type</th>
@@ -284,52 +348,16 @@ const OrdersTable = ({ orders, exchange }) => {
                         <span className="w-1.5 h-1.5 rounded-chip" style={{ background: st.c }}/>{o.status}
                       </span>
                     </td>
-                    <td className={oc + " text-fg-2"} style={mism ? dbMark(dq) : undefined}>{o.qty}</td>
-                    <td className={oc} style={mism ? dbMark(dp) : undefined}>{o.price}</td>
-                    <td className={oc + " text-fg-3 text-[10.5px]"} style={mism ? dbMark(dood) : undefined}>{fmtTime(o.opened)}</td>
-                    <td className={oc + " text-[10.5px] " + (o.filled ? 'text-fg-3' : 'text-fg-mute')} style={mism ? dbMark(df) : undefined}>{o.filled ? fmtTime(o.filled) : '—'}</td>
+                    <td className={oc + " text-fg-2"} style={mism ? oDbMark(dq) : undefined}>{o.qty}</td>
+                    <td className={oc} style={mism ? oDbMark(dp) : undefined}>{o.price}</td>
+                    <td className={oc + " text-fg-3 text-[10.5px]"} style={mism ? oDbMark(dood) : undefined}>{fmtTime(o.opened)}</td>
+                    <td className={oc + " text-[10.5px] " + (o.filled ? 'text-fg-3' : 'text-fg-mute')} style={mism ? oDbMark(df) : undefined}>{o.filled ? fmtTime(o.filled) : '—'}</td>
                   </tr>
 
-                  {mism && isOpen && ex && (
-                    <React.Fragment>
-                      {/* aligned EXCHANGE values — diffs vs the DB row above are amber */}
-                      <tr style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
-                        <td className={oc + " px-1.5"}><span className="font-mono text-[13px] leading-none" style={{ color: 'var(--fg-faint)' }}>↳</span></td>
-                        <td className={oc}>
-                          <span className="inline-flex items-center gap-1 font-mono text-[9px] font-bold tracking-[0.06em] rounded-chip py-[3px] px-2" style={{ color: 'var(--warn)', background: 'color-mix(in srgb, var(--warn) 14%, transparent)' }}>
-                            <UIcon name="server" size={10} style={{ width: 10, height: 10 }}/>EXCHANGE
-                          </span>
-                        </td>
-                        <td className={oc} style={cmp(dsd)}>{ex.side}</td>
-                        <td className={oc}>
-                          <span className="inline-flex items-center gap-[6px] text-[10.5px] font-semibold tracking-[0.04em]" style={dst ? cmp(true) : { color: 'var(--fg-mute)' }}>
-                            <span className="w-1.5 h-1.5 rounded-chip" style={{ background: dst ? 'var(--warn)' : exSt.c }}/>{ex.status}
-                          </span>
-                        </td>
-                        <td className={oc} style={cmp(dq)}>{ex.qty}</td>
-                        <td className={oc} style={cmp(dp)}>{ex.price}</td>
-                        <td className={oc + " text-[10.5px]"} style={cmp(dood)}>{fmtTime(ex.opened)}</td>
-                        <td className={oc + " text-[10.5px]"} style={cmp(df)}>{fmtTime(ex.filled)}</td>
-                      </tr>
-                      {/* reconcile note + action */}
-                      <tr style={{ background: 'color-mix(in srgb, var(--warn) 6%, transparent)' }}>
-                        <td colSpan={8} className="px-3 py-2.5 border-b border-line-soft">
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span className="inline-flex items-center gap-2 text-[11.5px] text-fg-2 leading-snug">
-                              <UIcon name="alert" size={13} style={{ color: 'var(--warn)', flexShrink: 0 }}/>
-                              Out of sync with <span className="font-semibold text-fg-1 whitespace-nowrap">{exchange}</span> · differs on <span className="font-semibold" style={{ color: 'var(--warn)' }}>{diffNames.join(' · ')}</span>. Kraite's record is shown on top; exchange values are highlighted.
-                            </span>
-                            <span className="flex-1"/>
-                            <button onClick={(e) => { e.stopPropagation(); resync(i); }} disabled={syncing[i]}
-                              className="appearance-none cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface-3 text-fg-1 font-sans text-[11.5px] font-semibold py-[6px] px-3 transition-colors duration-fast ease-out hover:border-line-strong disabled:opacity-60 disabled:cursor-default">
-                              {syncing[i]
-                                ? <><span className="w-[12px] h-[12px] rounded-full border-2 border-line-strong border-t-fg-1 animate-spin"/>Syncing…</>
-                                : <><UIcon name="refresh" size={13}/>Re-sync order</>}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    </React.Fragment>
+                  {mism && ex && (
+                    <OrderSyncPanel isOpen={isOpen} oc={oc} ex={ex} exchange={exchange} diffNames={diffNames}
+                      dq={dq} dp={dp} df={df} dood={dood} dsd={dsd} dst={dst} exSt={exSt}
+                      syncing={!!syncing[i]} onResync={() => resync(i)}/>
                   )}
                 </React.Fragment>
               );
