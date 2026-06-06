@@ -1,6 +1,5 @@
 @props([
     'active' => 'dashboard',
-    'contentDark' => true,
     'showBanner' => false,
     'downAccount' => null,
 ])
@@ -14,15 +13,20 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body>
-<div class="grid grid-cols-[88px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]"
+<div class="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]"
      data-density="compact">
 
-    <x-rail :active="$active"/>
+    @persist('rail')
+        <x-rail :active="$active"/>
+    @endpersist
 
     <div class="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]"
-         x-data="{ contentDark: {{ $contentDark ? 'true' : 'false' }} }">
+         x-data="{ contentDark: localStorage.getItem('kraite-content-theme') !== 'light' }"
+         x-init="$watch('contentDark', v => localStorage.setItem('kraite-content-theme', v ? 'dark' : 'light'))">
 
-        <x-top-bar/>
+        @persist('top-bar')
+            <x-top-bar/>
+        @endpersist
 
         @if($showBanner && $downAccount)
             <x-disconnect-banner :account="$downAccount"/>
@@ -35,7 +39,9 @@
             </div>
         </div>
 
-        <x-footer/>
+        @persist('footer')
+            <x-footer/>
+        @endpersist
     </div>
 </div>
 </body>

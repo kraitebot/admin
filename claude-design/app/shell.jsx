@@ -3,12 +3,12 @@
 // Chrome is always dark — it uses theme-independent ink-*/green-* tokens.
 
 const RAIL_ITEMS = [
-  { id: 'dashboard',   label: 'Dash' },
+  { id: 'dashboard',   label: 'Dashboard' },
   { id: 'positions',   label: 'Positions' },
-  { id: 'projections', label: 'Project' },
-  { id: 'bscs',        label: 'BSCS' },
+  { id: 'projections', label: 'Projections' },
   { id: 'accounts',    label: 'Accounts' },
   { id: 'billing',     label: 'Billing' },
+  { id: 'profile',     label: 'Profile' },
 ];
 
 const Rail = ({ active, setActive }) => {
@@ -47,7 +47,7 @@ const Rail = ({ active, setActive }) => {
         {/* single sliding green highlight that animates to the active item */}
         {hl && (
           <span aria-hidden="true"
-            className="absolute z-0 bg-green-25 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-green-500 before:rounded-chip max-[640px]:before:hidden"
+            className="absolute z-0 bg-green-500 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-green-500 before:rounded-chip max-[640px]:before:hidden"
             style={{ left: hl.left, top: hl.top, width: hl.width, height: hl.height }}/>
         )}
         {RAIL_ITEMS.map(it => {
@@ -56,10 +56,10 @@ const Rail = ({ active, setActive }) => {
             <button key={it.id} ref={el => { btnRefs.current[it.id] = el; }} onClick={() => setActive(it.id)}
               className={
                 "appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-fast ease-out max-[640px]:flex-1 max-[640px]:py-2 max-[640px]:px-0.5 max-[640px]:text-[9px] max-[420px]:p-0 " +
-                (on ? "text-green-500" : "text-ink-7 hover:text-ink-9")
+                (on ? "text-fg-on-accent" : "text-ink-7 hover:text-ink-9")
               }>
               <RailIcon name={it.id}/>
-              <span className="max-[420px]:hidden">{it.label}</span>
+              <span className="whitespace-nowrap max-[420px]:hidden">{it.label}</span>
             </button>
           );
         })}

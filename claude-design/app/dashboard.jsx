@@ -584,6 +584,15 @@ const Dashboard = ({ regime, score, serverFault, paginate }) => {
 
     <PositionsSection paginate={paginate}/>
 
+    {/* section separator between positions and the monitoring row */}
+    <div className="flex items-center gap-4 my-7" role="separator" aria-label="Monitoring">
+      <span className="h-px flex-1 bg-line"/>
+      <span className="font-mono text-[10px] font-medium tracking-[0.14em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
+        <UIcon name="activity" size={13}/>Monitoring
+      </span>
+      <span className="h-px flex-1 bg-line"/>
+    </div>
+
     <div className="grid grid-cols-3 gap-5 items-start max-[1080px]:grid-cols-1">
       <div className="flex flex-col gap-5 min-w-0 col-span-2 max-[1080px]:col-auto">
         <ActivityCard/>
@@ -605,6 +614,7 @@ const Placeholder = ({ route }) => {
     bscs:        { icon: 'bscs',         title: 'Black Swan Composite Score', desc: 'Market-risk regime detail, component breakdown, and trip history.' },
     accounts:    { icon: 'accounts',     title: 'Accounts', desc: 'Exchange credentials, connectivity testing, and per-account equity.' },
     billing:     { icon: 'billing',      title: 'Billing', desc: 'Balance, plan, wallet history, and top-up.' },
+    profile:     { icon: 'user',         title: 'Profile', desc: 'Trader identity, sessions, notification and security settings.' },
   }[route] || { icon: 'dashboard', title: route, desc: '' };
   return (
     <>
@@ -627,4 +637,8 @@ const Placeholder = ({ route }) => {
   );
 };
 
-Object.assign(window, { Dashboard, Placeholder });
+Object.assign(window, {
+  Dashboard, Placeholder, Segmented, TipLayer, StatusPill, PositionTile,
+  CARD_HEAD, CARD_TITLE, CARD_FOOT, FOOT_MONO, LINK_ARROW, LINK_QUIET,
+  BTN, BTN_PRIMARY, BTN_SECONDARY, PAGEHEAD, PH_EYEBROW, PH_H1, PH_SUB, dotCls,
+});

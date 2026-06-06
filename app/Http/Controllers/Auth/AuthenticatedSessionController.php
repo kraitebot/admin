@@ -55,9 +55,11 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      *
-     * Sysadmins land on the system overview; everyone else lands on the
-     * user dashboard. Account ownership is no longer the gate — the user
-     * dashboard exists for every non-admin even if they own zero accounts.
+     * The landing target follows the HOST, not the user: logging in on
+     * the console domain lands on the system overview (the `admin`
+     * middleware then 403s non-admins explicitly), while the admin
+     * domain always lands on the trader dashboard — sysadmins included,
+     * since on that surface they are acting as traders.
      */
     public function store(LoginRequest $request): RedirectResponse
     {
@@ -65,7 +67,7 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        $target = (bool) Auth::user()->is_admin
+        $target = $request->getHost() === config('domains.console')
             ? route('system.dashboard', absolute: false)
             : route('dashboard', absolute: false);
 

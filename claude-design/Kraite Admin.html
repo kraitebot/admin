@@ -25,6 +25,12 @@
 <script type="text/babel" src="app/data.jsx"></script>
 <script type="text/babel" src="app/shell.jsx"></script>
 <script type="text/babel" src="app/dashboard.jsx"></script>
+<script type="text/babel" src="app/positions.jsx"></script>
+<script type="text/babel" src="app/projections.jsx"></script>
+<script type="text/babel" src="app/accounts-kit.jsx"></script>
+<script type="text/babel" src="app/accounts.jsx"></script>
+<script type="text/babel" src="app/billing-kit.jsx"></script>
+<script type="text/babel" src="app/billing.jsx"></script>
 
 <script type="text/babel">
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -35,7 +41,10 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "showBanner": true,
   "serverFault": true,
   "paginatePositions": true,
-  "uiFont": "grotesk"
+  "uiFont": "grotesk",
+  "projState": "normal",
+  "acctState": "connected",
+  "billState": "active"
 }/*EDITMODE-END*/;
 
 const REGIME_SCORES = { CALM: 0.31, WATCH: 0.42, ELEVATED: 0.63, CASCADE: 0.82, 'BLACK SWAN': 0.94 };
@@ -98,7 +107,7 @@ function App() {
   React.useEffect(() => { setBannerOpen(true); }, [t.showBanner]);
 
   return (
-    <div className="grid grid-cols-[88px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
+    <div className="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
       <Rail active={active} setActive={go}/>
       <div className="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]">
         <TopBar contentDark={contentDark} setContentDark={setContentDark} onBell={() => {}}/>
@@ -108,6 +117,14 @@ function App() {
           <div className={"max-w-wide mx-auto pt-6 px-8 pb-12 max-[640px]:pt-4 max-[640px]:px-3 max-[640px]:pb-6 transition-[opacity,transform] duration-200 ease-out " + (fading ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0")}>
             {displayed === 'dashboard'
               ? <Dashboard regime={regime} score={score} serverFault={t.serverFault} paginate={t.paginatePositions}/>
+              : displayed === 'positions'
+              ? <Positions regime={regime} score={score}/>
+              : displayed === 'projections'
+              ? <Projections regime={regime} score={score} projState={t.projState}/>
+              : displayed === 'accounts'
+              ? <Accounts regime={regime} score={score} acctState={t.acctState}/>
+              : displayed === 'billing'
+              ? <Billing regime={regime} score={score} billState={t.billState}/>
               : <Placeholder route={displayed}/>}
           </div>
         </div>
@@ -128,6 +145,18 @@ function App() {
           onChange={(v) => setTweak('serverFault', v)}/>
         <TweakToggle label="Paginate positions (>6)" value={t.paginatePositions}
           onChange={(v) => setTweak('paginatePositions', v)}/>
+        <TweakSection label="Projections"/>
+        <TweakSelect label="Page state" value={t.projState}
+          options={[{value:'normal',label:'Normal'},{value:'no-closes',label:'Days with no closes'},{value:'loading',label:'Loading'},{value:'no-account',label:'No account selected'},{value:'zero-data',label:'Zero-data month'}]}
+          onChange={(v) => setTweak('projState', v)}/>
+        <TweakSection label="Accounts"/>
+        <TweakSelect label="Page state" value={t.acctState}
+          options={[{value:'connected',label:'Connected'},{value:'first-run',label:'First-run (no credentials)'},{value:'testing',label:'Test in progress'},{value:'test-failed',label:'Test failed (IPs blocked)'},{value:'trading-disabled',label:'Trading disabled'},{value:'quotes-loading',label:'Quotes loading'},{value:'quotes-empty',label:'No assets on exchange'},{value:'single',label:'Single account (no picker)'}]}
+          onChange={(v) => setTweak('acctState', v)}/>
+        <TweakSection label="Billing"/>
+        <TweakSelect label="Lifecycle state" value={t.billState}
+          options={[{value:'active',label:'Active subscription'},{value:'trial',label:'Trial active'},{value:'paused',label:'Paused'},{value:'read-only',label:'Read-only (renewal failed)'},{value:'trial-ready',label:'Plan picked, trial not started'},{value:'no-plan',label:'No plan yet (new user)'}]}
+          onChange={(v) => setTweak('billState', v)}/>
       </TweaksPanel>
     </div>
   );
