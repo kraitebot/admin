@@ -99,13 +99,26 @@
                 syncing: {},
                 resolved: {},
                 toggleSync(i) { this.openSync[i] = !this.openSync[i]; },
+                // re-sync: spin briefly, slide the panel up, then resolve to the in-sync check
                 resync(i) {
                     this.syncing[i] = true;
-                    setTimeout(() => { this.syncing[i] = false; this.resolved[i] = true; this.openSync[i] = false; }, 1000);
+                    setTimeout(() => {
+                        this.syncing[i] = false;
+                        this.openSync[i] = false;                                   // slide up
+                        setTimeout(() => { this.resolved[i] = true; }, 380);        // resolve after the slide
+                    }, 1000);
                 },
              }">
+            @php
+                // Fixed column template shared by the orders table AND the nested
+                // reconcile-panel table, so the EXCHANGE row lines up exactly.
+                $oColW = ['36px', '16%', '8%', '13%', '10%', '13%', '20%', '20%'];
+            @endphp
             <div class="overflow-x-auto">
-                <table class="w-full border-collapse min-w-[660px]">
+                <table class="w-full border-collapse table-fixed min-w-[700px]">
+                    <colgroup>
+                        @foreach($oColW as $w)<col style="width: {{ $w }};">@endforeach
+                    </colgroup>
                     <thead>
                         <tr style="background: var(--fg-1); color: var(--bg-elev-1);">
                             <th class="{{ $oh }} w-[36px]" aria-label="Sync"></th>
@@ -168,50 +181,58 @@
                                     <td class="{{ $oc }} text-fg-3 text-[10.5px]" :style="!resolved[{{ $oi }}] ? @js($dod ? $dbMark : '') : ''">{{ $fmtTime($o['opened']) }}</td>
                                     <td class="{{ $oc }} text-[10.5px] {{ $o['filled'] ? 'text-fg-3' : 'text-fg-mute' }}" :style="!resolved[{{ $oi }}] ? @js($df ? $dbMark : '') : ''">{{ $o['filled'] ? $fmtTime($o['filled']) : '—' }}</td>
                                 </tr>
-                                {{-- aligned EXCHANGE values — diffs vs the DB row above are amber --}}
-                                <template x-if="openSync[{{ $oi }}] && !resolved[{{ $oi }}]">
-                                    <tr style="background: color-mix(in srgb, var(--warn) 6%, transparent);">
-                                        <td class="{{ $oc }} px-1.5"><span class="font-mono text-[13px] leading-none" style="color: var(--fg-faint);">↳</span></td>
-                                        <td class="{{ $oc }}">
-                                            <span class="inline-flex items-center gap-1 font-mono text-[9px] font-bold tracking-[0.06em] rounded-chip py-[3px] px-2" style="color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent);">
-                                                <x-feathericon-server class="w-[10px] h-[10px]" stroke-width="1.75"/>EXCHANGE
-                                            </span>
-                                        </td>
-                                        <td class="{{ $oc }}" style="{{ $dsd ? $warnCell : $muteCell }}">{{ $ex['side'] }}</td>
-                                        <td class="{{ $oc }}">
-                                            <span class="inline-flex items-center gap-[6px] text-[10.5px] font-semibold tracking-[0.04em]" style="{{ $dst ? $warnCell : $muteCell }}">
-                                                <span class="w-1.5 h-1.5 rounded-chip" style="background: {{ $dst ? 'var(--warn)' : $exStColor }};"></span>{{ $ex['status'] }}
-                                            </span>
-                                        </td>
-                                        <td class="{{ $oc }}" style="{{ $dq ? $warnCell : $muteCell }}">{{ $ex['qty'] }}</td>
-                                        <td class="{{ $oc }}" style="{{ $dp ? $warnCell : $muteCell }}">{{ $ex['price'] }}</td>
-                                        <td class="{{ $oc }} text-[10.5px]" style="{{ $dod ? $warnCell : $muteCell }}">{{ $fmtTime($ex['opened']) }}</td>
-                                        <td class="{{ $oc }} text-[10.5px]" style="{{ $df ? $warnCell : $muteCell }}">{{ $fmtTime($ex['filled']) }}</td>
-                                    </tr>
-                                </template>
-                                {{-- reconcile note + action --}}
-                                <template x-if="openSync[{{ $oi }}] && !resolved[{{ $oi }}]">
-                                    <tr style="background: color-mix(in srgb, var(--warn) 6%, transparent);">
-                                        <td colspan="8" class="px-3 py-2.5 border-b border-line-soft">
-                                            <div class="flex items-center gap-3 flex-wrap">
-                                                <span class="inline-flex items-center gap-2 text-[11.5px] text-fg-2 leading-snug">
-                                                    <span class="flex-shrink-0 text-warn"><x-feathericon-alert-triangle class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
-                                                    <span>Out of sync with <span class="font-semibold text-fg-1 whitespace-nowrap">{{ $d['exch'] }}</span> · differs on <span class="font-semibold text-warn">{{ $diffNames }}</span>. Kraite's record is shown on top; exchange values are highlighted.</span>
-                                                </span>
-                                                <span class="flex-1"></span>
-                                                <button type="button" @click.stop="resync({{ $oi }})" :disabled="syncing[{{ $oi }}]"
-                                                        class="appearance-none cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface-3 text-fg-1 font-sans text-[11.5px] font-semibold py-[6px] px-3 transition-colors duration-fast ease-out hover:border-line-strong disabled:opacity-60 disabled:cursor-default">
-                                                    <template x-if="syncing[{{ $oi }}]">
-                                                        <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full border-2 border-line-strong border-t-fg-1 animate-spin"></span>Syncing…</span>
-                                                    </template>
-                                                    <template x-if="!syncing[{{ $oi }}]">
-                                                        <span class="inline-flex items-center gap-1.5"><x-feathericon-refresh-cw class="w-[13px] h-[13px]" stroke-width="1.75"/>Re-sync order</span>
-                                                    </template>
-                                                </button>
+                                {{-- slide-animated reconcile panel — ONE colSpan row, stays
+                                     mounted so the open/close slide animates both directions;
+                                     the nested table shares the colgroup for exact alignment --}}
+                                <tr :aria-hidden="!(openSync[{{ $oi }}] && !resolved[{{ $oi }}])">
+                                    <td colspan="8" class="p-0 border-0">
+                                        <div x-show="openSync[{{ $oi }}] && !resolved[{{ $oi }}]" x-collapse.duration.360ms x-cloak>
+                                            <div style="background: color-mix(in srgb, var(--warn) 6%, transparent);">
+                                                <table class="w-full border-collapse table-fixed">
+                                                    <colgroup>
+                                                        @foreach($oColW as $w)<col style="width: {{ $w }};">@endforeach
+                                                    </colgroup>
+                                                    <tbody>
+                                                        <tr>
+                                                            <td class="{{ $oc }} px-1.5"><span class="font-mono text-[13px] leading-none" style="color: var(--fg-faint);">↳</span></td>
+                                                            <td class="{{ $oc }}">
+                                                                <span class="inline-flex items-center gap-1 font-mono text-[9px] font-bold tracking-[0.06em] rounded-chip py-[3px] px-2" style="color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent);">
+                                                                    <x-feathericon-server class="w-[10px] h-[10px]" stroke-width="1.75"/>EXCHANGE
+                                                                </span>
+                                                            </td>
+                                                            <td class="{{ $oc }}" style="{{ $dsd ? $warnCell : $muteCell }}">{{ $ex['side'] }}</td>
+                                                            <td class="{{ $oc }}">
+                                                                <span class="inline-flex items-center gap-[6px] text-[10.5px] font-semibold tracking-[0.04em]" style="{{ $dst ? $warnCell : $muteCell }}">
+                                                                    <span class="w-1.5 h-1.5 rounded-chip" style="background: {{ $dst ? 'var(--warn)' : $exStColor }};"></span>{{ $ex['status'] }}
+                                                                </span>
+                                                            </td>
+                                                            <td class="{{ $oc }}" style="{{ $dq ? $warnCell : $muteCell }}">{{ $ex['qty'] }}</td>
+                                                            <td class="{{ $oc }}" style="{{ $dp ? $warnCell : $muteCell }}">{{ $ex['price'] }}</td>
+                                                            <td class="{{ $oc }} text-[10.5px]" style="{{ $dod ? $warnCell : $muteCell }}">{{ $fmtTime($ex['opened']) }}</td>
+                                                            <td class="{{ $oc }} text-[10.5px]" style="{{ $df ? $warnCell : $muteCell }}">{{ $fmtTime($ex['filled']) }}</td>
+                                                        </tr>
+                                                    </tbody>
+                                                </table>
+                                                <div class="px-3 py-2.5 border-b border-line-soft flex items-center gap-3 flex-wrap">
+                                                    <span class="inline-flex items-center gap-2 text-[11.5px] text-fg-2 leading-snug">
+                                                        <span class="flex-shrink-0 text-warn"><x-feathericon-alert-triangle class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
+                                                        <span>Out of sync with <span class="font-semibold text-fg-1 whitespace-nowrap">{{ $d['exch'] }}</span> · differs on <span class="font-semibold text-warn">{{ $diffNames }}</span>. Kraite's record is shown on top; exchange values are highlighted.</span>
+                                                    </span>
+                                                    <span class="flex-1"></span>
+                                                    <button type="button" @click.stop="resync({{ $oi }})" :disabled="syncing[{{ $oi }}]"
+                                                            class="appearance-none cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface-3 text-fg-1 font-sans text-[11.5px] font-semibold py-[6px] px-3 transition-colors duration-fast ease-out hover:border-line-strong disabled:opacity-60 disabled:cursor-default">
+                                                        <template x-if="syncing[{{ $oi }}]">
+                                                            <span class="inline-flex items-center gap-1.5"><span class="w-3 h-3 rounded-full border-2 border-line-strong border-t-fg-1 animate-spin"></span>Syncing…</span>
+                                                        </template>
+                                                        <template x-if="!syncing[{{ $oi }}]">
+                                                            <span class="inline-flex items-center gap-1.5"><x-feathericon-refresh-cw class="w-[13px] h-[13px]" stroke-width="1.75"/>Re-sync order</span>
+                                                        </template>
+                                                    </button>
+                                                </div>
                                             </div>
-                                        </td>
-                                    </tr>
-                                </template>
+                                        </div>
+                                    </td>
+                                </tr>
                             @else
                                 <tr class="last:[&>td]:border-0">
                                     <td class="{{ $oc }} px-1.5"></td>
