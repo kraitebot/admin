@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.7.1] — 2026-06-06
+
+### Config
+- `composer.production.json` synced with the local manifest: `laravel/horizon ^5.47` added (was missing since the v0.6.1 install — the deploy swap would have uninstalled Horizon and crashed boot), stale `brunocfalcao/hub-ui` require + VCS repository removed.
+
+---
+
 ## [0.7.0] — 2026-06-06
 
 ### Features
