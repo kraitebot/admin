@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.7.0] — 2026-06-06
+
+### Features
+- **Positions page** — sortable open/closed tables with expandable per-position records (summary groups + orders table), inverted accent headers, and the exchange reconcile UI: out-of-sync orders flag amber, expand to an aligned EXCHANGE ghost row with diff highlighting, and re-sync inline.
+- **Projections page** — monthly revenue calendar: realized history, today anchor, forward compounding under pessimistic/neutral/optimistic scenarios (per-segment daily rates), account picker, month picker (14 months back / 6 years forward), state-adaptive totals strip with REAL/PROJ split.
+- **Accounts page** — accordion of exchange accounts with General-information and Connectivity tabs: constrained config dropdowns (backend-validated ranges), API credential handshake with live progressive per-server connectivity test, IP allowlist with copy affordances, test-gated save, trading-disabled banner. Introduces the system-wide form-control components (`x-form.field/input/select/toggle/group`).
+- **Billing page** — prepaid-USDT wallet state machine: wallet hero with live credited moment, six lifecycle states (no-plan → trial-ready → trial → active → paused → read-only), plan switch with prorate breakdown + downgrade account picker, top-up flow with dynamic minimum and NOWPayments hand-off, ledger with running balance, collapsible billing terms.
+- **Console domain split** — `console.kraite.com` (sysadmin) and `admin.kraite.com` (trader) served by one project via host-bound route groups (`ADMIN_DOMAIN`/`CONSOLE_DOMAIN`); `/system/*` URL prefix retired, host-aware login landing, admin-gated console group, surface-aware rail.
+- **SPA navigation** — Livewire 4 `wire:navigate` with sequential content fade (out → swap → in), persisted shell (rail / top bar / footer), hover prefetch, Alpine-owned rail highlight that slides in parallel with the fade, theme toggle persisted across navigations.
+
+### Architecture
+- Trader rail rebuilt to the design spec: 112px, full labels, BSCS retired from nav, Profile added; rail item color transitions sync with the sliding pill.
+- Livewire runtime bundled via Vite (`livewire.esm`) with auto-start and asset auto-injection disabled — fixes the double-boot `$persist` crash on every page load.
+
+### Config
+- `laravel/framework` 12.61.1, `laravel/horizon` 5.47.2.
+
+---
+
 ## [0.6.1] — 2026-06-01
 
 ### Features
