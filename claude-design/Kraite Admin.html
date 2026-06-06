@@ -27,6 +27,8 @@
 <script type="text/babel" src="app/dashboard.jsx"></script>
 <script type="text/babel" src="app/positions.jsx"></script>
 <script type="text/babel" src="app/projections.jsx"></script>
+<script type="text/babel" src="app/accounts-kit.jsx"></script>
+<script type="text/babel" src="app/accounts.jsx"></script>
 
 <script type="text/babel">
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -38,7 +40,8 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "serverFault": true,
   "paginatePositions": true,
   "uiFont": "grotesk",
-  "projState": "normal"
+  "projState": "normal",
+  "acctState": "connected"
 }/*EDITMODE-END*/;
 
 const REGIME_SCORES = { CALM: 0.31, WATCH: 0.42, ELEVATED: 0.63, CASCADE: 0.82, 'BLACK SWAN': 0.94 };
@@ -115,6 +118,8 @@ function App() {
               ? <Positions regime={regime} score={score}/>
               : displayed === 'projections'
               ? <Projections regime={regime} score={score} projState={t.projState}/>
+              : displayed === 'accounts'
+              ? <Accounts regime={regime} score={score} acctState={t.acctState}/>
               : <Placeholder route={displayed}/>}
           </div>
         </div>
@@ -139,6 +144,10 @@ function App() {
         <TweakSelect label="Page state" value={t.projState}
           options={[{value:'normal',label:'Normal'},{value:'no-closes',label:'Days with no closes'},{value:'loading',label:'Loading'},{value:'no-account',label:'No account selected'},{value:'zero-data',label:'Zero-data month'}]}
           onChange={(v) => setTweak('projState', v)}/>
+        <TweakSection label="Accounts"/>
+        <TweakSelect label="Page state" value={t.acctState}
+          options={[{value:'connected',label:'Connected'},{value:'first-run',label:'First-run (no credentials)'},{value:'testing',label:'Test in progress'},{value:'test-failed',label:'Test failed (IPs blocked)'},{value:'trading-disabled',label:'Trading disabled'},{value:'quotes-loading',label:'Quotes loading'},{value:'quotes-empty',label:'No assets on exchange'},{value:'single',label:'Single account (no picker)'}]}
+          onChange={(v) => setTweak('acctState', v)}/>
       </TweaksPanel>
     </div>
   );
