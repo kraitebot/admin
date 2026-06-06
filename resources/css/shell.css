@@ -99,6 +99,11 @@ body { background: var(--black); overflow: hidden; }
    CONTENT — carries its own [data-theme]; re-tint borders + lift contrast.
    (chrome <html> is always dark, so these must scope to .content directly.)
    ========================================================================= */
+/* SPA navigation fade: app.js drives opacity 1 → 0 → 1 around each
+   wire:navigate swap; this transition makes both legs animate. */
+.content {
+  transition: opacity 160ms var(--ease-out);
+}
 .content[data-theme="dark"] {
   --fg-3: #aab1ba;
   --fg-mute: #828b95;
