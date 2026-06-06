@@ -132,6 +132,20 @@
         $closeSide = $long ? 'SELL' : 'BUY';
         $orders = [];
         $orders[] = ['type' => 'MARKET', 'side' => $entrySide, 'status' => 'FILLED', 'qty' => $fmtQty(0.40), 'price' => $fmtPrice($openN, $dec), 'opened' => $openedAt, 'filled' => $openedAt];
+        // demo: BTC's entry order is OUT OF SYNC with the exchange — the
+        // exchange reports a slightly different fill qty/price and a later
+        // fill timestamp than Kraite's DB. Drives the reconcile sub-row.
+        if (! $closed && $p['sym'] === 'BTC') {
+            $orders[0]['sync'] = [
+                'type' => 'MARKET',
+                'side' => $entrySide,
+                'status' => 'FILLED',
+                'qty' => number_format($qtyN * 0.40 + 0.002, $qtyDec),
+                'price' => $fmtPrice($openN - 1.5, $dec),
+                'opened' => $openedAt,
+                'filled' => $openedAt + 60,
+            ];
+        }
         for ($i = 0; $i < $total; $i++) {
             $done = $i < $filledN;
             $px = $openN * (1 + ($long ? -1 : 1) * 0.012 * ($i + 1));
