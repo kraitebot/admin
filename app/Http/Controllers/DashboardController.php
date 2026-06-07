@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -164,12 +165,14 @@ class DashboardController extends Controller
             ->whereNotNull('opened_at')
             ->orderByDesc('opened_at')
             ->limit(30)
-            ->get(['parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'])
+            ->get(['id', 'status', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'])
             ->each(function ($p) use ($events, $ago): void {
                 $events->push([
                     'kind' => 'OPEN',
                     'sort' => (string) $p->opened_at,
                     'time' => $ago($p->opened_at),
+                    'position_id' => (int) $p->id,
+                    'active' => in_array(strtolower((string) $p->status), self::OPEN_POSITION_STATUSES, true),
                     'side' => strtoupper((string) $p->direction),
                     'symbol' => $p->parsed_trading_pair,
                     'quantity' => $p->quantity !== null ? rtrim(rtrim((string) $p->quantity, '0'), '.') : null,
@@ -185,7 +188,7 @@ class DashboardController extends Controller
             ->whereNotNull('closed_at')
             ->orderByDesc('closed_at')
             ->limit(30)
-            ->get(['parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
+            ->get(['id', 'was_waped', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
             ->each(function ($p) use ($events, $ago): void {
                 $pnl = null;
                 if (is_numeric($p->opening_price) && is_numeric($p->closing_price) && is_numeric($p->quantity)) {
@@ -199,6 +202,11 @@ class DashboardController extends Controller
                     'kind' => 'CLOSE',
                     'sort' => (string) $p->closed_at,
                     'time' => $ago($p->closed_at),
+                    'position_id' => (int) $p->id,
+                    // A closed position is never "active" — but it carries the
+                    // waped flag so the row can badge a WAP'd (averaged-down) close.
+                    'active' => false,
+                    'waped' => (bool) $p->was_waped,
                     'side' => strtoupper((string) $p->direction),
                     'symbol' => $p->parsed_trading_pair,
                     'quantity' => null,
@@ -216,12 +224,14 @@ class DashboardController extends Controller
             ->whereNotNull('orders.filled_at')
             ->orderByDesc('orders.filled_at')
             ->limit(30)
-            ->get(['positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'])
+            ->get(['positions.id as position_id', 'positions.status', 'positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'])
             ->each(function ($o) use ($events, $ago): void {
                 $events->push([
                     'kind' => 'WAP',
                     'sort' => (string) $o->filled_at,
                     'time' => $ago($o->filled_at),
+                    'position_id' => (int) $o->position_id,
+                    'active' => in_array(strtolower((string) $o->status), self::OPEN_POSITION_STATUSES, true),
                     'side' => strtoupper((string) $o->direction),
                     'symbol' => $o->parsed_trading_pair,
                     'quantity' => $o->quantity !== null ? rtrim(rtrim((string) $o->quantity, '0'), '.') : null,
@@ -281,6 +291,31 @@ class DashboardController extends Controller
         $at = CarbonImmutable::parse($ts)->subSeconds($this->dbClockSkew());
 
         return $at->isFuture() ? 'just now' : $at->diffForHumans(['short' => true]);
+    }
+
+    /**
+     * Skew-corrected "Xh Ym" until a future DB timestamp (e.g. a cooldown
+     * expiry). Returns null when the moment is already past. Mirror of
+     * humanAgo for the forward direction; absolute syntax drops the
+     * "from now" suffix so callers can phrase it ("resumes in …").
+     */
+    private function humanUntil(mixed $ts): ?string
+    {
+        if ($ts === null) {
+            return null;
+        }
+
+        $at = CarbonImmutable::parse($ts)->subSeconds($this->dbClockSkew());
+
+        if (! $at->isFuture()) {
+            return null;
+        }
+
+        return $at->diffForHumans([
+            'short' => true,
+            'parts' => 2,
+            'syntax' => CarbonInterface::DIFF_ABSOLUTE,
+        ]);
     }
 
     /**
@@ -379,6 +414,21 @@ class DashboardController extends Controller
         $score = $index->score();
         $band = $index->band()?->value;
         $blocked = $index->shouldBlockOpens();
+        $cooldownUntil = $index->cooldownUntil();
+
+        // Inferred pause source. The fast 1-minute market-shock detector
+        // arms the same cooldown the slow score gate uses, even when the
+        // score is nowhere near the block threshold — so a cooldown active
+        // with a sub-threshold score is a SHOCK cooldown; at/above the
+        // threshold it's the regime gate. (No persisted reason column.)
+        $pauseReason = null;
+        if ($blocked) {
+            // Regime gate is the cause ONLY when a computed score is at/above
+            // the block threshold (the only way the slow gate arms a cooldown).
+            // Everything else — sub-threshold score, or no score yet — can only
+            // be the fast shock breaker, so it defaults to 'shock'.
+            $pauseReason = ($score !== null && $score >= $index->blockThreshold()) ? 'regime' : 'shock';
+        }
 
         $statusLine = match (true) {
             $score === null => 'Awaiting first compute…',
@@ -419,6 +469,13 @@ class DashboardController extends Controller
             'score' => $score,
             'band' => $band,
             'blocked' => $blocked,
+            // Cooldown / market-shock surface — when opens are paused and
+            // until when. pause_reason is 'shock' (fast 1-min breaker) or
+            // 'regime' (slow score gate at ≥ block_threshold).
+            'pause_reason' => $pauseReason,
+            'cooldown_active' => $index->isCooldownActive(),
+            'cooldown_remaining' => $this->humanUntil($cooldownUntil),
+            'cooldown_until' => $cooldownUntil ? $cooldownUntil->subSeconds($this->dbClockSkew())->toIso8601String() : null,
             'status' => $statusLine,
             'is_stale' => $index->isStale(),
             'block_threshold' => $index->blockThreshold(),
@@ -591,6 +648,13 @@ class DashboardController extends Controller
 
         $openingPrice = $position->opening_price !== null ? (string) $position->opening_price : null;
 
+        // After a WAP the original opening_price no longer reflects the
+        // blended entry the TP is computed against — show the weighted-
+        // average entry instead so "entry → TP" reads the right direction.
+        $wasWaped = (bool) $position->was_waped;
+        $wap = $this->computeWap($position);
+        $entryPrice = $wasWaped && $wap !== null ? $wap : $openingPrice;
+
         // Lifecycle-track geometry — the design's stage grammar, not a
         // price-proportional scale (real ladders cluster the markers into
         // an unreadable left-edge pile). See trackGeometry().
@@ -619,6 +683,12 @@ class DashboardController extends Controller
 
             'current_price' => $fmtPrice($currentPrice),
             'opening_price' => $fmtPrice($openingPrice),
+            'wap_price' => $fmtPrice($wap),
+            'was_waped' => $wasWaped,
+            // The entry the tile shows: blended WAP once the position has
+            // averaged down, the original open otherwise.
+            'entry_label' => $wasWaped ? 'WAP' : 'Open',
+            'entry_price' => $fmtPrice($entryPrice),
             'first_profit_price' => $fmtPrice($firstProfit),
             'profit_price' => $fmtPrice($currentTp),
             'next_limit_price' => $fmtPrice($nextLimit),
@@ -819,6 +889,42 @@ class DashboardController extends Controller
             $cmp < 0 => 'down',
             default => 'flat',
         };
+    }
+
+    /**
+     * Weighted-average entry price (WAP) across every FILLED entry fill —
+     * the MARKET open plus any filled LIMIT ladder rungs. Exit orders
+     * (PROFIT-LIMIT, STOP-MARKET) are excluded by type, so the entry side
+     * is captured without needing to branch on direction. Returns null
+     * when there are no filled entries to average.
+     */
+    private function computeWap(Position $position): ?string
+    {
+        $numerator = '0';
+        $quantitySum = '0';
+
+        foreach ($position->orders as $order) {
+            if (! in_array(strtoupper((string) $order->type), ['MARKET', 'LIMIT'], true)) {
+                continue;
+            }
+
+            if (strtoupper((string) $order->status) !== 'FILLED') {
+                continue;
+            }
+
+            if (! is_numeric($order->price) || ! is_numeric($order->quantity)) {
+                continue;
+            }
+
+            $numerator = bcadd($numerator, bcmul((string) $order->price, (string) $order->quantity, 16), 16);
+            $quantitySum = bcadd($quantitySum, (string) $order->quantity, 16);
+        }
+
+        if (bccomp($quantitySum, '0', 16) === 0) {
+            return null;
+        }
+
+        return bcdiv($numerator, $quantitySum, 8);
     }
 
     /**

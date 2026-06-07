@@ -19,6 +19,7 @@
             filter: 'ALL',
             page: 0,
             acctOpen: false,
+            activeOnly: false,
             _timers: [],
 
             cols: 3,
@@ -218,6 +219,15 @@
             },
             engineEmpty() { return (this.d?.positions || []).length === 0; },
             dotColor(dir) { return dir === 'up' ? 'var(--pnl-up-fg)' : dir === 'down' ? 'var(--pnl-down-fg)' : 'var(--border-strong)'; },
+
+            // Activity feed, optionally filtered to events whose SOURCE
+            // position is still active. Keyed on position id (server-set
+            // `e.active`), never token — the same symbol can have a closed
+            // position in history we must not surface as active.
+            activityRows() {
+                const all = this.d?.activity || [];
+                return this.activeOnly ? all.filter(e => e.active) : all;
+            },
         });
     </script>
 
@@ -274,8 +284,15 @@
              class="flex items-center gap-3 py-[13px] px-4 mb-5 rounded-control bg-pnldown-bg text-pnldown border" style="border-color: color-mix(in srgb, var(--danger) 45%, transparent);">
             <span class="flex flex-shrink-0 animate-pulse-soft"><x-feathericon-alert-triangle class="w-[18px] h-[18px]" stroke-width="1.75"/></span>
             <span class="text-[13px] leading-[1.45] flex-1 min-w-0">
-                <strong class="text-pnldown-strong font-bold">New position openings paused</strong> — Black Swan regime is
-                <span class="font-mono text-pnldown-strong font-semibold"><span x-text="bandMeta().label"></span> <span x-text="scoreDisplay()"></span></span>.
+                <strong class="text-pnldown-strong font-bold">New position openings paused</strong> —
+                {{-- The fast market-shock breaker can pause opens with the score still calm, so name the actual cause. --}}
+                <template x-if="d?.bscs?.pause_reason === 'shock'">
+                    <span>market shock circuit breaker tripped</span>
+                </template>
+                <template x-if="d?.bscs?.pause_reason !== 'shock'">
+                    <span>Black Swan regime is <span class="font-mono text-pnldown-strong font-semibold"><span x-text="bandMeta().label"></span> <span x-text="scoreDisplay()"></span></span></span>
+                </template>
+                <span x-show="d?.bscs?.cooldown_remaining">. Resumes in <span class="font-mono text-pnldown-strong font-semibold" x-text="d.bscs.cooldown_remaining"></span></span>.
                 Existing positions are still managed.
             </span>
         </div>
@@ -542,13 +559,13 @@
 
                                 <div class="h-px bg-line-soft my-[13px]"></div>
 
-                                {{-- Metrics row 2: Open / TP / Next --}}
+                                {{-- Metrics row 2: Entry (WAP once averaged down) / TP / Next --}}
                                 <div class="grid grid-cols-3 gap-2">
                                     <div>
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span>Open
+                                            <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span><span x-text="p.entry_label ?? 'Open'"></span>
                                         </div>
-                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="p.opening_price ?? '—'"></div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="(p.entry_price ?? p.opening_price) ?? '—'"></div>
                                     </div>
                                     <div class="text-center">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
@@ -620,20 +637,28 @@
                         <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
                             <x-feathericon-cpu class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Recent bot activity
                         </div>
+                        {{-- filter the feed to events whose source position is still active --}}
+                        <button type="button" @click="activeOnly = !activeOnly" role="switch" :aria-checked="activeOnly"
+                                class="inline-flex items-center gap-2 cursor-pointer bg-transparent border-0 appearance-none p-0">
+                            <span class="font-mono text-[10px] font-medium tracking-[0.08em] uppercase transition-colors duration-fast" :class="activeOnly ? 'text-fg-2' : 'text-fg-mute'">Active only</span>
+                            <span class="relative w-[34px] h-[18px] rounded-chip transition-colors duration-fast flex-shrink-0" :class="activeOnly ? 'bg-accent' : 'bg-surface-3'">
+                                <span class="absolute top-[2px] left-[2px] w-[14px] h-[14px] rounded-chip bg-white transition-transform duration-fast" :style="activeOnly ? 'transform: translateX(16px)' : ''"></span>
+                            </span>
+                        </button>
                     </div>
 
-                    {{-- empty: account hasn't produced events yet --}}
-                    <div x-show="(d?.activity || []).length === 0" x-cloak class="flex-1 flex flex-col items-center justify-center text-center py-[52px] px-5">
+                    {{-- empty: no events (after the active-only filter) --}}
+                    <div x-show="activityRows().length === 0" x-cloak class="flex-1 flex flex-col items-center justify-center text-center py-[52px] px-5">
                         <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-cpu class="w-6 h-6" stroke-width="1.75"/></div>
-                        <h4 class="font-sans font-semibold text-[16px] text-fg-1 mb-1.5">No activity yet</h4>
-                        <p class="text-[13px] text-fg-3 max-w-[400px]">Position opens, closes and WAPs will stream here as the engine trades this account.</p>
+                        <h4 class="font-sans font-semibold text-[16px] text-fg-1 mb-1.5" x-text="activeOnly ? 'No active-position activity' : 'No activity yet'"></h4>
+                        <p class="text-[13px] text-fg-3 max-w-[400px]" x-text="activeOnly ? 'No events from positions that are currently open. Toggle off to see the full history.' : 'Position opens, closes and WAPs will stream here as the engine trades this account.'"></p>
                     </div>
 
                     {{-- 30 events feed the list; the card height is set by the
                          right column, extra rows scroll within it (basis-0 so
                          the flex item can't grow the card past its column) --}}
-                    <div class="flex-1 basis-0 min-h-0 overflow-y-auto flex flex-col" x-show="(d?.activity || []).length > 0">
-                        <template x-for="(e, i) in (d?.activity || [])" :key="e.kind + e.symbol + e.time + i">
+                    <div class="flex-1 basis-0 min-h-0 overflow-y-auto flex flex-col" x-show="activityRows().length > 0">
+                        <template x-for="(e, i) in activityRows()" :key="e.position_id + e.kind + e.time + i">
                             <div class="flex items-center gap-2.5 py-[9px] px-5 border-b border-line-soft min-w-0 last:border-b-0">
                                 <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0"
                                       :style="`background: ${e.kind === 'CLOSE' ? (e.pnl === null ? 'var(--border-strong)' : (Number(e.pnl) >= 0 ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)')) : e.kind === 'WAP' ? 'var(--warn)' : 'var(--pnl-up-fg)'}`"></span>
@@ -651,9 +676,20 @@
                                     </template>
                                     {{-- CLOSE --}}
                                     <template x-if="e.kind === 'CLOSE'">
-                                        <span>Closed <span class="font-mono font-semibold text-fg-1" x-text="e.symbol"></span>
+                                        <span>
+                                            {{-- WAP'd closes averaged down before closing. A WAP that
+                                                 recovered to a green close = "High profit"; a WAP'd loss
+                                                 gets a neutral badge (never mislabel a loss as profit). --}}
+                                            <template x-if="e.waped">
+                                                <span class="align-middle inline-flex items-center gap-[4px] font-mono text-[9.5px] font-bold tracking-[0.06em] uppercase rounded-chip py-px px-[6px] mr-1"
+                                                      :class="(e.pnl !== null && Number(e.pnl) > 0) ? 'text-pnlup' : 'text-warn'"
+                                                      :style="`background: color-mix(in srgb, ${(e.pnl !== null && Number(e.pnl) > 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'} 15%, transparent)`">
+                                                    <x-feathericon-layers class="w-[10px] h-[10px]" stroke-width="2"/><span x-text="(e.pnl !== null && Number(e.pnl) > 0) ? 'High profit' : `WAP'd`"></span>
+                                                </span>
+                                            </template>
+                                            Closed <span class="font-mono font-semibold text-fg-1" x-text="e.symbol"></span>
                                             <span x-text="e.side.toLowerCase()"></span>
-                                            <span class="font-mono tabular-nums font-semibold" :class="Number(e.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown'" x-text="e.pnl !== null ? usdSigned(e.pnl) : ''"></span>
+                                            <span class="font-mono tabular-nums font-semibold" :class="(e.pnl !== null && Number(e.pnl) >= 0) ? 'text-pnlup' : 'text-pnldown'" x-text="e.pnl !== null ? usdSigned(e.pnl) : ''"></span>
                                             <span x-show="e.price"> @ <span class="font-mono tabular-nums text-fg-1" x-text="e.price"></span></span>
                                         </span>
                                     </template>
@@ -671,8 +707,8 @@
                         </template>
                     </div>
 
-                    <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3" x-show="(d?.activity || []).length > 0">
-                        <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-text="`UPDATED ${syncAgo()} AGO · ${(d?.activity || []).length} EVENTS`"></span>
+                    <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3" x-show="activityRows().length > 0">
+                        <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-text="`UPDATED ${syncAgo()} AGO · ${activityRows().length} EVENTS${activeOnly ? ' · ACTIVE ONLY' : ''}`"></span>
                     </div>
                 </div>
             </div>
@@ -696,7 +732,12 @@
                         <div class="flex items-baseline gap-[9px] flex-wrap">
                             <span class="font-mono text-[32px] font-semibold leading-none tracking-[-0.03em]" :style="`color: ${bandMeta().color}`" x-text="scoreDisplay()"></span>
                             <span class="font-mono text-[11.5px] text-fg-mute whitespace-nowrap">/ 1.00 · <span :style="`color: ${bandMeta().color}; font-weight: 600`" x-text="bandMeta().label"></span></span>
-                            <span class="font-mono text-[9.5px] tracking-[0.06em] text-fg-mute ml-auto self-center" x-text="d?.bscs?.blocked ? 'NEW POS. PAUSED' : 'NEW POS. ALLOWED'"></span>
+                            {{-- name the shock breaker explicitly: the score can read calm while the fast detector holds opens shut --}}
+                            <span class="font-mono text-[9.5px] tracking-[0.06em] ml-auto self-center inline-flex items-center gap-[5px]"
+                                  :class="d?.bscs?.pause_reason === 'shock' ? 'text-warn font-bold' : 'text-fg-mute'">
+                                <template x-if="d?.bscs?.pause_reason === 'shock'"><span class="w-[6px] h-[6px] rounded-chip bg-warn animate-pulse-soft"></span></template>
+                                <span x-text="!d?.bscs?.blocked ? 'NEW POS. ALLOWED' : (d?.bscs?.pause_reason === 'shock' ? 'MARKET SHOCK' : 'NEW POS. PAUSED')"></span>
+                            </span>
                         </div>
                         <div>
                             <div class="h-[7px] rounded-chip relative" style="background: linear-gradient(90deg, var(--bsi-calm) 0%, var(--bsi-watch) 32%, var(--bsi-elevated) 55%, var(--bsi-cascade) 80%, var(--bsi-blackswan) 100%);">
@@ -717,7 +758,7 @@
                         <div x-show="d?.bscs?.blocked" x-cloak
                              class="flex items-start gap-[9px] py-[11px] px-[13px] rounded-control bg-pnldown-bg text-pnldown text-[12px] leading-[1.45] border" style="border-color: color-mix(in srgb, var(--danger) 38%, transparent);">
                             <x-feathericon-alert-triangle class="w-[15px] h-[15px] flex-shrink-0 mt-0.5" stroke-width="1.75"/>
-                            <span>New position openings <strong class="font-bold">paused by the regime gate</strong>. Existing positions are still managed.</span>
+                            <span>New position openings <strong class="font-bold">paused by the <span x-text="d?.bscs?.pause_reason === 'shock' ? 'market shock breaker' : 'regime gate'"></span></strong><span x-show="d?.bscs?.cooldown_remaining"> · resumes in <span class="font-semibold" x-text="d.bscs.cooldown_remaining"></span></span>. Existing positions are still managed.</span>
                         </div>
                         {{-- sub-signals — raw values + fired state (heterogeneous scales, no fake bars) --}}
                         <div class="flex flex-col gap-[9px] pt-[3px]">

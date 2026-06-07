@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.7.3] — 2026-06-08
+
+### Features
+- **Sysadmin console surface** — sysadmins (`is_admin`, via the console host) get a staff-mode violet UI with their own 9-item rail (Overview / Positions / Engine / Dispatch / Infra / Exchanges / SQL / Revenue / Settings) and a Fleet overview dashboard (worker fleet table, market-regime, deploy rollout, revenue, exchange connectivity, incidents feed — mock data). Reuses the entire trader design system, swapping only the accent token; new shared `x-ui` components (`card-head`, `health-chip`, `health-dot`, `usage-bar`, `stat-tile`); placeholder pages for the not-yet-built nav surfaces; Sysadmin badge + accent avatar in the top bar.
+
+### Improvements
+- **WAP'd entry on position tiles** — once a position averages down, the tile shows the weighted-average entry (labelled "WAP", computed from the filled entry fills) instead of the original open, so the entry→TP relationship reads correctly (TP above entry for a long).
+- **Activity feed — "Active only" filter** — a header toggle filters the feed to events whose source position is still open, keyed on **position id** (a re-used token's earlier closed position never leaks in). The filter persists across the 10-second sync.
+- **Activity feed — WAP close badge** — closes from averaged-down positions are badged: "High profit" when the WAP recovered to a green close, neutral "WAP'd" on a loss.
+- **Market-shock cooldown surfaced** — the trader dashboard now distinguishes the fast 1-minute shock circuit breaker from the slow BSCS score: when the breaker has paused opens it shows "MARKET SHOCK" and "resumes in …", with the cooldown expiry skew-corrected to UTC. The blocked banner names the real cause (shock vs regime gate) instead of always blaming the regime band.
+
+### Fixes
+- Activity CLOSE rows with an unknown P&L no longer render in the profit colour.
+
+---
+
 ## [0.7.2] — 2026-06-07
 
 ### Features
