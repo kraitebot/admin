@@ -47,6 +47,52 @@ abstract class TestCase extends BaseTestCase
     {
         $this->stubCoreNotificationsSchema();
         $this->stubCoreUsersTableExtensions();
+        $this->stubCoreKraiteSingleton();
+    }
+
+    /**
+     * Mirror the core `kraite` singleton row (id=1). Core's notification /
+     * config paths read it (`Kraite::find(1)`, BSCS gates, billing floors);
+     * without the table, any flow that fires an AlertNotification 500s in
+     * tests — surfaced 2026-06-07 when the forgot-password flow started
+     * reading it through a core change.
+     */
+    private function stubCoreKraiteSingleton(): void
+    {
+        if (Schema::hasTable('kraite')) {
+            return;
+        }
+
+        Schema::create('kraite', function (Blueprint $table): void {
+            $table->id();
+            $table->json('notification_channels')->nullable();
+            $table->json('timeframes')->nullable();
+            $table->string('admin_telegram_chat_id')->nullable();
+            $table->string('email')->nullable();
+            $table->boolean('allow_opening_positions')->default(false);
+            $table->boolean('can_trade')->nullable();
+            $table->boolean('notifications_enabled')->nullable();
+            $table->boolean('is_cooling_down')->default(true);
+            $table->unsignedTinyInteger('bscs_score')->nullable();
+            $table->string('bscs_band', 16)->nullable();
+            $table->dateTime('bscs_synced_at')->nullable();
+            $table->boolean('bscs_block_active')->default(false);
+            $table->unsignedTinyInteger('bscs_block_threshold')->default(80);
+            $table->unsignedInteger('bscs_freshness_max_seconds')->default(6900);
+            $table->dateTime('bscs_override_until')->nullable();
+            $table->string('bscs_override_reason')->nullable();
+            $table->dateTime('bscs_cooldown_until')->nullable();
+            $table->decimal('top_up_minimum_when_covered_usdt', 12, 4)->default(20);
+            $table->boolean('in_private_beta')->default(false);
+            $table->timestamps();
+        });
+
+        DB::table('kraite')->insert([
+            'id' => 1,
+            'notifications_enabled' => false,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**

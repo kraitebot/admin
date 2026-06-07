@@ -1,8 +1,14 @@
 @php
     $iconBtn = 'appearance-none bg-transparent border border-transparent rounded-control text-ink-7 cursor-pointer w-[34px] h-[34px] inline-flex items-center justify-center relative transition-colors duration-fast ease-out hover:text-ink-9 hover:bg-ink-1';
-    $userInitials = 'JR';
-    $userName = 'J. Renner';
-    $userRole = 'TRADER';
+
+    $user = auth()->user();
+    $userName = $user?->name ?? 'Guest';
+    $userRole = $user?->is_admin ? 'SYSADMIN' : 'TRADER';
+    $userInitials = collect(explode(' ', trim($userName)))
+        ->filter()
+        ->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))
+        ->take(2)
+        ->implode('') ?: '?';
 @endphp
 <header class="h-14 flex-shrink-0 bg-[#07090b] flex items-center gap-4 px-5 z-20 max-[640px]:px-3 max-[640px]:gap-2"
         x-data="{ now: '' , tick() { const d = new Date(); const pad = n => String(n).padStart(2,'0'); this.now = pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds()); } }"
@@ -42,7 +48,10 @@
         <x-feathericon-chevron-down class="w-[14px] h-[14px] text-ink-6" stroke-width="1.75"/>
     </button>
 
-    <button type="button" class="{{ $iconBtn }}" title="Log out">
-        <x-feathericon-log-out class="w-[18px] h-[18px]" stroke-width="1.75"/>
-    </button>
+    <form method="POST" action="{{ route('logout') }}" class="contents">
+        @csrf
+        <button type="submit" class="{{ $iconBtn }}" title="Log out">
+            <x-feathericon-log-out class="w-[18px] h-[18px]" stroke-width="1.75"/>
+        </button>
+    </form>
 </header>

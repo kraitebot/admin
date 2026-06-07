@@ -1,5 +1,5 @@
 {{-- `active` is accepted (every page passes it) but no longer drives the
-     highlight — Livewire's data-current does, see the <nav> comment. --}}
+     highlight — the global $store.rail does, see the <nav> comment. --}}
 @props(['active' => 'dashboard'])
 @php
     // Surface follows the host: the console domain gets the sysadmin
@@ -27,31 +27,11 @@
             ['id' => 'profile',     'label' => 'Profile',     'route' => 'profile.edit',      'params' => [], 'icon' => 'user'],
         ];
 @endphp
-{{-- The rail lives inside @persist — it survives wire:navigate swaps, so the
-     active item can't be server-rendered. Alpine owns the `data-current`
-     attribute end-to-end (Livewire's own stamping is disabled via
-     wire:current.ignore — its re-stamp after each swap raced the optimistic
-     click toggle and made the previous link flick): set optimistically on
-     click, re-synced from the URL on every `livewire:navigated` (which also
-     fires on the initial page load and back/forward pops). --}}
-<nav x-data="{
-        hl: null,
-        measureEl(el) { if (!el) { this.hl = null; return; } this.hl = { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }; },
-        setActive(el) {
-            this.$el.querySelectorAll('[data-current]').forEach(a => a !== el && a.removeAttribute('data-current'));
-            el.setAttribute('data-current', '');
-            this.measureEl(el);
-        },
-        syncFromUrl() {
-            const here = location.origin + location.pathname.replace(/\/$/, '');
-            const match = Array.from(this.$el.querySelectorAll('a[href]'))
-                .find(a => a.href.replace(/\/$/, '') === here);
-            if (match) { this.setActive(match); return; }
-            this.$el.querySelectorAll('[data-current]').forEach(a => a.removeAttribute('data-current'));
-            this.hl = null;
-        },
-     }"
-     x-init="document.addEventListener('livewire:navigated', () => $nextTick(() => syncFromUrl())); window.addEventListener('resize', () => syncFromUrl()); if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => syncFromUrl())"
+{{-- The rail is persisted across wire:navigate swaps and Alpine re-inits it
+     after each swap — so the active state lives in a GLOBAL Alpine store
+     (`$store.rail`) with single module-level handlers in app.js. The markup
+     here only BINDS to the store; it owns nothing. --}}
+<nav data-rail x-data
      class="relative z-30 h-full flex flex-col items-stretch bg-[#07090b] pt-3 pb-2
             max-[640px]:fixed max-[640px]:inset-x-0 max-[640px]:bottom-0 max-[640px]:top-auto max-[640px]:z-[60] max-[640px]:h-[62px] max-[640px]:w-full max-[640px]:flex-row max-[640px]:border-t max-[640px]:border-ink-3 max-[640px]:p-0
             max-[420px]:h-[56px]">
@@ -61,25 +41,25 @@
     <div class="relative flex flex-col gap-0.5 flex-1 justify-center px-2
                 max-[640px]:flex-row max-[640px]:justify-around max-[640px]:items-center max-[640px]:px-1 max-[640px]:gap-0">
         <span aria-hidden="true"
-              x-show="hl"
+              x-show="$store.rail.hl"
               x-cloak
-              :style="hl ? `left:${hl.left}px;top:${hl.top}px;width:${hl.width}px;height:${hl.height}px` : ''"
+              :style="$store.rail.hl ? `left:${$store.rail.hl.left}px;top:${$store.rail.hl.top}px;width:${$store.rail.hl.width}px;height:${$store.rail.hl.height}px` : ''"
               class="absolute z-0 bg-green-500 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
                      before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-green-500 before:rounded-chip
                      max-[640px]:before:hidden"></span>
 
         @foreach($items as $item)
             <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
+               data-id="{{ $item['id'] }}"
                wire:navigate.hover
                wire:current.ignore
-               @click="setActive($el)"
+               @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
                {{-- color transition matches the pill slide (420ms, same curve) so the
-                    label darkens in sync with the green arriving beneath it — an instant
-                    snap leaves dark text on the dark rail until the pill lands --}}
+                    arriving label darkens in sync with the green sliding beneath it --}}
+               :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
                class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline
                       max-[640px]:flex-1 max-[640px]:py-2 max-[640px]:px-0.5 max-[640px]:text-[9px]
-                      max-[420px]:p-0
-                      text-ink-7 hover:text-ink-9 data-[current]:text-fg-on-accent data-[current]:hover:text-fg-on-accent">
+                      max-[420px]:p-0">
                 <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
                 <span class="whitespace-nowrap max-[420px]:hidden">{{ $item['label'] }}</span>
             </a>

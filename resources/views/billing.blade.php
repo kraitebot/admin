@@ -146,6 +146,11 @@
                         if (this.view === 'trial' && this.trialSecs > 0) this.trialSecs--;
                     }, 1000));
                 },
+                // wire:navigate swaps the body but timers outlive the DOM
+                destroy() {
+                    this._timers.forEach(t => { clearTimeout(t); clearInterval(t); });
+                    this._timers = [];
+                },
 
                 // ---- formatters ----
                 usdt: fmt,

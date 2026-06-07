@@ -108,6 +108,11 @@
             tradingActive() { return this.connectionUsable() && this.cfg.canTrade; },
             okCount() { return Object.values(this.results).filter(v => v === 'ok').length; },
             credChanged() { if (this.phase === 'ok' || this.phase === 'empty') this.phase = 'idle'; },
+            // wire:navigate swaps the body but timers outlive the DOM
+            destroy() {
+                this._timers.forEach(clearTimeout);
+                this._timers = [];
+            },
 
             status() {
                 if (this.testing()) return { kind: 'testing', c: 'var(--info)', t: 'Testing…', pulse: false };

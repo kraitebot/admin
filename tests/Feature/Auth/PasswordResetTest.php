@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Auth\Events\PasswordReset;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
@@ -24,6 +25,12 @@ function isPasswordResetNotification(): Closure
 
 beforeEach(function () {
     Notification::fake();
+
+    // The array cache store persists for the whole PHPUnit process, so
+    // rate-limiter hits accumulate ACROSS tests — whether two tests share
+    // a limiter minute-bucket then depends on wall-clock time, making the
+    // throttle-adjacent tests flaky by time of day. Reset per test.
+    Cache::flush();
 });
 
 /**

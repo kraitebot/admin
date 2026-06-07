@@ -140,8 +140,147 @@ class DashboardController extends Controller
             'btc' => $this->btcStrip(),
             'bscs' => $this->bscsBadge(),
             'positions' => $positions,
+            'activity' => $this->activityFeed($account),
             'generated_at' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * Recent bot activity — position lifecycle events only (opens, closes,
+     * WAPs). Sync/heartbeat noise is deliberately excluded. Built from the
+     * positions + orders tables directly; newest first, capped at 30.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function activityFeed(Account $account): array
+    {
+        $ago = fn ($ts): string => $this->humanAgo($ts) ?? 'just now';
+
+        $events = collect();
+
+        // OPEN events — every position the account has opened.
+        DB::table('positions')
+            ->where('account_id', $account->id)
+            ->whereNotNull('opened_at')
+            ->orderByDesc('opened_at')
+            ->limit(30)
+            ->get(['parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'])
+            ->each(function ($p) use ($events, $ago): void {
+                $events->push([
+                    'kind' => 'OPEN',
+                    'sort' => (string) $p->opened_at,
+                    'time' => $ago($p->opened_at),
+                    'side' => strtoupper((string) $p->direction),
+                    'symbol' => $p->parsed_trading_pair,
+                    'quantity' => $p->quantity !== null ? rtrim(rtrim((string) $p->quantity, '0'), '.') : null,
+                    'price' => $p->opening_price !== null ? rtrim(rtrim((string) $p->opening_price, '0'), '.') : null,
+                    'pnl' => null,
+                ]);
+            });
+
+        // CLOSE events — clean closes, with price-true realized PnL.
+        DB::table('positions')
+            ->where('account_id', $account->id)
+            ->where('status', 'closed')
+            ->whereNotNull('closed_at')
+            ->orderByDesc('closed_at')
+            ->limit(30)
+            ->get(['parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
+            ->each(function ($p) use ($events, $ago): void {
+                $pnl = null;
+                if (is_numeric($p->opening_price) && is_numeric($p->closing_price) && is_numeric($p->quantity)) {
+                    $delta = strtoupper((string) $p->direction) === 'LONG'
+                        ? bcsub((string) $p->closing_price, (string) $p->opening_price, 8)
+                        : bcsub((string) $p->opening_price, (string) $p->closing_price, 8);
+                    $pnl = number_format((float) bcmul($delta, (string) $p->quantity, 8), 2, '.', '');
+                }
+
+                $events->push([
+                    'kind' => 'CLOSE',
+                    'sort' => (string) $p->closed_at,
+                    'time' => $ago($p->closed_at),
+                    'side' => strtoupper((string) $p->direction),
+                    'symbol' => $p->parsed_trading_pair,
+                    'quantity' => null,
+                    'price' => $p->closing_price !== null ? rtrim(rtrim((string) $p->closing_price, '0'), '.') : null,
+                    'pnl' => $pnl,
+                ]);
+            });
+
+        // WAP events — a filled ladder rung re-anchors the position.
+        DB::table('orders')
+            ->join('positions', 'positions.id', '=', 'orders.position_id')
+            ->where('positions.account_id', $account->id)
+            ->where('orders.type', 'LIMIT')
+            ->where('orders.status', 'FILLED')
+            ->whereNotNull('orders.filled_at')
+            ->orderByDesc('orders.filled_at')
+            ->limit(30)
+            ->get(['positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'])
+            ->each(function ($o) use ($events, $ago): void {
+                $events->push([
+                    'kind' => 'WAP',
+                    'sort' => (string) $o->filled_at,
+                    'time' => $ago($o->filled_at),
+                    'side' => strtoupper((string) $o->direction),
+                    'symbol' => $o->parsed_trading_pair,
+                    'quantity' => $o->quantity !== null ? rtrim(rtrim((string) $o->quantity, '0'), '.') : null,
+                    'price' => $o->price !== null ? rtrim(rtrim((string) $o->price, '0'), '.') : null,
+                    'pnl' => null,
+                ]);
+            });
+
+        return $events
+            ->sortByDesc('sort')
+            ->take(30)
+            ->map(function (array $e): array {
+                unset($e['sort']);
+
+                return $e;
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Seconds the DB wall clock runs ahead of UTC. Local ingestion stamps
+     * rows in the machine's local time while the app runs UTC — measuring
+     * the skew straight from the DB corrects every human-readable age
+     * (and is zero on a UTC-clocked production DB). Cached per request.
+     */
+    private ?int $dbClockSkew = null;
+
+    private function dbClockSkew(): int
+    {
+        return $this->dbClockSkew ??= (int) DB::scalar('SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())');
+    }
+
+    /**
+     * Minutes until the next BSCS recompute, humanized. The ingestion app
+     * schedules kraite:cron-compute-market-regime hourlyAt(50) — minute-of-
+     * hour is timezone-proof, so the countdown needs no skew correction.
+     */
+    private function nextBscsComputeIn(): string
+    {
+        $minute = CarbonImmutable::now()->minute;
+        $mins = $minute < 50 ? 50 - $minute : 110 - $minute;
+
+        return $mins <= 1 ? 'about now' : "in {$mins}m";
+    }
+
+    /**
+     * Skew-corrected "Xm ago" for a DB timestamp; residual future stamps
+     * still clamp to "just now" rather than showing "X from now".
+     */
+    private function humanAgo(mixed $ts): ?string
+    {
+        if ($ts === null) {
+            return null;
+        }
+
+        $at = CarbonImmutable::parse($ts)->subSeconds($this->dbClockSkew());
+
+        return $at->isFuture() ? 'just now' : $at->diffForHumans(['short' => true]);
     }
 
     /**
@@ -284,14 +423,8 @@ class DashboardController extends Controller
             'is_stale' => $index->isStale(),
             'block_threshold' => $index->blockThreshold(),
             'computed_at' => $snapshot?->computed_at ? CarbonImmutable::parse($snapshot->computed_at)->toIso8601String() : null,
-            // Local ingestion can stamp computed_at in wall-clock time while
-            // the app runs UTC, putting the parse minutes "in the future" —
-            // clamp those to "just now" instead of showing "X from now".
-            'computed_ago' => $snapshot?->computed_at
-                ? (CarbonImmutable::parse($snapshot->computed_at)->isFuture()
-                    ? 'just now'
-                    : CarbonImmutable::parse($snapshot->computed_at)->diffForHumans(['short' => true]))
-                : null,
+            'computed_ago' => $this->humanAgo($snapshot?->computed_at),
+            'next_compute_in' => $this->nextBscsComputeIn(),
             'components' => $components,
         ];
     }
@@ -458,10 +591,10 @@ class DashboardController extends Controller
 
         $openingPrice = $position->opening_price !== null ? (string) $position->opening_price : null;
 
-        // Lifecycle-track geometry: 0% = first profit price (TP side),
-        // 100% = the deepest limit. PX marker and every ladder rung are
-        // normalised onto that leg so the tile can place them directly.
-        $track = $this->trackGeometry($firstProfit, $lastLimit, $currentPrice, $limits);
+        // Lifecycle-track geometry — the design's stage grammar, not a
+        // price-proportional scale (real ladders cluster the markers into
+        // an unreadable left-edge pile). See trackGeometry().
+        $track = $this->trackGeometry($filledCount, $totalLimits, (float) $alphaLimitPct);
 
         return [
             'id' => $position->id,
@@ -473,7 +606,7 @@ class DashboardController extends Controller
             'direction' => strtoupper((string) $position->direction),
             'leverage' => (int) $position->leverage,
             'opened_at' => optional($position->opened_at ?? $position->created_at)?->toIso8601String(),
-            'age_human' => optional($position->opened_at ?? $position->created_at)?->diffForHumans(['short' => true]),
+            'age_human' => $this->humanAgo($position->opened_at ?? $position->created_at),
 
             // 24h % stays stubbed — needs a separate candles aggregate.
             'var_24h_pct' => null,
@@ -622,49 +755,52 @@ class DashboardController extends Controller
     }
 
     /**
-     * Normalise the lifecycle leg [first profit price → deepest limit]
-     * to 0–100% and place the live PX marker plus every ladder rung on
-     * it. Direction-agnostic: percentages are computed on the absolute
-     * span, so LONG (TP above, limits below) and SHORT (inverted) both
-     * map left→right as TP→deepest-limit, which is how the tile reads.
+     * Lifecycle-track geometry in the design's STAGE grammar (decoded from
+     * the design mock data, where the markers advance by lifecycle stage
+     * rather than by price distance — real ladder prices sit so close to
+     * the mark that a price-proportional scale piles every marker onto the
+     * left edge):
      *
-     * @param  array<int, array<string, mixed>>  $limits
-     * @return array{px_pct: float|null, rungs: array<int, array<string, mixed>>}|null
+     *  - Ladder rungs occupy fixed slots spread across 26%…80%; rungs that
+     *    have FILLED disappear from the ladder.
+     *  - TP starts hard-left (0% — a fresh position's first TP). Each WAP
+     *    (filled rung) slides it right to that rung's slot; the tile draws
+     *    a trace from 0% to the current TP so the slide stays visible.
+     *  - PX marker travels from TP toward the NEXT pending rung's slot,
+     *    proportional to alpha_limit (which measures exactly that leg).
+     *
+     * @return array{tp_pct: float, px_pct: float, gain_left: float, gain_width: float, rungs: array<int, array<string, mixed>>}|null
      */
-    private function trackGeometry(?string $firstProfit, ?string $lastLimit, ?string $current, array $limits): ?array
+    private function trackGeometry(int $filledCount, int $totalLimits, float $alphaLimitPct): ?array
     {
-        if ($firstProfit === null || $lastLimit === null
-            || ! is_numeric($firstProfit) || ! is_numeric($lastLimit)
-            || bccomp($firstProfit, $lastLimit, 16) === 0) {
+        if ($totalLimits < 1) {
             return null;
         }
 
-        $span = abs((float) $lastLimit - (float) $firstProfit);
-
-        $place = function (?string $price) use ($firstProfit, $span): ?float {
-            if ($price === null || ! is_numeric($price) || $span <= 0.0) {
-                return null;
+        $slot = function (int $index) use ($totalLimits): float {
+            if ($totalLimits === 1) {
+                return 53.0;
             }
-            $pct = (abs((float) $price - (float) $firstProfit) / $span) * 100;
 
-            return round(max(0.0, min(100.0, $pct)), 1);
+            return round(26.0 + ($index - 1) * (54.0 / ($totalLimits - 1)), 1);
         };
 
+        $tp = $filledCount === 0 ? 0.0 : $slot(min($filledCount, $totalLimits));
+        $nextAnchor = $filledCount < $totalLimits ? $slot($filledCount + 1) : 92.0;
+
+        $fraction = max(0.0, min(100.0, $alphaLimitPct)) / 100.0;
+        $px = round($tp + ($nextAnchor - $tp) * $fraction, 1);
+
         $rungs = [];
-        foreach ($limits as $limit) {
-            $pct = $place($limit['price_raw'] ?? null);
-            if ($pct === null) {
-                continue;
-            }
-            $rungs[] = [
-                'index' => $limit['index'],
-                'pct' => $pct,
-                'filled' => $limit['filled'],
-            ];
+        for ($i = $filledCount + 1; $i <= $totalLimits; $i++) {
+            $rungs[] = ['index' => $i, 'pct' => $slot($i)];
         }
 
         return [
-            'px_pct' => $place($current),
+            'tp_pct' => $tp,
+            'px_pct' => $px,
+            'gain_left' => round(min($tp, $px), 1),
+            'gain_width' => round(abs($px - $tp), 1),
             'rungs' => $rungs,
         ];
     }

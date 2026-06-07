@@ -16,17 +16,23 @@
 <div class="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]"
      data-density="compact">
 
-    @persist('rail')
+    {{-- Raw x-persist divs, NOT the @persist directive — the directive
+         compiles to forceAssetInjection(), which overrides
+         livewire.inject_assets=false and loads a SECOND Livewire+Alpine
+         alongside the Vite bundle (two instances then fight over the
+         rail's data-current state). The runtime handles the x-persist
+         attribute itself; the directive only adds the force-inject. --}}
+    <div x-persist="rail" class="contents">
         <x-rail :active="$active"/>
-    @endpersist
+    </div>
 
     <div class="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]"
          x-data="{ contentDark: localStorage.getItem('kraite-content-theme') !== 'light' }"
          x-init="$watch('contentDark', v => localStorage.setItem('kraite-content-theme', v ? 'dark' : 'light'))">
 
-        @persist('top-bar')
+        <div x-persist="top-bar" class="contents">
             <x-top-bar/>
-        @endpersist
+        </div>
 
         @if($showBanner && $downAccount)
             <x-disconnect-banner :account="$downAccount"/>
@@ -39,9 +45,9 @@
             </div>
         </div>
 
-        @persist('footer')
+        <div x-persist="footer" class="contents">
             <x-footer/>
-        @endpersist
+        </div>
     </div>
 </div>
 </body>

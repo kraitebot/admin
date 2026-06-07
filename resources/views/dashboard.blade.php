@@ -21,15 +21,41 @@
             acctOpen: false,
             _timers: [],
 
+            cols: 3,
+            _onResize: null,
             init() {
                 this._timers.push(setInterval(() => { this.nowTick = Date.now(); }, 1000));
                 this._timers.push(setInterval(() => this.refresh(), 10000));
+                this._onResize = () => {
+                    const w = window.innerWidth;
+                    this.cols = w <= 640 ? 1 : w <= 1080 ? 2 : 3;
+                    this.page = Math.min(this.page, this.pageCount() - 1);
+                    this.syncDot();
+                };
+                this._onResize();
+                window.addEventListener('resize', this._onResize);
             },
+            // wire:navigate swaps the body but JS timers outlive the DOM —
+            // without this, every dashboard visit leaves a zombie 10s poller
+            // fetching /dashboard/data from whatever page comes next.
+            destroy() {
+                this._timers.forEach(clearInterval);
+                this._timers = [];
+                if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                if (this._onResize) window.removeEventListener('resize', this._onResize);
+            },
+            // Page size follows the viewport: two grid rows per page on
+            // multi-column layouts (3×2=6, 2×2=4); the single-column mobile
+            // layout stacks six before paging.
+            perPage() { return this.cols === 3 ? 6 : this.cols === 2 ? 4 : 6; },
 
             // ---- data ----
+            spinning: false,
             async refresh() {
                 if (this.loading || !this.accountId) return;
                 this.loading = true;
+                this.spinning = true;
+                const started = Date.now();
                 try {
                     const res = await fetch(`${dataUrl}?account_id=${this.accountId}`, {
                         headers: { 'Accept': 'application/json' },
@@ -38,9 +64,13 @@
                         this.d = await res.json();
                         this.syncedAt = Date.now();
                         this.page = Math.min(this.page, this.pageCount() - 1);
+                        this.syncDot();
                     }
                 } finally {
                     this.loading = false;
+                    // Hold the spin for at least 1s — a sub-100ms local fetch
+                    // makes the animation read as a glitch instead of a sync.
+                    setTimeout(() => { this.spinning = false; }, Math.max(0, 1000 - (Date.now() - started)));
                 }
             },
             setAccount(id) {
@@ -49,6 +79,7 @@
                 this.accountId = id;
                 this.filter = 'ALL';
                 this.page = 0;
+                this.syncDot();
                 this.refresh();
             },
             account() { return this.accounts.find(a => a.id === this.accountId) || null; },
@@ -103,21 +134,87 @@
                 return all.filter(p => p.direction === this.filter);
             },
             chunks() {
-                const per = 6, out = [];
+                const per = this.perPage(), out = [];
                 const list = this.filtered();
                 for (let i = 0; i < list.length; i += per) out.push(list.slice(i, i + per));
                 return out.length ? out : [[]];
             },
             pageCount() { return Math.max(1, this.chunks().length); },
             safePage() { return Math.min(this.page, this.pageCount() - 1); },
-            setFilter(f) { this.filter = f; this.page = 0; },
+            setFilter(f) { this.filter = f; this.page = 0; this.syncDot(); },
+
+            // Pager-dot thumb — the green "bubble" that stretches across to
+            // the destination dot, then settles on it. Dots render on an
+            // absolute strip (left = i * dotStep) so the thumb's math uses
+            // the same formula and can't drift relative to the dots.
+            dotW: 7,
+            dotStep: 14,
+            dotLeft: 0,
+            dotWidth: 7,
+            _settleTimer: null,
+            syncDot() { this.dotLeft = this.safePage() * this.dotStep; this.dotWidth = this.dotW; },
+            animateDot(next) {
+                if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                const cur = this.safePage();
+                const lo = Math.min(cur, next);
+                const hi = Math.max(cur, next);
+                if (lo !== hi) {
+                    // Stage 1: stretch — thumb spans from the leftmost dot
+                    // (lo) to the rightmost (hi), inclusive of the dot's width.
+                    this.dotLeft = lo * this.dotStep;
+                    this.dotWidth = (hi - lo) * this.dotStep + this.dotW;
+                }
+                this.page = next;
+                // Stage 2: settle on the target dot after the stretch peaks.
+                this._settleTimer = setTimeout(() => {
+                    this.syncDot();
+                    this._settleTimer = null;
+                }, lo !== hi ? 190 : 0);
+            },
+
+            // Pointer-drag swipe between pages — the track follows the
+            // finger/cursor live, rubber-bands past the ends, and snaps to
+            // the next/previous page when the drag passes 18% of the width.
+            drag: { active: false, startX: 0, base: 0, w: 0, moved: 0, pointerId: null },
+            onDown(e) {
+                if (this.pageCount() <= 1 || e.button === 1 || e.button === 2) return;
+                const v = this.$refs.view, t = this.$refs.track;
+                if (!v || !t) return;
+                const w = v.offsetWidth;
+                this.drag = { active: true, startX: e.clientX, base: -this.safePage() * w, w, moved: 0, pointerId: e.pointerId };
+                t.style.transition = 'none';
+                v.setPointerCapture?.(e.pointerId);
+            },
+            onMove(e) {
+                if (!this.drag.active) return;
+                const dx = e.clientX - this.drag.startX;
+                this.drag.moved = dx;
+                let pos = this.drag.base + dx;
+                const min = -(this.pageCount() - 1) * this.drag.w;
+                if (pos > 0) pos = pos * 0.35;
+                if (pos < min) pos = min + (pos - min) * 0.35;
+                this.$refs.track.style.transform = 'translateX(' + pos + 'px)';
+            },
+            onUp(e) {
+                if (!this.drag.active) return;
+                const moved = this.drag.moved, w = this.drag.w;
+                this.drag.active = false;
+                this.$refs.view?.releasePointerCapture?.(this.drag.pointerId);
+                let next = this.safePage();
+                if (moved < -w * 0.18) next = Math.min(this.pageCount() - 1, this.safePage() + 1);
+                else if (moved > w * 0.18) next = Math.max(0, this.safePage() - 1);
+                this.$refs.track.style.transition = '';
+                this.$refs.track.style.transform = '';
+                this.animateDot(next);
+            },
             rangeLabel() {
                 const total = this.filtered().length;
                 if ((this.d?.positions || []).length === 0) return 'No positions open right now · engine standing by';
                 if (total === 0) return `no ${this.filter.toLowerCase()} positions on this account`;
-                if (total <= 6) return `${total} managed across the lifecycle · no manual orders`;
-                const from = this.safePage() * 6 + 1;
-                return `${total} positions · showing ${from}–${Math.min(from + 5, total)} · max 6 per page`;
+                const per = this.perPage();
+                if (total <= per) return `${total} managed across the lifecycle · no manual orders`;
+                const from = this.safePage() * per + 1;
+                return `${total} positions · showing ${from}–${Math.min(from + per - 1, total)} · max ${per} per page`;
             },
             engineEmpty() { return (this.d?.positions || []).length === 0; },
             dotColor(dir) { return dir === 'up' ? 'var(--pnl-up-fg)' : dir === 'down' ? 'var(--pnl-down-fg)' : 'var(--border-strong)'; },
@@ -163,7 +260,7 @@
                 <div class="w-px h-[22px] bg-line"></div>
                 <button type="button" @click="refresh()"
                         class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
-                    <span class="inline-flex" :class="loading ? 'animate-spin' : ''"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/></span>Sync
+                    <span class="inline-flex" :class="spinning ? 'animate-spin' : ''"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/></span>Sync
                 </button>
                 <a href="{{ route('projections') }}" wire:navigate
                    class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] border-transparent bg-accent text-accent-on hover:bg-accent-hover no-underline">
@@ -291,8 +388,10 @@
                     <div x-show="!engineEmpty()">
                         @include('partials.segmented', ['options' => ['ALL', 'LONG', 'SHORT']])
                     </div>
-                    {{-- Account picker (real accounts) --}}
-                    <div class="relative" @click.outside="acctOpen = false">
+                    {{-- Account picker (real accounts) — pointless with a
+                         single account, so it only renders when there's a
+                         choice to make --}}
+                    <div class="relative" x-show="accounts.length > 1" @click.outside="acctOpen = false">
                         <button type="button" @click="acctOpen = !acctOpen"
                                 :class="acctOpen ? 'border-accent' : 'border-line hover:border-line-strong'"
                                 class="inline-flex items-center gap-[9px] h-[34px] border rounded-control bg-surface px-3 cursor-pointer text-[12.5px] text-fg-2 max-w-[280px] transition-colors duration-fast ease-out max-[640px]:max-w-none max-[640px]:flex-1">
@@ -331,10 +430,22 @@
                 </span>
             </div>
 
-            {{-- tiles — payload-driven --}}
+            {{-- tiles — payload-driven, swipeable carousel (pointer drag
+                 follows the finger, snaps at 18% of the width) --}}
             <div x-show="filtered().length > 0">
+                <div x-ref="view"
+                     class="overflow-hidden cursor-grab touch-pan-y active:cursor-grabbing"
+                     @pointerdown="onDown($event)"
+                     @pointermove="onMove($event)"
+                     @pointerup="onUp($event)"
+                     @pointercancel="onUp($event)">
+                <div x-ref="track"
+                     class="flex transition-transform duration-[380ms] ease-out select-none"
+                     :style="`transform: translateX(-${safePage() * 100}%)`">
+                <template x-for="(chunk, ci) in chunks()" :key="ci">
+                <div class="flex-[0_0_100%] min-w-0 [&_img]:pointer-events-none [&_img]:select-none">
                 <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
-                    <template x-for="p in chunks()[safePage()]" :key="p.id">
+                    <template x-for="p in chunk" :key="p.id">
                         <div class="ptile bg-surface border-2 rounded-surface overflow-hidden transition-colors duration-fast ease-out"
                              :class="(p.direction === 'LONG' ? 'ptile--long' : 'ptile--short') + (p.status === 'waping' ? ' ptile--waped' : '')">
                             <div :class="p.status === 'opening' ? 'grayscale opacity-[0.62]' : ''" class="pt-4 px-[18px] pb-[14px]">
@@ -381,61 +492,80 @@
                                     </div>
                                 </div>
 
-                                {{-- lifecycle track (real geometry) --}}
+                                {{-- lifecycle track — design stage grammar --}}
                                 <template x-if="p.track">
                                     <div class="relative mt-[22px] mx-0.5 mb-4 h-[30px]"
-                                         :style="`--mc: ${p.direction === 'LONG' ? 'var(--accent)' : 'var(--pnl-down-fg)'}`">
-                                        <div class="absolute top-1/2 left-0 right-0 h-px bg-line-strong"></div>
-                                        {{-- TP marker at 0% --}}
-                                        <span class="absolute -top-[14px] -translate-x-1/2 font-mono text-[8.5px] font-bold tracking-[0.06em]" style="left: 0%; color: var(--mc);">TP</span>
-                                        <span class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-[9px] h-[9px] rounded-chip border-2" style="left: 0%; background: var(--mc); border-color: var(--bg-elev-1);"></span>
-                                        {{-- ladder rungs --}}
+                                         :style="p.direction === 'LONG'
+                                            ? '--mc: var(--accent); --mc-soft: var(--accent-soft)'
+                                            : '--mc: var(--pnl-down-fg); --mc-soft: color-mix(in srgb, var(--pnl-down-fg) 22%, transparent)'">
+                                        <div class="absolute left-0 right-0 top-[21px] h-px" style="background: color-mix(in srgb, var(--mc) 45%, transparent);"></div>
+                                        {{-- TP slide trace — dashed line from the original first-TP (0%) to
+                                             the current TP, so each WAP's rightward slide stays visible --}}
+                                        <div x-show="p.track.tp_pct > 0" class="absolute top-[20px] h-[3px]"
+                                             :style="`left: 0%; width: ${p.track.tp_pct}%; background: repeating-linear-gradient(90deg, color-mix(in srgb, var(--mc) 55%, transparent) 0 4px, transparent 4px 8px)`"></div>
+                                        <div class="absolute top-[19px] h-1 rounded-chip" :style="`left: ${p.track.gain_left}%; width: ${p.track.gain_width}%; background: var(--mc)`"></div>
                                         <template x-for="rung in p.track.rungs" :key="rung.index">
-                                            <span class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 flex flex-col items-center" :style="`left: ${rung.pct}%`">
-                                                <span class="w-[7px] h-[7px] rounded-chip" :style="rung.filled ? 'background: var(--mc)' : 'background: var(--bg-elev-1); box-shadow: inset 0 0 0 1.5px var(--border-strong)'"></span>
-                                                <span class="absolute top-[10px] font-mono text-[8px] text-fg-mute tabular-nums" x-text="rung.index"></span>
-                                            </span>
+                                            <span class="absolute top-[15px] -translate-x-1/2 font-mono text-[10px] bg-surface px-1 leading-[1.4]" :style="`left: ${rung.pct}%; color: var(--mc)`" x-text="rung.index"></span>
                                         </template>
-                                        {{-- PX marker --}}
-                                        <template x-if="p.track.px_pct !== null">
-                                            <span class="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-[left] duration-slow ease-snap" :style="`left: ${p.track.px_pct}%`">
-                                                <span class="absolute -top-[22px] left-1/2 -translate-x-1/2 font-mono text-[8.5px] font-bold tracking-[0.06em] text-fg-1">PX</span>
-                                                <span class="block w-[11px] h-[11px] rounded-chip bg-fg-1 border-2" style="border-color: var(--bg-elev-1); box-shadow: 0 0 0 1px rgba(0,0,0,0.3);"></span>
-                                            </span>
-                                        </template>
+                                        <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" :style="`left: ${p.track.tp_pct}%`">
+                                            <span class="font-mono text-[9px] font-bold tracking-[0.06em]" style="color: var(--mc);">TP</span>
+                                            <span class="w-[11px] h-[11px] rotate-45 mt-[3px]" style="background: var(--mc); border-radius: 50% 50% 50% 0; box-shadow: 0 0 0 3px var(--mc-soft);"></span>
+                                        </div>
+                                        <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2] transition-[left] duration-slow ease-snap" :style="`left: ${p.track.px_pct}%`">
+                                            <span class="font-mono text-[9px] font-bold tracking-[0.06em] text-fg-2">PX</span>
+                                            <span class="w-[10px] h-[10px] rounded-full bg-fg-1 mt-[3px]" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-1) 20%, transparent);"></span>
+                                        </div>
                                     </div>
                                 </template>
 
-                                {{-- metric rows --}}
-                                <div class="grid grid-cols-3 gap-x-3 gap-y-2.5 mb-3">
+                                {{-- Metrics row 1: Path / Limit / Filled --}}
+                                <div class="grid grid-cols-3 gap-2">
                                     <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase text-fg-mute flex items-center gap-1"><x-feathericon-flag class="w-[9px] h-[9px]" stroke-width="2"/>Path</div>
-                                        <div class="font-mono text-[12.5px] font-semibold tabular-nums mt-0.5" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="(p.alpha_path_pct ?? '0.0') + '%'"></div>
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <x-feathericon-flag class="w-[11px] h-[11px]" stroke-width="1.75"/>Path
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="(p.alpha_path_pct ?? '0.0') + '%'"></div>
                                     </div>
-                                    <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase text-fg-mute flex items-center gap-1"><x-feathericon-arrow-right class="w-[9px] h-[9px]" stroke-width="2"/>Limit</div>
-                                        <div class="font-mono text-[12.5px] font-semibold tabular-nums mt-0.5" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="(p.alpha_limit_pct ?? '0.0') + '%'"></div>
+                                    <div class="text-center">
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <x-feathericon-arrow-right class="w-[11px] h-[11px]" stroke-width="1.75"/>Limit
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1" x-text="(p.alpha_limit_pct ?? '0.0') + '%'"></div>
                                     </div>
-                                    <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase text-fg-mute flex items-center gap-1"><x-feathericon-check class="w-[9px] h-[9px]" stroke-width="2"/>Filled</div>
-                                        <div class="font-mono text-[12.5px] font-semibold tabular-nums mt-0.5 text-fg-1" x-text="`${p.filled_count} / ${p.total_limits}`"></div>
-                                    </div>
-                                    <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase text-fg-mute">● Open</div>
-                                        <div class="font-mono text-[12px] tabular-nums mt-0.5 text-fg-1" x-text="p.opening_price ?? '—'"></div>
-                                    </div>
-                                    <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">↑ TP</div>
-                                        <div class="font-mono text-[12px] tabular-nums mt-0.5 font-semibold" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="p.profit_price ?? p.first_profit_price ?? '—'"></div>
-                                    </div>
-                                    <div>
-                                        <div class="font-mono text-[8.5px] font-semibold tracking-[0.09em] uppercase text-fg-mute">↓ Next</div>
-                                        <div class="font-mono text-[12px] tabular-nums mt-0.5 text-fg-1" x-text="p.next_limit_price ?? '—'"></div>
+                                    <div class="text-right">
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <x-feathericon-check class="w-[11px] h-[11px]" stroke-width="1.75"/>Filled
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1" x-text="`${p.filled_count} / ${p.total_limits}`"></div>
                                     </div>
                                 </div>
 
-                                {{-- footer: mark + PnL --}}
-                                <div class="flex items-center justify-between pt-2.5 border-t border-line-soft">
+                                <div class="h-px bg-line-soft my-[13px]"></div>
+
+                                {{-- Metrics row 2: Open / TP / Next --}}
+                                <div class="grid grid-cols-3 gap-2">
+                                    <div>
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span>Open
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="p.opening_price ?? '—'"></div>
+                                    </div>
+                                    <div class="text-center">
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="1.75"/>TP
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="p.profit_price ?? p.first_profit_price ?? '—'"></div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
+                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/>Next
+                                        </div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="p.next_limit_price ?? '—'"></div>
+                                    </div>
+                                </div>
+
+                                {{-- footer: live mark + unrealized PnL (real-data extra) --}}
+                                <div class="flex items-center justify-between pt-2.5 mt-[13px] border-t border-line-soft">
                                     <span class="font-mono text-[10.5px] text-fg-mute tabular-nums">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span></span>
                                     <span class="font-mono text-[12px] font-semibold tabular-nums"
                                           :class="p.pnl === null || p.pnl === undefined ? 'text-fg-mute' : (Number(p.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown')"
@@ -445,16 +575,23 @@
                         </div>
                     </template>
                 </div>
+                </div>
+                </template>
+                </div>
+                </div>
 
-                {{-- pager dots --}}
+                {{-- pager dots — absolute strip with the stretching thumb --}}
                 <div class="flex justify-center mt-5" x-show="pageCount() > 1">
-                    <div class="flex items-center gap-[7px]">
+                    <div class="relative h-[7px]" :style="`width: ${(pageCount() - 1) * dotStep + dotW}px`">
                         <template x-for="(c, i) in chunks()" :key="i">
-                            <button type="button" @click="page = i"
-                                    class="appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip transition-colors duration-fast ease-out"
-                                    :class="safePage() === i ? 'bg-accent' : 'bg-line-strong hover:bg-fg-mute'"
+                            <button type="button" @click="animateDot(i)"
+                                    :style="`left: ${i * dotStep}px; top: 0`"
+                                    class="absolute appearance-none cursor-pointer p-0 border-0 w-[7px] h-[7px] rounded-chip bg-line-strong transition-colors duration-fast ease-out hover:bg-fg-mute z-[1]"
                                     :aria-label="`Page ${i + 1}`"></button>
                         </template>
+                        <span aria-hidden="true"
+                              :style="`left:${dotLeft}px;width:${dotWidth}px`"
+                              class="absolute top-0 h-[7px] rounded-chip bg-accent z-[2] pointer-events-none transition-[left,width] duration-base ease-out"></span>
                     </div>
                 </div>
             </div>
@@ -469,21 +606,73 @@
             <span class="h-px flex-1 bg-line"></span>
         </div>
 
-        {{-- ===================== BOTTOM GRID ===================== --}}
-        <div class="grid grid-cols-3 gap-5 items-start max-[1080px]:grid-cols-1">
+        {{-- ===================== BOTTOM GRID =====================
+             Both columns stretch to the same total height: the grid has no
+             items-start, the activity card fills its column (footer pinned
+             to the bottom) and the connectivity card absorbs any slack on
+             the right. --}}
+        <div class="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-1">
 
-            {{-- Activity feed — honest placeholder until an event source exists --}}
+            {{-- Activity feed — position lifecycle events (opens / closes / WAPs) --}}
             <div class="flex flex-col gap-5 min-w-0 col-span-2 max-[1080px]:col-auto">
-                <div class="card">
+                <div class="card flex-1 flex flex-col">
                     <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
                         <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
                             <x-feathericon-cpu class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Recent bot activity
                         </div>
                     </div>
-                    <div class="flex flex-col items-center justify-center text-center py-[52px] px-5">
+
+                    {{-- empty: account hasn't produced events yet --}}
+                    <div x-show="(d?.activity || []).length === 0" x-cloak class="flex-1 flex flex-col items-center justify-center text-center py-[52px] px-5">
                         <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-cpu class="w-6 h-6" stroke-width="1.75"/></div>
-                        <h4 class="font-sans font-semibold text-[16px] text-fg-1 mb-1.5">Activity feed coming online</h4>
-                        <p class="text-[13px] text-fg-3 max-w-[400px]">Trade opens, closes, regime changes and funding events will stream here once the event source is wired.</p>
+                        <h4 class="font-sans font-semibold text-[16px] text-fg-1 mb-1.5">No activity yet</h4>
+                        <p class="text-[13px] text-fg-3 max-w-[400px]">Position opens, closes and WAPs will stream here as the engine trades this account.</p>
+                    </div>
+
+                    {{-- 30 events feed the list; the card height is set by the
+                         right column, extra rows scroll within it (basis-0 so
+                         the flex item can't grow the card past its column) --}}
+                    <div class="flex-1 basis-0 min-h-0 overflow-y-auto flex flex-col" x-show="(d?.activity || []).length > 0">
+                        <template x-for="(e, i) in (d?.activity || [])" :key="e.kind + e.symbol + e.time + i">
+                            <div class="flex items-center gap-2.5 py-[9px] px-5 border-b border-line-soft min-w-0 last:border-b-0">
+                                <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0"
+                                      :style="`background: ${e.kind === 'CLOSE' ? (e.pnl === null ? 'var(--border-strong)' : (Number(e.pnl) >= 0 ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)')) : e.kind === 'WAP' ? 'var(--warn)' : 'var(--pnl-up-fg)'}`"></span>
+                                <span class="font-mono text-[9px] font-semibold tracking-[0.07em] uppercase text-fg-mute w-14 flex-shrink-0" x-text="e.kind"></span>
+                                <span class="flex-1 min-w-0 text-[12.5px] text-fg-2 whitespace-nowrap overflow-hidden text-ellipsis">
+                                    {{-- OPEN --}}
+                                    <template x-if="e.kind === 'OPEN'">
+                                        <span>Opened
+                                            <span class="align-middle inline-flex items-center gap-[5px] font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase rounded-chip py-px px-[5px]"
+                                                  :class="e.side === 'LONG' ? 'bg-pnlup-bg text-pnlup' : 'bg-pnldown-bg text-pnldown'" x-text="e.side"></span>
+                                            <span class="font-mono font-semibold text-fg-1" x-text="e.symbol"></span>
+                                            <span class="font-mono tabular-nums text-fg-1" x-text="e.quantity ?? ''"></span>
+                                            <span x-show="e.price"> @ <span class="font-mono tabular-nums text-fg-1" x-text="e.price"></span></span>
+                                        </span>
+                                    </template>
+                                    {{-- CLOSE --}}
+                                    <template x-if="e.kind === 'CLOSE'">
+                                        <span>Closed <span class="font-mono font-semibold text-fg-1" x-text="e.symbol"></span>
+                                            <span x-text="e.side.toLowerCase()"></span>
+                                            <span class="font-mono tabular-nums font-semibold" :class="Number(e.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown'" x-text="e.pnl !== null ? usdSigned(e.pnl) : ''"></span>
+                                            <span x-show="e.price"> @ <span class="font-mono tabular-nums text-fg-1" x-text="e.price"></span></span>
+                                        </span>
+                                    </template>
+                                    {{-- WAP --}}
+                                    <template x-if="e.kind === 'WAP'">
+                                        <span>WAP'd <span class="font-mono font-semibold text-fg-1" x-text="e.symbol"></span>
+                                            <span x-text="e.side.toLowerCase()"></span> — limit filled
+                                            <span class="font-mono tabular-nums text-fg-1" x-text="e.quantity ?? ''"></span>
+                                            <span x-show="e.price"> @ <span class="font-mono tabular-nums text-fg-1" x-text="e.price"></span></span>
+                                        </span>
+                                    </template>
+                                </span>
+                                <span class="font-mono text-[10.5px] text-fg-mute whitespace-nowrap flex-shrink-0" x-text="e.time"></span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3" x-show="(d?.activity || []).length > 0">
+                        <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-text="`UPDATED ${syncAgo()} AGO · ${(d?.activity || []).length} EVENTS`"></span>
                     </div>
                 </div>
             </div>
@@ -548,17 +737,18 @@
                         <span class="font-mono text-[11px] text-fg-mute tracking-[0.04em]" x-show="d?.bscs?.is_stale" x-cloak>
                             <span class="text-warn">STALE</span>
                         </span>
+                        <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-show="d?.bscs?.next_compute_in" x-text="`NEXT ${(d?.bscs?.next_compute_in || '').toUpperCase()}`"></span>
                     </div>
                 </div>
 
                 {{-- Server connectivity — placeholder until a heartbeat source exists --}}
-                <div class="card">
+                <div class="card flex-1 flex flex-col">
                     <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
                         <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
                             <x-feathericon-server class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Server connectivity
                         </div>
                     </div>
-                    <div class="flex flex-col items-center justify-center text-center py-[40px] px-5">
+                    <div class="flex-1 flex flex-col items-center justify-center text-center py-[40px] px-5">
                         <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-server class="w-6 h-6" stroke-width="1.75"/></div>
                         <h4 class="font-sans font-semibold text-[15px] text-fg-1 mb-1.5">Heartbeat wiring pending</h4>
                         <p class="text-[12.5px] text-fg-3 max-w-[280px]">Per-server link state appears here once the fleet heartbeat is exposed to the trader surface.</p>

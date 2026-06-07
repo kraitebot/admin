@@ -2,6 +2,29 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.7.2] — 2026-06-07
+
+### Features
+- **Dashboard wired to real data** — KPI tiles (portfolio value + 30-point balance spark + 24h delta, today/30-day realized P&L with ROI %, open/long/short counts), recent bot activity feed (position opens / closes / WAPs, newest-first), Black Swan Composite panel (score, band, five sub-signals, block threshold), and top-bar identity (name, SYSADMIN/TRADER role, working logout). Served by one shared payload builder for both first paint and the 10-second polling endpoint.
+
+### Improvements
+- **Realized P&L now exchange-true** — sourced from `positions.pnl` (exchange-reported net, fees + funding included) instead of reconstructing from execution prices, which overstated by the omitted round-trip cost (~$0.62 over 70 trades).
+- **Relative times corrected for DB clock skew** — activity ages, position ages and the BSCS computed-ago now subtract the measured DB-vs-UTC offset, so locally-ingested wall-clock timestamps no longer collapse to "just now" or read hours off.
+- **Positions carousel** — restored pointer-drag swipe between pages with rubber-band ends and the stretch-then-settle dot-thumb animation; single-account users no longer see the account picker; pagination only appears past one viewport-page of tiles.
+- **Monitoring row** — activity and right-column cards share one height; the activity feed carries 30 events and scrolls within the fixed card.
+- **Sync UX** — dashboard auto-syncs every 10s; the sync spin holds a minimum of 1s so a sub-100ms local fetch reads as a sync, not a glitch. The BSCS footer shows the next scheduled compute countdown.
+
+### Fixes
+- **Rail highlight** — rewritten onto a global Alpine store with module-level handlers, fixing the departing link vanishing mid-transition and stale highlights after `wire:navigate` swaps (per-component `x-data` was re-initialising and desyncing).
+- **Double Livewire/Alpine instance** — shell persistence uses raw `x-persist` divs instead of the `@persist` directive, which compiled to `forceAssetInjection()` and booted a second Livewire+Alpine alongside the Vite bundle.
+- **Activity dot colour** — CLOSE rows with an unknown P&L no longer paint green (`Number(null) >= 0` was truthy); they render a neutral dot.
+- **Zombie pollers** — `destroy()` hooks on dashboard / billing / accounts clear their interval timers on navigation, so a left page can't keep fetching from the next.
+
+### Tests
+- `TestCase` seeds a stub `kraite` singleton so core's regime/PnL reads work on the sqlite test DB; `PasswordResetTest` flushes the cache per test to stop rate-limiter bleed.
+
+---
+
 ## [0.7.1] — 2026-06-06
 
 ### Config
