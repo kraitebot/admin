@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kraite — Sysadmin</title>
+<link rel="icon" href="assets/snake-white.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="app/tw-config.js"></script>
+<link rel="stylesheet" href="assets/colors_and_type.css"/>
+<link rel="stylesheet" href="app/shell.css"/>
+<style id="staff-accent">
+  /* Staff-mode accent — a cool indigo/violet so operators never confuse this
+     console with the green trader surface. Set by the App from the active tweak. */
+  :root {
+    --accent: #7b6cff;
+    --accent-hover: #968aff;
+    --accent-press: #5d4ee6;
+    --accent-soft: #211c4a;
+    --on-accent: #ffffff;
+    --fg-on-accent: #ffffff;
+    --border-focus: #7b6cff;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="app/tweaks-panel.jsx"></script>
+<script type="text/babel" src="app/icons.jsx"></script>
+<script type="text/babel" src="app/data.jsx"></script>
+<script type="text/babel" src="app/accounts-kit.jsx"></script>
+<script type="text/babel" src="app/admin/admin-kit.jsx"></script>
+<script type="text/babel" src="app/admin/pages-data.jsx"></script>
+<script type="text/babel" src="app/admin/admin-shell.jsx"></script>
+<script type="text/babel" src="app/admin/overview.jsx"></script>
+<script type="text/babel" src="app/admin/positions.jsx"></script>
+<script type="text/babel" src="app/admin/engine.jsx"></script>
+<script type="text/babel" src="app/admin/dispatch.jsx"></script>
+<script type="text/babel" src="app/admin/infra.jsx"></script>
+<script type="text/babel" src="app/admin/exchanges.jsx"></script>
+<script type="text/babel" src="app/admin/sql.jsx"></script>
+<script type="text/babel" src="app/admin/revenue.jsx"></script>
+<script type="text/babel" src="app/admin/settings.jsx"></script>
+<script type="text/babel" src="app/admin/admin-stubs.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "contentTheme": "dark",
+  "accent": "#7b6cff",
+  "regime": "ELEVATED",
+  "halted": false
+}/*EDITMODE-END*/;
+
+const REGIME_SCORES = { CALM: 0.31, WATCH: 0.42, ELEVATED: 0.63, CASCADE: 0.82, 'BLACK SWAN': 0.94 };
+
+// staff accent presets — each option's hex is the stored tweak value
+const ACCENTS = {
+  '#7b6cff': { a: '#7b6cff', h: '#968aff', p: '#5d4ee6', s: '#211c4a' }, // indigo
+  '#3d8bff': { a: '#3d8bff', h: '#62a2ff', p: '#2f6fe0', s: '#0f2a4d' }, // azure
+  '#a86cff': { a: '#a86cff', h: '#bd8cff', p: '#8f4ee6', s: '#2a1a4d' }, // violet
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [active, setActive] = React.useState('overview');
+  const [displayed, setDisplayed] = React.useState('overview');
+  const [fading, setFading] = React.useState(false);
+
+  const go = React.useCallback((next) => {
+    if (next === active) return;
+    setActive(next);
+    setFading(true);
+    const contentEl = document.querySelector('.content');
+    if (contentEl) contentEl.scrollTop = 0;
+    window.setTimeout(() => {
+      setDisplayed(next);
+      requestAnimationFrame(() => requestAnimationFrame(() => setFading(false)));
+    }, 180);
+  }, [active]);
+
+  const contentDark = t.contentTheme === 'dark';
+  const setContentDark = (v) => setTweak('contentTheme', v ? 'dark' : 'light');
+
+  // staff accent → drive the --accent ramp (overrides the <style id="staff-accent"> defaults)
+  React.useEffect(() => {
+    const c = ACCENTS[t.accent] || ACCENTS['#7b6cff'];
+    const r = document.documentElement.style;
+    r.setProperty('--accent', c.a);
+    r.setProperty('--accent-hover', c.h);
+    r.setProperty('--accent-press', c.p);
+    r.setProperty('--accent-soft', c.s);
+    r.setProperty('--border-focus', c.a);
+  }, [t.accent]);
+
+  const regime = t.regime;
+  const score = REGIME_SCORES[regime] ?? 0.42;
+  const halted = !!t.halted;
+  const setHalted = (v) => setTweak('halted', v);
+
+  return (
+    <div className="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]" data-density="compact">
+      <AdminRail active={active} setActive={go}/>
+      <div className="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]">
+        <AdminTopBar contentDark={contentDark} setContentDark={setContentDark} halted={halted} onHalt={setHalted}/>
+        {halted && <HaltBanner onResume={() => setHalted(false)}/>}
+        <div className="content flex-1 min-h-0 overflow-y-auto bg-canvas text-fg rounded-t-2xl relative z-[2] max-[640px]:rounded-t-xl" data-theme={contentDark ? 'dark' : 'light'}>
+          <div className={"max-w-wide mx-auto pt-6 px-8 pb-12 max-[640px]:pt-4 max-[640px]:px-3 max-[640px]:pb-6 transition-[opacity,transform] duration-200 ease-out " + (fading ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0")}>
+            {displayed === 'overview'
+              ? <AdminOverview regime={regime} score={score} halted={halted}/>
+              : displayed === 'positions'
+              ? <AdminPositions regime={regime} score={score}/>
+              : displayed === 'engine'
+              ? <AdminEngine regime={regime} score={score} halted={halted}/>
+              : displayed === 'dispatcher'
+              ? <AdminDispatch/>
+              : displayed === 'infra'
+              ? <AdminInfra/>
+              : displayed === 'venues'
+              ? <AdminExchanges/>
+              : displayed === 'sql'
+              ? <AdminSql/>
+              : displayed === 'revenue'
+              ? <AdminRevenue/>
+              : displayed === 'settings'
+              ? <AdminSettings/>
+              : <AdminStub route={displayed}/>}
+          </div>
+        </div>
+        <AdminFooter/>
+      </div>
+
+      <TweaksPanel>
+        <TweakSection label="Console"/>
+        <TweakRadio label="Theme" value={t.contentTheme} options={['light', 'dark']}
+          onChange={(v) => setTweak('contentTheme', v)}/>
+        <TweakSection label="Staff accent"/>
+        <TweakColor label="Accent" value={t.accent} options={['#7b6cff', '#3d8bff', '#a86cff']}
+          onChange={(v) => setTweak('accent', v)}/>
+        <TweakSection label="Platform state"/>
+        <TweakSelect label="BSCS regime" value={t.regime}
+          options={['CALM', 'WATCH', 'ELEVATED', 'CASCADE', 'BLACK SWAN']}
+          onChange={(v) => setTweak('regime', v)}/>
+        <TweakToggle label="All trading halted (kill switch)" value={t.halted}
+          onChange={(v) => setTweak('halted', v)}/>
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+
+<template id="__bundler_thumbnail">
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" fill="#050607"/>
+  <rect x="30" y="30" width="40" height="40" rx="6" fill="none" stroke="#7b6cff" stroke-width="4"/>
+  <path d="M50 38v14" stroke="#7b6cff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M42 42a10 10 0 1 0 16 0" fill="none" stroke="#7b6cff" stroke-width="4" stroke-linecap="round"/>
+</svg>
+</template>
+</body>
+</html>

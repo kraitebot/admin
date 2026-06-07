@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Kraite Sysadmin — Design System</title>
+<link rel="icon" href="assets/snake-white.svg"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script src="app/tw-config.js"></script>
+<link rel="stylesheet" href="assets/colors_and_type.css"/>
+<link rel="stylesheet" href="app/shell.css"/>
+<style>
+  /* Staff-mode dark island — renders the operator-console (dark-content,
+     violet-accent) components faithfully inside this light doc. Pair with
+     class "content" + data-theme="dark" to also pick up the accent card-border
+     behaviour from shell.css. The ONE thing that differs from the trader system
+     is the accent: a cool indigo replaces terminal-green for chrome/brand. */
+  .ds-staff{
+    --bg:#0a0e12;--bg-elev-1:#1d242d;--bg-elev-2:#1d242d;--bg-elev-3:#283139;
+    --bg-input:#1d242d;--bg-hover:#283139;--bg-active:#2a3037;
+    --fg-1:#f1f3f5;--fg-2:#c4cad1;--fg-3:#aab1ba;--fg-mute:#828b95;--fg-faint:#3a424b;
+    --border:#1d2228;--border-soft:#161a1e;--border-strong:#2a3037;
+    --pnl-up-fg:#00d17a;--pnl-up-bg:#00321f;--pnl-down-fg:#ff4d4d;--pnl-down-bg:#3a0a0a;
+    --accent:#7b6cff;--accent-hover:#968aff;--accent-press:#5d4ee6;--accent-soft:#211c4a;
+    --on-accent:#ffffff;--fg-on-accent:#ffffff;--border-focus:#7b6cff;
+    --info:#4a9eff;--warn:#ffb000;--danger:#ff2d2d;
+    background:#11161c;color:#f1f3f5;
+  }
+  .ds-chrome{ background:#07090b; color:#f1f3f5; }
+  .swatch{ border:1px solid var(--border); border-radius:var(--ar-control); overflow:hidden; background:var(--bg-elev-1); }
+  .swatch .cap{ padding:9px 11px; }
+  .swatch .cap b{ font-size:12.5px; font-weight:600; color:var(--fg-1); display:block; }
+  .swatch .cap code{ font-family:var(--font-mono); font-size:11px; color:var(--fg-mute); background:none; border:0; padding:0; white-space:nowrap; }
+  pre.code{ background:#0d1117; border:1px solid #1d2228; border-radius:10px; padding:16px 18px; overflow-x:auto; }
+  pre.code code{ font-family:var(--font-mono); font-size:12.5px; line-height:1.65; color:#c9d1d9; background:none; border:0; padding:0; white-space:pre; }
+  .tok-purple{ color:#a86cff; } .tok-green{ color:#3fb950; } .tok-mute{ color:#6e7681; } .tok-str{ color:#a5d6ff; }
+</style>
+</head>
+<body data-theme="light" class="bg-canvas text-fg overflow-x-hidden overflow-y-auto">
+
+<header class="sticky top-0 z-50 ds-chrome border-b border-ink-3 flex items-center gap-4 px-7 h-[60px]">
+  <img src="assets/snake-white.svg" alt="Kraite" class="h-[26px] block"/>
+  <div>
+    <div class="font-bold text-[15px] tracking-[-0.01em] whitespace-nowrap">Kraite <span style="color:#7b6cff">Sysadmin</span> — Design System</div>
+    <div class="font-mono text-[11px] text-ink-6 tracking-[0.04em]">Operator console · staff-mode · v4.2.1</div>
+  </div>
+  <div class="flex-1"></div>
+  <a class="font-sans text-[13px] font-semibold text-ink-8 no-underline border border-ink-4 rounded-control py-[7px] px-[14px] inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out hover:bg-ink-1 hover:text-ink-9" href="Design System.html">Base system</a>
+  <a class="font-sans text-[13px] font-semibold no-underline rounded-control py-[7px] px-[14px] inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out" style="background:#7b6cff;color:#fff" href="Kraite Admin - Sysadmins.html">
+    Open the console
+    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="square"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </a>
+</header>
+
+<div class="grid grid-cols-[228px_1fr] max-w-[1340px] mx-auto">
+  <!-- TOC -->
+  <nav class="sticky top-[60px] self-start h-[calc(100vh-60px)] overflow-y-auto pt-8 pr-[18px] pb-10 pl-7 border-r border-line text-[13px]">
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-0 mb-2">Foundations</div>
+    <a href="#intro" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">How this extends the base</a>
+    <a href="#accent" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Staff accent</a>
+    <a href="#semantic" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Health &amp; regime color</a>
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Chrome</div>
+    <a href="#rail" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Icon rail</a>
+    <a href="#topbar" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Top bar &amp; kill switch</a>
+    <a href="#halt" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Halt banner</a>
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Section kit</div>
+    <a href="#tile" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">KPI stat tile</a>
+    <a href="#card" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Section card &amp; head</a>
+    <a href="#health" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Health chips &amp; dots</a>
+    <a href="#meters" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Meters &amp; regime ramp</a>
+    <a href="#table" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Data tables</a>
+    <a href="#sql" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">SQL console</a>
+    <a href="#forms" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Forms (reused)</a>
+    <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Handoff</div>
+    <a href="#catalog" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Section catalog</a>
+    <a href="#arch" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Architecture &amp; files</a>
+    <a href="#notes" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Engineering notes</a>
+  </nav>
+
+  <!-- CONTENT -->
+  <main class="py-10 px-12 pb-[120px] min-w-0 max-w-[1040px]">
+    <div class="max-w-[720px] mb-3" id="intro">
+      <h1 class="text-[36px] font-bold tracking-[-0.025em] mb-3 text-fg-1">Sysadmin design system</h1>
+      <p class="text-[15px] leading-[1.6] text-fg-3">The operator console (<code class="text-[13px]">Kraite Admin - Sysadmins.html</code>) is internal staff tooling — the platform's command surface over the whole fleet. It <strong class="text-fg-1">inherits the entire base Kraite design system</strong> (type, radius, spacing, motion, the card model, the form vocabulary). This document only covers what is <strong class="text-fg-1">specific to staff mode</strong>. For everything else, see the <a href="Design System.html">base system</a>.</p>
+    </div>
+
+    <div class="grid grid-cols-3 gap-3 mt-7 mb-2 max-[760px]:grid-cols-1">
+      <div class="border border-line rounded-surface p-4 bg-surface">
+        <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-fg-mute mb-1.5">Principle 01</div>
+        <div class="text-[14px] font-semibold text-fg-1 mb-1">Violet = staff mode</div>
+        <p class="text-[12.5px] leading-[1.5] text-fg-3">A cool indigo accent replaces terminal-green for all chrome and brand, so operators never confuse this console with the green trader app.</p>
+      </div>
+      <div class="border border-line rounded-surface p-4 bg-surface">
+        <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-fg-mute mb-1.5">Principle 02</div>
+        <div class="text-[14px] font-semibold text-fg-1 mb-1">Green is reserved for health</div>
+        <p class="text-[12.5px] leading-[1.5] text-fg-3">Because violet owns the brand, green / amber / red carry only semantic meaning — healthy, degraded, down — and P&amp;L. Never decorative.</p>
+      </div>
+      <div class="border border-line rounded-surface p-4 bg-surface">
+        <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-fg-mute mb-1.5">Principle 03</div>
+        <div class="text-[14px] font-semibold text-fg-1 mb-1">Operators act, and are logged</div>
+        <p class="text-[12.5px] leading-[1.5] text-fg-3">Destructive controls (kill switch, fleet config) are confirm-gated and attributed. The UI makes the blast radius explicit before you commit.</p>
+      </div>
+    </div>
+
+    <!-- ============ STAFF ACCENT ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="accent">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Staff accent</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[26px]">The single override that defines staff mode. Three curated cool accents ship as a Tweak (default indigo); all share the same lightness and chroma, varying only hue. Text on the accent is white (<code class="text-[12px]">--on-accent</code> / <code class="text-[12px]">--fg-on-accent</code> flip from the base's black-on-green).</p>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Indigo — default ramp</div>
+      <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3 mb-7">
+        <div class="swatch"><div class="h-[60px]" style="background:#7b6cff"></div><div class="cap"><b>Accent</b><code>--accent · #7b6cff</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#968aff"></div><div class="cap"><b>Accent hover</b><code>--accent-hover · #968aff</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#5d4ee6"></div><div class="cap"><b>Accent press</b><code>--accent-press · #5d4ee6</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#211c4a"></div><div class="cap"><b>Accent soft</b><code>--accent-soft · #211c4a</code></div></div>
+      </div>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Tweakable accents (curated swatches)</div>
+      <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3 mb-7">
+        <div class="swatch"><div class="h-[60px]" style="background:#7b6cff"></div><div class="cap"><b>Indigo · default</b><code>#7b6cff</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#3d8bff"></div><div class="cap"><b>Azure</b><code>#3d8bff</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#a86cff"></div><div class="cap"><b>Violet</b><code>#a86cff</code></div></div>
+      </div>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3 pb-2 border-b border-line-soft">How it's applied</div>
+      <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mb-3">A small <code class="text-[12px]">&lt;style&gt;</code> block in the page head overrides the accent ramp on <code class="text-[12px]">:root</code>; the App then re-drives it live from the active Tweak. Everything that reads <code class="text-[12px]">--accent</code> (buttons, rail highlight, card borders, focus rings) follows automatically — no per-component change.</p>
+      <pre class="code"><code>:root {
+  <span class="tok-purple">--accent</span>: #7b6cff;
+  <span class="tok-purple">--accent-hover</span>: #968aff;
+  <span class="tok-purple">--accent-press</span>: #5d4ee6;
+  <span class="tok-purple">--accent-soft</span>: #211c4a;
+  <span class="tok-purple">--on-accent</span>: #ffffff;      <span class="tok-mute">/* base is #001008 (dark) */</span>
+  <span class="tok-purple">--fg-on-accent</span>: #ffffff;   <span class="tok-mute">/* rail active-item text */</span>
+  <span class="tok-purple">--border-focus</span>: #7b6cff;
+}</code></pre>
+    </section>
+
+    <!-- ============ SEMANTIC ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="semantic">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Foundations</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Health &amp; regime color</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[26px]">Status is the dominant signal on an ops surface. One fixed health ramp drives every node, stream, venue, and queue. The Black-Swan regime ramp is inherited unchanged from the base system.</p>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">Health ramp — node / stream / venue / step state</div>
+      <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3 mb-7">
+        <div class="swatch"><div class="h-[60px]" style="background:#00d17a"></div><div class="cap"><b>Healthy / Operational</b><code>--pnl-up-fg · #00d17a</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#ffb000"></div><div class="cap"><b>Degraded</b><code>--warn · #ffb000</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#4a9eff"></div><div class="cap"><b>Draining</b><code>--info · #4a9eff</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#ff2d2d"></div><div class="cap"><b>Down</b><code>--danger · #ff2d2d</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#5a636d"></div><div class="cap"><b>Maintenance / idle</b><code>--fg-mute · #5a636d</code></div></div>
+      </div>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3.5 pb-2 border-b border-line-soft">BSCS regime ramp — inherited, escalation</div>
+      <div class="grid [grid-template-columns:repeat(auto-fill,minmax(150px,1fr))] gap-3">
+        <div class="swatch"><div class="h-[60px]" style="background:#00d17a"></div><div class="cap"><b>Calm</b><code>--bsi-calm · #00d17a</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#ffb000"></div><div class="cap"><b>Watch</b><code>--bsi-watch · #ffb000</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#ff7a1a"></div><div class="cap"><b>Elevated</b><code>--bsi-elevated · #ff7a1a</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#ff2d2d"></div><div class="cap"><b>Cascade</b><code>--bsi-cascade · #ff2d2d</code></div></div>
+        <div class="swatch"><div class="h-[60px]" style="background:#a020f0"></div><div class="cap"><b>Black swan</b><code>--bsi-blackswan · #a020f0</code></div></div>
+      </div>
+    </section>
+
+    <!-- ============ RAIL ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="rail">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Chrome</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Icon rail</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">112px fixed rail, dark chrome (<code class="text-[12px]">#07090b</code>), white snake mark. A single violet pill slides to the active item (<code class="text-[12px]">420ms</code> ease). Nine items vertically centered via an auto-margin wrapper that falls back to scroll on short viewports — never clipping. On ≤640px it becomes a bottom bar.</p>
+      <div class="ds-chrome rounded-surface border border-ink-3 overflow-hidden inline-flex" style="height:560px">
+        <div class="flex flex-col items-stretch pt-3 pb-2 w-[112px]">
+          <div class="flex items-center justify-center h-11 mb-3"><img src="assets/snake-white.svg" class="w-[30px] h-[30px]"/></div>
+          <div class="relative flex flex-col my-auto px-2">
+            <div class="relative flex flex-col gap-0.5 py-1">
+              <span aria-hidden="true" class="absolute z-0 rounded-control" style="background:#7b6cff;left:8px;top:4px;width:calc(100% - 16px);height:48px"></span>
+              <span class="absolute z-[1]" style="left:-4px;top:26px;width:3px;height:22px;background:#7b6cff;border-radius:999px"></span>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Overview</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>Positions</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="8" width="16" height="12" rx="1"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>Engine</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 19h4v-4h4v-4h4V7h6"/></svg>Dispatch</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Infra</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 9h13M14 6l3 3-3 3M20 15H7M10 12l-3 3 3 3"/></svg>Exchanges</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/></svg>SQL</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 6h18v12H3zM3 10h18 M7 14h4"/></svg>Revenue</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M4 8h8M18 8h2M4 16h2M12 16h8"/><circle cx="15" cy="8" r="2.4"/><circle cx="9" cy="16" r="2.4"/></svg>Settings</button>
+            </div>
+          </div>
+          <div class="flex flex-col items-center gap-1.5 pt-2 mx-2 border-t border-ink-2"><div class="w-2 h-2 rounded-chip" style="background:#00d17a" title="Control plane online"></div></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ TOPBAR ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="topbar">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Chrome</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Top bar &amp; kill switch</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">A <code class="text-[12px]">SYSADMIN</code> badge sits beside the wordmark so the mode is unmistakable. The global <strong class="text-fg-1">kill switch</strong> is the top bar's centerpiece — a confirm-gated "Halt all" that pauses every bot fleet-wide. Identity is the operator (SRE), not a trader.</p>
+
+      <div class="ds-chrome rounded-surface border border-ink-3 overflow-hidden">
+        <header class="h-14 flex items-center gap-4 px-5">
+          <div class="flex items-center gap-[10px] whitespace-nowrap">
+            <span class="font-sans font-bold text-[15px] tracking-[-0.01em] text-ink-9">Kraite</span>
+            <span class="font-mono text-[10px] font-bold tracking-[0.12em] uppercase py-[3px] px-2 rounded-chip" style="color:#7b6cff;background:color-mix(in srgb,#7b6cff 16%,transparent);border:1px solid color-mix(in srgb,#7b6cff 38%,transparent)">Sysadmin</span>
+            <span class="font-mono text-[11px] font-medium tracking-[0.06em] uppercase text-ink-6">Platform ops</span>
+          </div>
+          <div class="flex-1"></div>
+          <div class="font-mono text-[12px] text-ink-7 tabular-nums flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-chip" style="background:#00d17a"></span><span>21:24:08 UTC</span></div>
+          <div class="w-px h-6 bg-ink-3"></div>
+          <button class="inline-flex items-center gap-2 h-[34px] px-3.5 rounded-control font-sans text-[12.5px] font-bold whitespace-nowrap border" style="color:#ff2d2d;border-color:color-mix(in srgb,#ff2d2d 55%,transparent);background:color-mix(in srgb,#ff2d2d 8%,transparent)">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.8 7a8 8 0 1 0 10.4 0"/></svg>Halt all</button>
+          <div class="w-px h-6 bg-ink-3"></div>
+          <button class="bg-transparent border border-transparent rounded-control text-ink-7 w-[34px] h-[34px] inline-flex items-center justify-center hover:bg-ink-1"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M20 14a8 8 0 1 1-10-10 6 6 0 0 0 10 10z"/></svg></button>
+          <button class="flex items-center gap-[9px] bg-transparent border border-transparent rounded-control py-[5px] pr-2 pl-[6px]">
+            <span class="w-[30px] h-[30px] rounded-full font-mono font-bold text-[12px] flex items-center justify-center" style="background:color-mix(in srgb,#7b6cff 22%,transparent);color:#7b6cff">SO</span>
+            <span class="flex flex-col leading-[1.15] text-left"><span class="text-[12.5px] font-semibold text-ink-9">S. Okafor</span><span class="font-mono text-[10px] text-ink-6 tracking-[0.04em]">PLATFORM SRE</span></span>
+          </button>
+        </header>
+      </div>
+
+      <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mt-6 mb-3">Clicking <strong class="text-fg-1">Halt all</strong> opens a confirm popover that states the blast radius. On confirm the button flips to a green <strong class="text-fg-1">Resume</strong>, and the global halt banner appears under the bar (next section).</p>
+      <div class="flex flex-wrap gap-8 items-start">
+        <div>
+          <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-fg-mute mb-2.5">Confirm popover</div>
+          <div class="ds-staff rounded-control p-4 w-[320px]" style="border:1px solid color-mix(in srgb,#ff2d2d 40%,#1d2228)">
+            <div class="flex items-center gap-2.5 mb-2.5"><span class="w-[30px] h-[30px] rounded-control flex items-center justify-center" style="background:color-mix(in srgb,#ff2d2d 15%,transparent);color:#ff2d2d"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.8 7a8 8 0 1 0 10.4 0"/></svg></span><h4 class="font-sans font-bold text-[14px] text-fg-1">Halt all trading?</h4></div>
+            <p class="text-[12px] text-fg-3 leading-snug mb-3.5">Immediately pauses every bot across <span class="font-semibold text-fg-1">all 8 workers</span> and <span class="font-semibold text-fg-1">1,284 accounts</span>. Open positions are held, not closed. Reversible.</p>
+            <div class="flex items-center gap-2">
+              <button class="flex-1 inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[12.5px] font-bold text-white border-0" style="background:#ff2d2d"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.8 7a8 8 0 1 0 10.4 0"/></svg>Halt everything</button>
+              <button class="h-[38px] px-3.5 rounded-control bg-transparent text-fg-1 font-sans font-semibold text-[13px]" style="border:1px solid var(--border-strong)">Cancel</button>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="font-mono text-[10px] tracking-[0.1em] uppercase text-fg-mute mb-2.5">Halted state (top-bar button)</div>
+          <div class="ds-chrome rounded-control p-4 inline-block">
+            <button class="inline-flex items-center gap-2 h-[34px] px-3.5 rounded-control font-sans text-[12.5px] font-bold whitespace-nowrap border" style="color:#00d17a;border-color:color-mix(in srgb,#00d17a 45%,transparent);background:color-mix(in srgb,#00d17a 12%,transparent)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 4l14 8-14 8z"/></svg>Resume trading</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HALT BANNER ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="halt">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Chrome</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Halt banner</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Shown between top bar and content whenever trading is halted. Deep-red alert surface, pulsing power glyph, operator attribution, one-click resume. Same anatomy as the trader app's exchange-disconnect banner — reused with a kill-switch payload.</p>
+      <div class="rounded-surface overflow-hidden border border-ink-3">
+        <div class="flex items-center gap-3 py-[13px] px-5" style="background:#2a0808;color:#ffb0b0">
+          <span class="flex flex-shrink-0" style="color:#ff2d2d"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.8 7a8 8 0 1 0 10.4 0"/></svg></span>
+          <span class="text-[13px]" style="color:#ffd0d0"><strong class="text-white font-bold">ALL TRADING HALTED</strong> — engine paused across every worker and account by <span class="font-mono" style="color:#ff8585">S. Okafor</span> · just now. Open positions are held, not closed.</span>
+          <span class="flex-1"></span>
+          <button class="rounded-chip py-1.5 px-[14px] font-sans text-[12px] font-semibold text-white border-0" style="background:#ff2d2d">Resume trading</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ KPI TILE ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="tile">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">KPI stat tile · <code class="text-[15px]">StatTile</code></h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">The headline metric. Inverts to a white card on dark content (<code class="text-[12px]">.kpi-invert</code>, inherited). Mono value, optional <code class="text-[12px]">Delta</code> chip, optional sparkline, an all-caps sub label, and an optional inline slot (e.g. health dots). Pages open with a 4–5 wide grid of these.</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="grid grid-cols-4 gap-3 max-[760px]:grid-cols-2">
+          <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px]">
+            <div class="flex items-center justify-between gap-2"><span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--fg-3)"><circle cx="9" cy="8" r="4"/><path d="M2 21v-1a7 7 0 0 1 14 0v1M16 4.5a4 4 0 0 1 0 7.5"/></svg>Active traders</span><span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip text-pnlup bg-pnlup-bg">+1.40%</span></div>
+            <div class="flex items-end justify-between gap-3"><span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none">1,284</span></div>
+            <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">24H · +18 SIGNUPS</span>
+          </div>
+          <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px]">
+            <div class="flex items-center justify-between gap-2"><span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--fg-3)"><rect x="6" y="6" width="12" height="12" rx="1"/><rect x="9.5" y="9.5" width="5" height="5"/></svg>Worker nodes</span></div>
+            <div class="flex items-end justify-between gap-3"><span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none">6 / 8</span><span class="flex items-center gap-1.5"><span class="w-[8px] h-[8px] rounded-chip" style="background:#ffb000"></span><span class="w-[8px] h-[8px] rounded-chip" style="background:#4a9eff"></span></span></div>
+            <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">HEALTHY · 1 DEGRADED</span>
+          </div>
+          <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px]">
+            <div class="flex items-center justify-between gap-2"><span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--fg-3)"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>Capital under mgmt</span><span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip text-pnlup bg-pnlup-bg">+2.10%</span></div>
+            <div class="flex items-end justify-between gap-3"><span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none">$84.2M</span></div>
+            <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">AUM · ALL ACCOUNTS</span>
+          </div>
+          <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px]">
+            <div class="flex items-center justify-between gap-2"><span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--fg-3)"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Engine throughput</span></div>
+            <div class="flex items-end justify-between gap-3"><span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none">3,420</span></div>
+            <svg class="block w-full" viewBox="0 0 120 26" preserveAspectRatio="none" height="26"><path d="M0 20 L17 14 L34 16 L51 9 L68 11 L85 7 L102 9 L120 4" fill="none" stroke="#00d17a" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>
+            <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">ORDERS / MIN</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CARD + HEAD ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="card">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Section card &amp; head · <code class="text-[15px]">ACardHead</code></h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Every panel is a <code class="text-[12px]">.card.card--flat</code> (neutral border, raised shadow) topped by a filled band header. Icon tints to the accent when <code class="text-[12px]">accent</code> is set; a right slot carries a hint, count, or ghost action.</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="card card--flat overflow-hidden">
+          <div class="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft">
+            <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] leading-none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:#7b6cff"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>Worker fleet</h4>
+            <span class="font-mono text-[10.5px] text-fg-mute tabular-nums">6 healthy · 1 degraded · 1 draining</span>
+          </div>
+          <div class="px-5 py-6 text-[13px] text-fg-3">Card body — tables, rows, forms, or charts go here.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HEALTH ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="health">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Health chips, dots &amp; sync</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]"><code class="text-[12px]">HealthChip</code> is the tinted state pill (border + 12% fill + dot); degraded/down pulse. <code class="text-[12px]">HealthDot</code> is the bare indicator for dense rows. The sync chip flags ledger-vs-exchange drift on the Positions book.</p>
+      <div class="content ds-staff rounded-surface p-6 flex flex-wrap gap-3 items-center" data-theme="dark">
+        <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase" style="color:#00d17a;border-color:color-mix(in srgb,#00d17a 36%,transparent);background:color-mix(in srgb,#00d17a 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip" style="background:#00d17a"></span>Healthy</span>
+        <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase" style="color:#ffb000;border-color:color-mix(in srgb,#ffb000 36%,transparent);background:color-mix(in srgb,#ffb000 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip animate-pulse-soft" style="background:#ffb000"></span>Degraded</span>
+        <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase" style="color:#4a9eff;border-color:color-mix(in srgb,#4a9eff 36%,transparent);background:color-mix(in srgb,#4a9eff 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip" style="background:#4a9eff"></span>Draining</span>
+        <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase" style="color:#ff2d2d;border-color:color-mix(in srgb,#ff2d2d 36%,transparent);background:color-mix(in srgb,#ff2d2d 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip animate-pulse-soft" style="background:#ff2d2d"></span>Down</span>
+        <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase" style="color:#828b95;border-color:color-mix(in srgb,#828b95 36%,transparent);background:color-mix(in srgb,#828b95 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip" style="background:#828b95"></span>Maintenance</span>
+        <span class="mx-1 w-px h-6" style="background:var(--border)"></span>
+        <span class="inline-flex items-center gap-1.5 font-mono text-[9.5px] font-bold tracking-[0.07em] uppercase" style="color:#828b95"><span class="w-[6px] h-[6px] rounded-chip" style="background:#00d17a"></span>Synced</span>
+        <span class="inline-flex items-center gap-1.5 font-mono text-[9.5px] font-bold tracking-[0.07em] uppercase" style="color:#ffb000"><span class="w-[6px] h-[6px] rounded-chip animate-pulse-soft" style="background:#ffb000"></span>Drift</span>
+      </div>
+    </section>
+
+    <!-- ============ METERS ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="meters">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Usage meters &amp; regime ramp</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]"><code class="text-[12px]">UsageBar</code> (CPU/mem/saturation) thresholds its fill: green &lt;75%, amber ≥75%, red ≥90%. <code class="text-[12px]">RegimeRamp</code> lights the 5-segment escalation up to the current regime — used wherever the platform-wide BSCS posture appears.</p>
+      <div class="content ds-staff rounded-surface p-6 grid grid-cols-2 gap-8 max-[640px]:grid-cols-1" data-theme="dark">
+        <div class="flex flex-col gap-3.5">
+          <div class="flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span><span class="font-mono text-[11px] font-semibold tabular-nums text-fg-2">41%</span></div><div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip" style="width:41%;background:#00d17a"></div></div></div>
+          <div class="flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">MEM</span><span class="font-mono text-[11px] font-semibold tabular-nums" style="color:#ffb000">88%</span></div><div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip" style="width:88%;background:#ffb000"></div></div></div>
+          <div class="flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span><span class="font-mono text-[11px] font-semibold tabular-nums" style="color:#ff2d2d">94%</span></div><div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip" style="width:94%;background:#ff2d2d"></div></div></div>
+        </div>
+        <div class="flex flex-col gap-2 self-center">
+          <div class="flex items-stretch gap-1 h-[8px]">
+            <div class="flex-1 rounded-chip" style="background:#00d17a"></div>
+            <div class="flex-1 rounded-chip" style="background:#ffb000"></div>
+            <div class="flex-1 rounded-chip" style="background:#ff7a1a"></div>
+            <div class="flex-1 rounded-chip" style="background:var(--bg-elev-3)"></div>
+            <div class="flex-1 rounded-chip" style="background:var(--bg-elev-3)"></div>
+          </div>
+          <div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Calm</span><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Black swan</span></div>
+          <div class="font-mono text-[11px] text-fg-mute mt-1">Regime <span class="font-bold" style="color:#ff7a1a">ELEVATED · 0.63</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DATA TABLE ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="table">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Data tables</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Tables are CSS-grid rows inside a card — not <code class="text-[12px]">&lt;table&gt;</code>. A muted <code class="text-[12px]">uppercase</code> header row, then data rows with <code class="text-[12px]">border-b border-line-soft</code>. Degraded rows get a faint warn wash (<code class="text-[12px]">color-mix(... var(--warn) 6-7%)</code>). Columns collapse at breakpoints via <code class="text-[12px]">max-[1024px]:hidden</code>.</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="card card--flat overflow-hidden">
+          <div class="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft"><h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] leading-none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:#7b6cff"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/></svg>Worker fleet</h4></div>
+          <div class="grid grid-cols-[1.5fr_120px_1fr_72px] items-center gap-4 py-2 px-5 border-b border-line-soft font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint"><span>Node</span><span>Status</span><span>CPU</span><span class="text-right">Latency</span></div>
+          <div class="grid grid-cols-[1.5fr_120px_1fr_72px] items-center gap-4 py-3 px-5 border-b border-line-soft">
+            <div class="flex items-center gap-2.5"><span class="font-mono text-[10px] font-bold tracking-[0.06em] text-fg-mute w-[34px]">FRA</span><div class="flex flex-col leading-[1.2]"><span class="font-mono text-[12.5px] font-semibold text-fg-1">kr-fra-01</span><span class="font-mono text-[10px] text-fg-mute">Frankfurt · up 38d</span></div></div>
+            <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase w-fit" style="color:#00d17a;border-color:color-mix(in srgb,#00d17a 36%,transparent);background:color-mix(in srgb,#00d17a 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip" style="background:#00d17a"></span>Healthy</span>
+            <div class="flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span><span class="font-mono text-[11px] font-semibold tabular-nums text-fg-2">41%</span></div><div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip" style="width:41%;background:#00d17a"></div></div></div>
+            <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 text-right">11ms</span>
+          </div>
+          <div class="grid grid-cols-[1.5fr_120px_1fr_72px] items-center gap-4 py-3 px-5" style="background:color-mix(in srgb,#ffb000 7%,transparent)">
+            <div class="flex items-center gap-2.5"><span class="font-mono text-[10px] font-bold tracking-[0.06em] text-fg-mute w-[34px]">SGP</span><div class="flex flex-col leading-[1.2]"><span class="font-mono text-[12.5px] font-semibold text-fg-1">kr-sgp-02</span><span class="font-mono text-[10px] text-fg-mute">Singapore · up 7d</span></div></div>
+            <span class="inline-flex items-center gap-[7px] py-[5px] px-[11px] rounded-chip border font-mono text-[10.5px] font-bold tracking-[0.07em] uppercase w-fit" style="color:#ffb000;border-color:color-mix(in srgb,#ffb000 36%,transparent);background:color-mix(in srgb,#ffb000 12%,transparent)"><span class="w-[7px] h-[7px] rounded-chip animate-pulse-soft" style="background:#ffb000"></span>Degraded</span>
+            <div class="flex flex-col gap-1"><div class="flex items-center justify-between"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span><span class="font-mono text-[11px] font-semibold tabular-nums" style="color:#ff2d2d">94%</span></div><div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip" style="width:94%;background:#ff2d2d"></div></div></div>
+            <span class="font-mono text-[12px] font-semibold tabular-nums text-right" style="color:#ffb000">142ms</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ SQL ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="sql">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">SQL console</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Read-only query surface: a saved-query list, a mono editor over <code class="text-[12px]">--bg-input</code>, a primary <strong class="text-fg-1">Run</strong> (idle → spinner → grid), and guardrail chips in the page head. Results render as a grid (numeric columns right-aligned, mono, tabular).</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="flex items-center gap-2 mb-4 flex-wrap">
+          <span class="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-chip border border-line font-mono text-[10px] font-semibold tracking-[0.04em] text-fg-3"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:var(--fg-mute)"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3z"/></svg>Read-only</span>
+          <span class="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-chip border border-line font-mono text-[10px] font-semibold tracking-[0.04em] text-fg-3">Timeout 30s</span>
+          <span class="inline-flex items-center gap-1.5 py-[5px] px-2.5 rounded-chip border border-line font-mono text-[10px] font-semibold tracking-[0.04em] text-fg-3">Row cap 1,000</span>
+        </div>
+        <div class="card card--flat overflow-hidden">
+          <div class="flex items-center justify-between gap-3 py-2.5 px-4 bg-surface-2 border-b border-line-soft">
+            <span class="font-mono text-[11px] font-semibold text-fg-2 flex items-center gap-2"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:#7b6cff"><ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/></svg>query editor <span class="text-fg-faint">· kraite-prod (replica)</span></span>
+            <button class="inline-flex items-center gap-[7px] h-[32px] px-3.5 rounded-control font-sans font-semibold text-[12px] text-white border-0" style="background:#7b6cff"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M6 4l14 8-14 8z"/></svg>Run</button>
+          </div>
+          <div class="bg-input font-mono text-[12.5px] leading-[1.6] p-4 text-fg-1">select a.name, a.plan, a.equity_usd<br/>from accounts a<br/>order by a.equity_usd desc limit 8;</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FORMS ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="forms">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Forms — reused verbatim</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Settings uses the base system's form vocabulary unchanged — <code class="text-[12px]">AcctField</code>, <code class="text-[12px]">AcctInput</code>, <code class="text-[12px]">AcctSelect</code>, <code class="text-[12px]">AcctToggle</code>, <code class="text-[12px]">AcctGroup</code> (loaded from <code class="text-[12px]">app/accounts-kit.jsx</code>). Focus rings and the toggle "on" state pick up the violet accent automatically. See the base system's <a href="Design System.html#inputs">Form inputs</a> for full anatomy.</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="grid grid-cols-2 gap-5 max-[560px]:grid-cols-1">
+          <div class="flex flex-col"><div class="mb-[7px]"><label class="font-mono text-[10px] font-semibold tracking-[0.11em] uppercase text-fg-mute">ELEVATED at</label></div><input value="0.55" class="w-full h-[42px] bg-input border rounded-control px-3.5 text-[13.5px] font-mono text-fg-1 outline-none" style="border-color:var(--border)"/></div>
+          <div class="flex flex-col"><div class="mb-[7px]"><label class="font-mono text-[10px] font-semibold tracking-[0.11em] uppercase text-fg-mute">Allow new opens</label></div>
+            <div class="h-[42px] flex items-center gap-3 px-3.5 rounded-control border border-line bg-input">
+              <span class="relative inline-flex items-center h-[26px] w-[46px] rounded-chip flex-shrink-0" style="background:#7b6cff"><span class="absolute rounded-chip bg-white" style="width:18px;height:18px;top:4px;left:24px;box-shadow:0 1px 3px rgba(0,0,0,.4)"></span></span>
+              <span class="font-mono text-[12px] font-semibold tracking-[0.03em]" style="color:#00d17a">ENABLED</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CATALOG ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="catalog">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Handoff</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Section catalog</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Nine sections. Overview and the seven below it are built; each is one file under <code class="text-[12px]">app/admin/</code>.</p>
+      <div class="grid grid-cols-2 gap-3 max-[760px]:grid-cols-1">
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Overview <code class="text-[11px] text-fg-mute">overview.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Fleet command center — platform KPIs, worker-node table, regime, deploy, revenue, exchange connectivity, incident feed.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Positions <code class="text-[11px] text-fg-mute">positions.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Fleet-wide book across all clients — open/closed, lifecycle, leverage, ladder fill, live P&amp;L, sync (drift) flag.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Engine <code class="text-[11px] text-fg-mute">engine.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">BSCS regime gate (5 sub-signals + posture), entry indicators, per-symbol trade config.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Dispatch <code class="text-[11px] text-fg-mute">dispatch.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Step-dispatcher — throughput KPIs, per-queue depth/lag/rate, saturation, live step stream.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Infra <code class="text-[11px] text-fg-mute">infra.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Nodes, egress-IP allowlist, market-data stream / listen-key health, node reachability.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Exchanges <code class="text-[11px] text-fg-mute">exchanges.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Venue catalog (accordion) — symbols, leverage brackets, live marks, connectivity.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">SQL <code class="text-[11px] text-fg-mute">sql.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Read-only query console — saved queries, editor, Run, result grid, guardrails.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Revenue <code class="text-[11px] text-fg-mute">revenue.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Fleet financials — MRR/realized/float, subscription mix, plan breakdown, payments feed.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Settings <code class="text-[11px] text-fg-mute">settings.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Single config record — maintenance mode, regime thresholds, cooldowns, guards, channels.</p></div>
+      </div>
+    </section>
+
+    <!-- ============ ARCHITECTURE ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="arch">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Handoff</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Architecture &amp; files</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">React 18 + Babel-standalone + Tailwind Play CDN (preflight off), styled by the shared token files. The console is self-contained but shares the low-level primitives with the trader app.</p>
+      <pre class="code"><code><span class="tok-mute"># shared with the trader app — do not fork</span>
+app/tw-config.js              <span class="tok-mute">Tailwind ↔ token map</span>
+assets/colors_and_type.css    <span class="tok-mute">tokens, base type, light/dark</span>
+app/shell.css                 <span class="tok-mute">.card / .kpi-invert / content theming</span>
+app/icons.jsx                 <span class="tok-mute">UIcon set (+ sysadmin glyphs)</span>
+app/data.jsx                  <span class="tok-mute">RegimePill · Sparkline · Delta · POSITIONS · CLOSED</span>
+app/accounts-kit.jsx          <span class="tok-mute">AcctField/Input/Select/Toggle · AC_IPS</span>
+app/tweaks-panel.jsx          <span class="tok-mute">Tweaks shell + controls</span>
+
+<span class="tok-mute"># sysadmin console</span>
+Kraite Admin - Sysadmins.html <span class="tok-mute">entry · staff accent override · App + routing</span>
+app/admin/admin-kit.jsx       <span class="tok-purple">A_*</span> consts · <span class="tok-purple">StatTile ACardHead HealthChip UsageBar RegimeRamp</span> · A_NAV/A_WORKERS/A_VENUES
+app/admin/pages-data.jsx      <span class="tok-mute">BSCS_SIGNALS · DISPATCH_QUEUES · DATA_STREAMS · VENUE_SYMBOLS · …</span>
+app/admin/admin-shell.jsx     <span class="tok-purple">AdminRail · AdminTopBar · KillSwitch · HaltBanner · AdminFooter</span>
+app/admin/overview.jsx        <span class="tok-mute">flagship</span>
+app/admin/{positions,engine,dispatch,infra,exchanges,sql,revenue,settings}.jsx
+app/admin/admin-stubs.jsx     <span class="tok-mute">AdminStub — fallback for any unbuilt route</span></code></pre>
+      <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mt-4">Routing is a single switch in the entry file (<code class="text-[12px]">displayed === 'engine' ? &lt;AdminEngine/&gt; : …</code>) with a 180ms cross-fade. Active route lives in React state. <code class="text-[12px]">regime</code> / <code class="text-[12px]">score</code> / <code class="text-[12px]">halted</code> are Tweak-backed and threaded to the pages that need them.</p>
+    </section>
+
+    <!-- ============ NOTES ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="notes">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Handoff</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Engineering notes</h2>
+      <div class="flex flex-col gap-3 max-w-[760px] mt-3">
+        <div class="border border-line rounded-surface p-4 bg-surface" style="border-left:3px solid #ff2d2d">
+          <div class="text-[13.5px] font-semibold text-fg-1 mb-1">⚠︎ Every button needs an explicit background</div>
+          <p class="text-[12.5px] leading-[1.55] text-fg-3">Tailwind Preflight is <strong class="text-fg-1">off</strong>, so a bare <code class="text-[12px]">&lt;button&gt;</code> renders the UA default (<code class="text-[12px]">#C0C0C0</code> silver). Always set <code class="text-[12px]">bg-transparent</code> (or a real fill / inline <code class="text-[12px]">style.background</code>). The <code class="text-[12px]">A_BTN_*</code> presets already include one; plain buttons must add it.</p>
+        </div>
+        <div class="border border-line rounded-surface p-4 bg-surface" style="border-left:3px solid #7b6cff">
+          <div class="text-[13.5px] font-semibold text-fg-1 mb-1">Accent is the only theme change</div>
+          <p class="text-[12.5px] leading-[1.55] text-fg-3">Don't hard-code violet in components — read <code class="text-[12px]">var(--accent)</code> / use <code class="text-[12px]">bg-accent</code> / <code class="text-[12px]">text-accent</code>. The page-level override + the App's live setter handle the rest, which is what makes the accent Tweakable.</p>
+        </div>
+        <div class="border border-line rounded-surface p-4 bg-surface" style="border-left:3px solid #ffb000">
+          <div class="text-[13.5px] font-semibold text-fg-1 mb-1">Green stays semantic</div>
+          <p class="text-[12.5px] leading-[1.55] text-fg-3">Never use green as a brand/CTA color here — it reads as "healthy / profit". Primary actions are violet (<code class="text-[12px]">A_BTN_PRIMARY</code>); positive states use the health/pnl tokens.</p>
+        </div>
+        <div class="border border-line rounded-surface p-4 bg-surface" style="border-left:3px solid #4a9eff">
+          <div class="text-[13.5px] font-semibold text-fg-1 mb-1">Shared-scope identifiers</div>
+          <p class="text-[12.5px] leading-[1.55] text-fg-3">Babel scripts share one global lexical scope — top-level <code class="text-[12px]">const</code> names must be unique across <em>all</em> loaded files (the <code class="text-[12px]">A_</code>/<code class="text-[12px]">Ovw</code>/<code class="text-[12px]">Admin</code> prefixes exist for this). Components are published via <code class="text-[12px]">Object.assign(window, …)</code>.</p>
+        </div>
+        <div class="border border-line rounded-surface p-4 bg-surface" style="border-left:3px solid #00d17a">
+          <div class="text-[13.5px] font-semibold text-fg-1 mb-1">Mock data → API</div>
+          <p class="text-[12.5px] leading-[1.55] text-fg-3">All datasets live in <code class="text-[12px]">admin-kit.jsx</code> / <code class="text-[12px]">pages-data.jsx</code> as plain arrays — the shape each section's API should return. Swap them for fetches without touching the view components.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+</body>
+</html>

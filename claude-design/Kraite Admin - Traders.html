@@ -31,6 +31,7 @@
 <script type="text/babel" src="app/accounts.jsx"></script>
 <script type="text/babel" src="app/billing-kit.jsx"></script>
 <script type="text/babel" src="app/billing.jsx"></script>
+<script type="text/babel" src="app/profile.jsx"></script>
 
 <script type="text/babel">
 const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
@@ -126,6 +127,8 @@ function App() {
               ? <Accounts regime={regime} score={score} acctState={t.acctState}/>
               : displayed === 'billing'
               ? <Billing regime={regime} score={score} billState={t.billState}/>
+              : displayed === 'profile'
+              ? <Profile/>
               : <Placeholder route={displayed}/>}
           </div>
         </div>
