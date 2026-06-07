@@ -41,6 +41,7 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
   "showBanner": true,
   "serverFault": true,
   "paginatePositions": true,
+  "noPositions": false,
   "uiFont": "grotesk",
   "projState": "normal",
   "acctState": "connected",
@@ -116,11 +117,11 @@ function App() {
         <div className="content flex-1 min-h-0 overflow-y-auto bg-canvas text-fg rounded-t-2xl relative z-[2] max-[640px]:rounded-t-xl" data-theme={contentDark ? 'dark' : 'light'}>
           <div className={"max-w-wide mx-auto pt-6 px-8 pb-12 max-[640px]:pt-4 max-[640px]:px-3 max-[640px]:pb-6 transition-[opacity,transform] duration-200 ease-out " + (fading ? "opacity-0 translate-y-1" : "opacity-100 translate-y-0")}>
             {displayed === 'dashboard'
-              ? <Dashboard regime={regime} score={score} serverFault={t.serverFault} paginate={t.paginatePositions}/>
+              ? <Dashboard regime={regime} score={score} serverFault={t.serverFault} paginate={t.paginatePositions} noPositions={t.noPositions}/>
               : displayed === 'positions'
-              ? <Positions regime={regime} score={score}/>
+              ? <Positions regime={regime} score={score} noPositions={t.noPositions}/>
               : displayed === 'projections'
-              ? <Projections regime={regime} score={score} projState={t.projState}/>
+              ? <Projections regime={regime} score={score} projState={t.projState} noPositions={t.noPositions}/>
               : displayed === 'accounts'
               ? <Accounts regime={regime} score={score} acctState={t.acctState}/>
               : displayed === 'billing'
@@ -145,6 +146,8 @@ function App() {
           onChange={(v) => setTweak('serverFault', v)}/>
         <TweakToggle label="Paginate positions (>6)" value={t.paginatePositions}
           onChange={(v) => setTweak('paginatePositions', v)}/>
+        <TweakToggle label="First run — no positions yet" value={t.noPositions}
+          onChange={(v) => setTweak('noPositions', v)}/>
         <TweakSection label="Projections"/>
         <TweakSelect label="Page state" value={t.projState}
           options={[{value:'normal',label:'Normal'},{value:'no-closes',label:'Days with no closes'},{value:'loading',label:'Loading'},{value:'no-account',label:'No account selected'},{value:'zero-data',label:'Zero-data month'}]}

@@ -762,14 +762,28 @@ const AggStrip = () => {
   );
 };
 
+// ---------- first-run empty state: account has never traded ----------
+const FirstRunPositions = () => (
+  <div className="flex flex-col items-center justify-center text-center py-[110px] px-5 border border-dashed border-line rounded-surface bg-surface">
+    <div className="w-14 h-14 rounded-control border border-line flex items-center justify-center text-fg-mute mb-5">
+      <UIcon name="layers" size={26}/>
+    </div>
+    <h4 className="font-sans font-semibold text-[22px] text-fg-1 leading-[1.2] tracking-[-0.01em] mb-2">No positions yet</h4>
+    <p className="text-[14px] text-fg-3 max-w-[460px] leading-[1.5]">This account hasn't opened or closed a single position. The moment the engine takes its first trade, open positions and realized history will populate here.</p>
+    <span className="mt-5 inline-flex items-center gap-[7px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">
+      <span className="w-1.5 h-1.5 rounded-chip bg-green-500"/>Engine running · scanning for entries
+    </span>
+  </div>
+);
+
 // ---------- page ----------
-const Positions = ({ regime, score }) => (
+const Positions = ({ regime, score, noPositions }) => (
   <>
     <div className={PAGEHEAD}>
       <div>
         <div className={PH_EYEBROW}><UIcon name="layers" size={13} style={{ width: 13, height: 13 }}/>PORTFOLIO</div>
         <h1 className={PH_H1}>Positions</h1>
-        <div className={PH_SUB}>Full lifecycle — open positions, realized history, and per-market detail.</div>
+        <div className={PH_SUB}>{noPositions ? 'Full lifecycle — no positions opened or closed yet on this account.' : 'Full lifecycle — open positions, realized history, and per-market detail.'}</div>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
         <RegimePill regime={regime} score={score} pulse={regime === 'CASCADE' || regime === 'BLACK SWAN'}/>
@@ -778,16 +792,20 @@ const Positions = ({ regime, score }) => (
       </div>
     </div>
 
-    <AggStrip/>
-    <OpenTable/>
+    {noPositions ? <FirstRunPositions/> : (
+      <>
+        <AggStrip/>
+        <OpenTable/>
 
-    <div className="flex items-center gap-4 my-7" role="separator" aria-label="History">
-      <span className="h-px flex-1 bg-line"/>
-      <span className="font-mono text-[10px] font-medium tracking-[0.14em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap"><UIcon name="clock" size={13}/>History</span>
-      <span className="h-px flex-1 bg-line"/>
-    </div>
+        <div className="flex items-center gap-4 my-7" role="separator" aria-label="History">
+          <span className="h-px flex-1 bg-line"/>
+          <span className="font-mono text-[10px] font-medium tracking-[0.14em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap"><UIcon name="clock" size={13}/>History</span>
+          <span className="h-px flex-1 bg-line"/>
+        </div>
 
-    <ClosedTable/>
+        <ClosedTable/>
+      </>
+    )}
   </>
 );
 

@@ -206,8 +206,22 @@ const Segmented = ({ options, value, onChange }) => {
   );
 };
 
+// ---- empty state: engine is holding no positions right now ----
+const NoPositionsTile = () => (
+  <div className="flex flex-col items-center justify-center text-center py-[78px] px-5 border border-dashed border-line rounded-surface bg-surface">
+    <div className="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4">
+      <UIcon name="layers" size={24}/>
+    </div>
+    <h4 className="font-sans font-semibold text-[20px] text-fg-1 leading-[1.2] tracking-[-0.01em] mb-1.5">No open positions</h4>
+    <p className="text-[13.5px] text-fg-3 max-w-[400px] leading-[1.5]">The engine isn't holding anything right now. New positions will appear here the moment the bot opens one.</p>
+    <span className="mt-[18px] inline-flex items-center gap-[7px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">
+      <span className="w-1.5 h-1.5 rounded-chip bg-green-500"/>Engine running · scanning for entries
+    </span>
+  </div>
+);
+
 // ---- open positions section: full-width tile grid, optional pagination ----
-const PositionsSection = ({ paginate }) => {
+const PositionsSection = ({ paginate, empty }) => {
   const [filter, setFilter] = React.useState('ALL');
   const [page, setPage] = React.useState(0);
   const PER = 6;
@@ -288,13 +302,15 @@ const PositionsSection = ({ paginate }) => {
         <div>
           <div className="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap"><UIcon name="layers" size={17} style={{ color: 'var(--fg-3)' }}/>Open positions</div>
           <div className="text-[12.5px] text-fg-3 mt-1 whitespace-nowrap">
-            {usePager
+            {empty
+              ? <>No positions open right now · engine standing by</>
+              : usePager
               ? <>{rows.length} positions · showing {safePage * PER + 1}–{Math.min(safePage * PER + PER, rows.length)} · max 6 per direction</>
               : <>{rows.length} positions managed across the lifecycle · no manual orders</>}
           </div>
         </div>
         <div className="flex items-center gap-4 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
-          <Segmented options={['ALL','LONG','SHORT']} value={filter} onChange={setFilterReset}/>
+          {!empty && <Segmented options={['ALL','LONG','SHORT']} value={filter} onChange={setFilterReset}/>}
           <button className="inline-flex items-center gap-[9px] h-[34px] border border-line rounded-control bg-surface px-3 cursor-pointer text-[12.5px] text-fg-2 max-w-[280px] transition-colors duration-fast ease-out hover:border-line-strong max-[640px]:max-w-none max-[640px]:flex-1">
             <span className="w-[7px] h-[7px] rounded-chip bg-green-500 flex-shrink-0"/>
             <span className="whitespace-nowrap overflow-hidden text-ellipsis">Karine Esnault · Binance</span>
@@ -302,7 +318,8 @@ const PositionsSection = ({ paginate }) => {
           </button>
         </div>
       </div>
-      {usePager ? (
+      {empty ? <NoPositionsTile/> : (
+      usePager ? (
         <>
           <div className="overflow-hidden cursor-grab touch-pan-y active:cursor-grabbing" ref={viewRef}
             onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
@@ -327,7 +344,7 @@ const PositionsSection = ({ paginate }) => {
         <div className="grid grid-cols-3 gap-5 max-[1080px]:grid-cols-2 max-[640px]:grid-cols-1">
           {rows.map(p => <PositionTile key={p.sym} p={p}/>)}
         </div>
-      )}
+      ))}
     </section>
   );
 };
@@ -533,7 +550,7 @@ const BscsMiniCard = ({ regime, score }) => {
   );
 };
 
-const Dashboard = ({ regime, score, serverFault, paginate }) => {
+const Dashboard = ({ regime, score, serverFault, paginate, noPositions }) => {
   const suspended = regime === 'ELEVATED' || regime === 'CASCADE' || regime === 'BLACK SWAN';
   const until = new Date(Date.now() + 24 * 3600 * 1000);
   const untilStr = until.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'UTC' }).replace(' at ', ', ') + ' UTC';
@@ -545,7 +562,7 @@ const Dashboard = ({ regime, score, serverFault, paginate }) => {
         <div className={PH_EYEBROW}><UIcon name="dashboard" size={13} style={{ width: 13, height: 13 }}/>OVERVIEW</div>
         <h1 className={PH_H1}>Dashboard</h1>
         <div className={PH_SUB}>
-          Engine running autonomously · <span className="font-mono tabular-nums text-fg-2">10</span> open positions · last sync <span className="font-mono tabular-nums text-fg-2">3s</span> ago
+          Engine running autonomously · <span className="font-mono tabular-nums text-fg-2">{noPositions ? 0 : 10}</span> open positions · last sync <span className="font-mono tabular-nums text-fg-2">3s</span> ago
         </div>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
@@ -582,7 +599,7 @@ const Dashboard = ({ regime, score, serverFault, paginate }) => {
       {KPIS.map(k => <KpiTile key={k.key} k={k}/>)}
     </div>
 
-    <PositionsSection paginate={paginate}/>
+    <PositionsSection paginate={paginate} empty={noPositions}/>
 
     {/* section separator between positions and the monitoring row */}
     <div className="flex items-center gap-4 my-7" role="separator" aria-label="Monitoring">

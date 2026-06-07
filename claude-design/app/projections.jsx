@@ -510,7 +510,7 @@ const PJEmptyState = ({ icon, title, desc, children }) => (
 );
 
 // ============================ page ============================
-const Projections = ({ regime, score, projState = 'normal' }) => {
+const Projections = ({ regime, score, projState = 'normal', noPositions }) => {
   const [acctIdx, setAcctIdx] = React.useState(0);
   const [scenario, setScenario] = React.useState('neutral');
   const [ym, setYm] = React.useState({ year: PJ_CUR_Y, month: PJ_CUR_M });
@@ -555,6 +555,19 @@ const Projections = ({ regime, score, projState = 'normal' }) => {
       </div>
     </div>
   );
+
+  if (noPositions) {
+    return (
+      <>
+        {header}
+        <PJEmptyState icon="projections" title="Nothing to project yet" desc="Projections are built from realized trading revenue. Once the engine opens and closes its first positions, this account's revenue calendar and forward projection appear here.">
+          <span className="mt-5 inline-flex items-center gap-[7px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">
+            <span className="w-1.5 h-1.5 rounded-chip bg-green-500"/>Engine running · scanning for entries
+          </span>
+        </PJEmptyState>
+      </>
+    );
+  }
 
   if (view === 'no-account') {
     return (
