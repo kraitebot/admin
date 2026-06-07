@@ -1,7 +1,17 @@
 @php
     // ============================================================
     // MOCK DATA — design-fidelity port. Wire to backend later.
+    // The first-run gate below is REAL: an account that has never
+    // opened a single position gets the first-run empty state
+    // instead of the mock tables.
     // ============================================================
+    $accountIds = auth()->user()->is_admin
+        ? null
+        : Kraite\Core\Models\Account::where('user_id', auth()->id())->pluck('id');
+    $noPositions = ! Kraite\Core\Models\Position::query()
+        ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
+        ->exists();
+
     $regime = 'ELEVATED';
     $score = 0.63;
 
@@ -275,7 +285,7 @@
                 <x-feathericon-layers class="w-[13px] h-[13px]" stroke-width="1.75"/>PORTFOLIO
             </div>
             <h1 class="font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leading-[1.1] max-[640px]:text-[24px]">Positions</h1>
-            <div class="text-[13px] text-fg-3 mt-1.5">Full lifecycle — open positions, realized history, and per-market detail.</div>
+            <div class="text-[13px] text-fg-3 mt-1.5">{{ $noPositions ? 'Full lifecycle — no positions opened or closed yet on this account.' : 'Full lifecycle — open positions, realized history, and per-market detail.' }}</div>
         </div>
         <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
             {{-- Regime pill --}}
@@ -291,6 +301,19 @@
         </div>
     </div>
 
+    @if($noPositions)
+        {{-- first-run empty state: this account has never traded --}}
+        <div class="flex flex-col items-center justify-center text-center py-[110px] px-5 border border-dashed border-line rounded-surface bg-surface">
+            <div class="w-14 h-14 rounded-control border border-line flex items-center justify-center text-fg-mute mb-5">
+                <x-feathericon-layers class="w-[26px] h-[26px]" stroke-width="1.75"/>
+            </div>
+            <h4 class="font-sans font-semibold text-[22px] text-fg-1 leading-[1.2] tracking-[-0.01em] mb-2">No positions yet</h4>
+            <p class="text-[14px] text-fg-3 max-w-[460px] leading-[1.5]">This account hasn't opened or closed a single position. The moment the engine takes its first trade, open positions and realized history will populate here.</p>
+            <span class="mt-5 inline-flex items-center gap-[7px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">
+                <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>Engine running · scanning for entries
+            </span>
+        </div>
+    @else
     {{-- ===================== AGGREGATE SUMMARY STRIP ===================== --}}
     <div class="card flex items-stretch mb-7 max-[900px]:flex-wrap">
         @foreach($aggCells as $i => $c)
@@ -527,6 +550,7 @@
             </div>
         </div>
     </section>
+    @endif
 
     <style>[x-cloak] { display: none !important; }</style>
 </x-app-layout>

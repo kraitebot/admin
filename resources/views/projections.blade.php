@@ -9,6 +9,15 @@
     $regime = 'ELEVATED';
     $score = 0.63;
 
+    // REAL first-run gate: projections are built from realized revenue —
+    // an account that has never traded has nothing to project.
+    $accountIds = auth()->user()->is_admin
+        ? null
+        : Kraite\Core\Models\Account::where('user_id', auth()->id())->pluck('id');
+    $noPositions = ! Kraite\Core\Models\Position::query()
+        ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
+        ->exists();
+
     $regimes = [
         'CALM'        => ['color' => 'var(--bsi-calm)'],
         'WATCH'       => ['color' => 'var(--bsi-watch)'],
@@ -310,6 +319,19 @@
             </div>
         </div>
 
+        @if($noPositions)
+            {{-- first-run: nothing to project until the engine trades --}}
+            <div class="card">
+                <div class="flex flex-col items-center justify-center text-center py-[78px] px-5">
+                    <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-trending-up class="w-6 h-6" stroke-width="1.75"/></div>
+                    <h4 class="font-sans font-semibold text-[19px] text-fg-1 leading-[1.2] tracking-[-0.01em] mb-1.5">Nothing to project yet</h4>
+                    <p class="text-[13px] text-fg-3 max-w-[440px] m-0">Projections are built from realized trading revenue. Once the engine opens and closes its first positions, this account's revenue calendar and forward projection appear here.</p>
+                    <span class="mt-5 inline-flex items-center gap-[7px] font-mono text-[10.5px] font-medium tracking-[0.08em] uppercase text-fg-mute">
+                        <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>Engine running · scanning for entries
+                    </span>
+                </div>
+            </div>
+        @else
         {{-- ===================== CONTROL ROW ===================== --}}
         <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
             <div class="flex items-center gap-3 flex-wrap">
@@ -611,6 +633,7 @@
                 </div>
             </div>
         </template>
+        @endif
 
     </div>
 
