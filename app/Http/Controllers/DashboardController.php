@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -13,6 +14,8 @@ use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Position;
+use Kraite\Core\Support\Financial\AccountFinancials;
+use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
 
 class DashboardController extends Controller
@@ -49,10 +52,12 @@ class DashboardController extends Controller
             $query->where('user_id', Auth::id());
         }
 
-        $accounts = $query
+        $accountModels = $query
             ->orderBy('user_id')
             ->orderBy('name')
-            ->get()
+            ->get();
+
+        $accounts = $accountModels
             ->map(fn (Account $account) => [
                 'id' => $account->id,
                 'name' => $account->name,
@@ -62,9 +67,15 @@ class DashboardController extends Controller
                 'disabled_reason' => $account->disabled_reason,
             ]);
 
+        // First paint renders the same payload the polling endpoint serves,
+        // so the page never flashes empty and both paths share one shape.
+        $initialAccount = $accountModels->first();
+
         return view('dashboard', [
             'accounts' => $accounts,
             'isAdmin' => $isAdmin,
+            'initialAccountId' => $initialAccount?->id,
+            'initialPayload' => $initialAccount ? $this->payload($initialAccount) : null,
         ]);
     }
 
@@ -88,6 +99,17 @@ class DashboardController extends Controller
 
         $account = $query->firstOrFail();
 
+        return response()->json($this->payload($account));
+    }
+
+    /**
+     * Full dashboard payload for one account — shared by the first paint
+     * (index) and the polling endpoint (data) so both render one shape.
+     *
+     * @return array<string, mixed>
+     */
+    private function payload(Account $account): array
+    {
         $rawPositions = $account->positions()
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->with(['exchangeSymbol.symbol', 'orders'])
@@ -107,16 +129,101 @@ class DashboardController extends Controller
             ->values()
             ->all();
 
-        return response()->json([
+        return [
             'account' => [
                 'id' => $account->id,
                 'name' => $account->name,
+                'exchange' => $account->apiSystem?->name ?? 'Unknown',
             ],
             'metrics' => $this->accountMetrics($account),
+            'kpis' => $this->kpis($account, $positions),
             'btc' => $this->btcStrip(),
             'bscs' => $this->bscsBadge(),
             'positions' => $positions,
-        ]);
+            'generated_at' => now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * KPI strip — real numbers only:
+     *
+     *  - Portfolio value: latest wallet snapshot + 24h delta + the recent
+     *    snapshot series for the sparkline.
+     *  - P&L today / 30d: realized trade PnL via AccountFinancials (the
+     *    same engine Projections and the marketing site read), so the
+     *    dashboard can never disagree with them. 30d carries a sparkline
+     *    of the cumulative daily realized series.
+     *  - Open positions: count + long/short split from the live payload.
+     *
+     * @param  array<int, array<string, mixed>>  $positions
+     * @return array<string, mixed>
+     */
+    private function kpis(Account $account, array $positions): array
+    {
+        $financials = new AccountFinancials($account);
+
+        // ---- portfolio value + spark + 24h delta ----
+        $series = DB::table('account_balance_history')
+            ->where('account_id', $account->id)
+            ->orderByDesc('id')
+            ->limit(30)
+            ->pluck('total_wallet_balance')
+            ->reverse()
+            ->map(fn ($v) => (float) $v)
+            ->values()
+            ->all();
+
+        $balance = $series === [] ? null : end($series);
+
+        $dayAgo = DB::table('account_balance_history')
+            ->where('account_id', $account->id)
+            ->where('created_at', '<=', now()->subDay())
+            ->orderByDesc('id')
+            ->value('total_wallet_balance');
+
+        $balanceDelta24hPct = null;
+        if ($balance !== null && $dayAgo !== null && (float) $dayAgo > 0) {
+            $balanceDelta24hPct = round((($balance - (float) $dayAgo) / (float) $dayAgo) * 100, 2);
+        }
+
+        // ---- realized P&L: today + 30d (trade-PnL sourced) ----
+        $todayWindow = Window::today();
+        $monthWindow = Window::lastDays(30);
+
+        $pnlToday = $financials->realizedDelta($todayWindow);
+        $pnl30d = $financials->realizedDelta($monthWindow);
+        $roi30dPct = $financials->realizedRoiPct($monthWindow);
+
+        $todayStart = $financials->startWallet($todayWindow);
+        $pnlTodayPct = null;
+        if ($pnlToday !== null && $todayStart !== null && bccomp($todayStart, '0', 8) > 0) {
+            $pnlTodayPct = round((float) bcmul(bcdiv($pnlToday, $todayStart, 8), '100', 4), 2);
+        }
+
+        // 30d sparkline = cumulative realized-per-day series.
+        $cumulative = 0.0;
+        $pnl30dSpark = [];
+        foreach ($financials->dailyRevenues($monthWindow) as $delta) {
+            $cumulative += (float) $delta;
+            $pnl30dSpark[] = round($cumulative, 2);
+        }
+
+        // ---- open positions split ----
+        $longCount = count(array_filter($positions, fn (array $p) => $p['direction'] === 'LONG'));
+
+        return [
+            'balance' => $balance !== null ? number_format($balance, 2, '.', '') : null,
+            'balance_delta_24h_pct' => $balanceDelta24hPct,
+            'balance_spark' => $series,
+            'pnl_today' => $pnlToday !== null ? number_format((float) $pnlToday, 2, '.', '') : null,
+            'pnl_today_pct' => $pnlTodayPct,
+            'pnl_30d' => $pnl30d !== null ? number_format((float) $pnl30d, 2, '.', '') : null,
+            'pnl_30d_pct' => $roi30dPct !== null ? round($roi30dPct, 2) : null,
+            'pnl_30d_spark' => $pnl30dSpark,
+            'open_count' => count($positions),
+            'long_count' => $longCount,
+            'short_count' => count($positions) - $longCount,
+        ];
     }
 
     /**
@@ -137,10 +244,37 @@ class DashboardController extends Controller
         $statusLine = match (true) {
             $score === null => 'Awaiting first compute…',
             $blocked => 'New trades paused.',
+            $band === 'critical' => 'Market in critical regime.',
             $band === 'fragile' => 'New trades use smaller size.',
             $band === 'elevated' => 'Market moving more than usual.',
             default => 'Market normal.',
         };
+
+        // Sub-signal grid from the latest snapshot. Raw values live on
+        // heterogeneous scales (ratios, percentages, z-scores), so the card
+        // renders the FIRED state as the visual signal and the raw value as
+        // the mono figure — no fake normalisation into a 0–1 bar.
+        $snapshot = $index->latestSnapshot();
+        $components = [];
+
+        if ($snapshot) {
+            $signalMap = [
+                'vol_expansion' => 'Vol expansion',
+                'range_blowout' => 'Range blowout',
+                'corr_regime' => 'Correlation regime',
+                'rejection_pct' => 'Rejection %',
+                'fut_vol' => 'Futures vol',
+            ];
+
+            foreach ($signalMap as $key => $label) {
+                $value = $snapshot->{$key.'_value'};
+                $components[] = [
+                    'label' => $label,
+                    'value' => $value !== null ? round((float) $value, 2) : null,
+                    'fired' => (bool) $snapshot->{$key.'_fired'},
+                ];
+            }
+        }
 
         return [
             'score' => $score,
@@ -148,6 +282,17 @@ class DashboardController extends Controller
             'blocked' => $blocked,
             'status' => $statusLine,
             'is_stale' => $index->isStale(),
+            'block_threshold' => $index->blockThreshold(),
+            'computed_at' => $snapshot?->computed_at ? CarbonImmutable::parse($snapshot->computed_at)->toIso8601String() : null,
+            // Local ingestion can stamp computed_at in wall-clock time while
+            // the app runs UTC, putting the parse minutes "in the future" —
+            // clamp those to "just now" instead of showing "X from now".
+            'computed_ago' => $snapshot?->computed_at
+                ? (CarbonImmutable::parse($snapshot->computed_at)->isFuture()
+                    ? 'just now'
+                    : CarbonImmutable::parse($snapshot->computed_at)->diffForHumans(['short' => true]))
+                : null,
+            'components' => $components,
         ];
     }
 
@@ -231,7 +376,7 @@ class DashboardController extends Controller
         }
 
         $opens = $this->loadCandleOpens([(int) $btc->es_id])[$btc->es_id] ?? [];
-        $mark = $btc->mark_price !== null ? (string) $btc->mark_price : null;
+        $mark = $this->markOrLastClose((int) $btc->es_id, $btc->mark_price !== null ? (string) $btc->mark_price : null);
 
         // Format with the actual BTC exchange-symbol precision so the
         // dashboard mirrors what Binance shows ($69,123.45 not $69,123.4567).
@@ -264,7 +409,10 @@ class DashboardController extends Controller
         // for display use kraite-core's api_format_* helpers so the tile
         // shows the same precision the exchange does (price_precision +
         // tick_size for prices, quantity_precision for sizes).
-        $currentPrice = $exchangeSymbol?->mark_price !== null ? (string) $exchangeSymbol->mark_price : null;
+        $currentPrice = $this->markOrLastClose(
+            (int) $position->exchange_symbol_id,
+            $exchangeSymbol?->mark_price !== null ? (string) $exchangeSymbol->mark_price : null,
+        );
 
         $firstProfit = $position->first_profit_price !== null ? (string) $position->first_profit_price : null;
         $lastLimit = $position->lastLimitOrder()?->price;
@@ -287,6 +435,7 @@ class DashboardController extends Controller
             ->map(fn ($order, $idx) => [
                 'index' => $idx + 1,
                 'price' => $fmtPrice((string) $order->price),
+                'price_raw' => (string) $order->price,
                 'quantity' => $exchangeSymbol ? api_format_quantity((string) $order->quantity, $exchangeSymbol) : (string) $order->quantity,
                 'status' => strtoupper((string) $order->status),
                 'filled' => strtoupper((string) $order->status) === 'FILLED',
@@ -307,6 +456,13 @@ class DashboardController extends Controller
         $size = $this->computeSize($quantity, $currentPrice);
         $pnl = $position->unrealizedPnl();
 
+        $openingPrice = $position->opening_price !== null ? (string) $position->opening_price : null;
+
+        // Lifecycle-track geometry: 0% = first profit price (TP side),
+        // 100% = the deepest limit. PX marker and every ladder rung are
+        // normalised onto that leg so the tile can place them directly.
+        $track = $this->trackGeometry($firstProfit, $lastLimit, $currentPrice, $limits);
+
         return [
             'id' => $position->id,
             'status' => strtolower((string) $position->status),
@@ -326,11 +482,16 @@ class DashboardController extends Controller
                 $candleOpensByExchangeSymbol[$position->exchange_symbol_id] ?? [],
             ),
 
+            'side' => strtolower((string) $position->direction),
+
             'current_price' => $fmtPrice($currentPrice),
+            'opening_price' => $fmtPrice($openingPrice),
             'first_profit_price' => $fmtPrice($firstProfit),
             'profit_price' => $fmtPrice($currentTp),
             'next_limit_price' => $fmtPrice($nextLimit),
             'last_limit_price' => $fmtPrice($lastLimit),
+
+            'track' => $track,
 
             'alpha_path_pct' => $alphaPathPct,
             'alpha_limit_pct' => $alphaLimitPct,
@@ -342,6 +503,26 @@ class DashboardController extends Controller
             'total_limits' => $totalLimits,
             'limits' => $limits,
         ];
+    }
+
+    /**
+     * Live mark price with a candle-close fallback. The mark feed only runs
+     * where ingestion's WS streams are active (production); on environments
+     * without it, the latest close on the shortest engine timeframe is the
+     * freshest price on record — same semantic class, slightly staler.
+     */
+    private function markOrLastClose(int $exchangeSymbolId, ?string $mark): ?string
+    {
+        if ($mark !== null && is_numeric($mark)) {
+            return $mark;
+        }
+
+        $close = DB::table('candles')
+            ->where('exchange_symbol_id', $exchangeSymbolId)
+            ->orderByDesc('timestamp')
+            ->value('close');
+
+        return $close !== null ? (string) $close : null;
     }
 
     /**
@@ -438,6 +619,54 @@ class DashboardController extends Controller
         }
 
         return $dots;
+    }
+
+    /**
+     * Normalise the lifecycle leg [first profit price → deepest limit]
+     * to 0–100% and place the live PX marker plus every ladder rung on
+     * it. Direction-agnostic: percentages are computed on the absolute
+     * span, so LONG (TP above, limits below) and SHORT (inverted) both
+     * map left→right as TP→deepest-limit, which is how the tile reads.
+     *
+     * @param  array<int, array<string, mixed>>  $limits
+     * @return array{px_pct: float|null, rungs: array<int, array<string, mixed>>}|null
+     */
+    private function trackGeometry(?string $firstProfit, ?string $lastLimit, ?string $current, array $limits): ?array
+    {
+        if ($firstProfit === null || $lastLimit === null
+            || ! is_numeric($firstProfit) || ! is_numeric($lastLimit)
+            || bccomp($firstProfit, $lastLimit, 16) === 0) {
+            return null;
+        }
+
+        $span = abs((float) $lastLimit - (float) $firstProfit);
+
+        $place = function (?string $price) use ($firstProfit, $span): ?float {
+            if ($price === null || ! is_numeric($price) || $span <= 0.0) {
+                return null;
+            }
+            $pct = (abs((float) $price - (float) $firstProfit) / $span) * 100;
+
+            return round(max(0.0, min(100.0, $pct)), 1);
+        };
+
+        $rungs = [];
+        foreach ($limits as $limit) {
+            $pct = $place($limit['price_raw'] ?? null);
+            if ($pct === null) {
+                continue;
+            }
+            $rungs[] = [
+                'index' => $limit['index'],
+                'pct' => $pct,
+                'filled' => $limit['filled'],
+            ];
+        }
+
+        return [
+            'px_pct' => $place($current),
+            'rungs' => $rungs,
+        ];
     }
 
     private function directionFromLive(?string $current, ?string $lastClose): string
