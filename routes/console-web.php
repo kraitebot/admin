@@ -30,6 +30,17 @@ Route::domain(config('domains.console'))->middleware(['auth', 'admin'])->group(f
     Route::get('/dashboard/data', [SystemDashboardController::class, 'data'])->name('system.dashboard.data');
     Route::get('/dashboard/health', [SystemDashboardController::class, 'health'])->name('system.dashboard.health');
 
+    // Sysadmin rail surfaces whose pages aren't built yet. Honest
+    // placeholders keep the design's nav fully navigable; each gets its
+    // real page in a later phase. (Dispatch → system.steps and SQL →
+    // system.sql-query already have real pages below.)
+    Route::view('/positions', 'system.positions')->name('system.positions');
+    Route::view('/engine', 'system.engine')->name('system.engine');
+    Route::view('/infra', 'system.infra')->name('system.infra');
+    Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
+    Route::view('/revenue', 'system.revenue')->name('system.revenue');
+    Route::view('/settings', 'system.settings')->name('system.settings');
+
     // BSCS operator controls — manual override is sysadmin-only per spec.
     Route::post('/bscs/override/engage', [BscsController::class, 'engageOverride'])->name('system.bscs.override.engage');
     Route::post('/bscs/override/clear', [BscsController::class, 'clearOverride'])->name('system.bscs.override.clear');

@@ -3,8 +3,15 @@
     'showBanner' => false,
     'downAccount' => null,
 ])
+@php
+    // Surface follows the host: the console (sysadmin) domain swaps the
+    // whole UI to staff-mode violet via data-surface; every other host is
+    // the trader surface. EnsureAdmin already gates the console host on
+    // is_admin, so data-surface=console ⇔ a sysadmin is looking at it.
+    $surface = request()->getHost() === config('domains.console') ? 'console' : 'trader';
+@endphp
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="dark" data-surface="{{ $surface }}">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>

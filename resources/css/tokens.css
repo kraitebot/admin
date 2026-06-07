@@ -224,6 +224,31 @@
 }
 
 /* ============================================================
+   SYSADMIN (console) SURFACE — staff-mode accent
+   ------------------------------------------------------------
+   The console surface reuses the ENTIRE trader design system and
+   swaps only the accent to violet, signalling "staff mode".
+   - On the dark chrome (rail/top-bar/footer, no nested data-theme):
+     the first selector applies at the <html> root.
+   - Inside the content area (which sets its own data-theme on a child
+     div): the descendant selector `[data-surface="console"] [data-theme]`
+     (specificity 0,2,0) beats the `[data-theme="light|dark"]` accent
+     blocks above (0,1,0), so violet wins regardless of the light/dark
+     toggle. The first selector ties [data-theme] on specificity and
+     relies on source order — kept after the theme blocks deliberately.
+   ============================================================ */
+[data-surface="console"],
+[data-surface="console"] [data-theme] {
+  --accent:        #7b6cff;
+  --accent-hover:  #968aff;
+  --accent-press:  #5d4ee6;
+  --accent-soft:   #211c4a;
+  --on-accent:     #ffffff;
+  --fg-on-accent:  #ffffff;
+  --border-focus:  #7b6cff;
+}
+
+/* ============================================================
    SEMANTIC ELEMENT STYLES
    ============================================================ */
 

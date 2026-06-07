@@ -10,13 +10,15 @@
 
     $items = $console
         ? [
-            ['id' => 'dashboard',   'label' => 'Dashboard',   'route' => 'system.dashboard',     'params' => [],          'icon' => 'grid'],
-            ['id' => 'users',       'label' => 'Users',       'route' => 'system.users',         'params' => [],          'icon' => 'users'],
-            ['id' => 'commands',    'label' => 'Commands',    'route' => 'system.commands',      'params' => [],          'icon' => 'terminal'],
-            ['id' => 'steps',       'label' => 'Steps',       'route' => 'system.steps',         'params' => ['default'], 'icon' => 'git-branch'],
-            ['id' => 'backtesting', 'label' => 'Backtesting', 'route' => 'system.backtesting',   'params' => [],          'icon' => 'bar-chart-2'],
-            ['id' => 'billing',     'label' => 'Billing',     'route' => 'system.billing.plans', 'params' => [],          'icon' => 'credit-card'],
-            ['id' => 'sql',         'label' => 'SQL',         'route' => 'system.sql-query',     'params' => [],          'icon' => 'database'],
+            ['id' => 'overview',   'label' => 'Overview',   'route' => 'system.dashboard',  'params' => [],          'icon' => 'activity'],
+            ['id' => 'positions',  'label' => 'Positions',  'route' => 'system.positions',  'params' => [],          'icon' => 'layers'],
+            ['id' => 'engine',     'label' => 'Engine',     'route' => 'system.engine',     'params' => [],          'icon' => 'cpu'],
+            ['id' => 'dispatch',   'label' => 'Dispatch',   'route' => 'system.steps',      'params' => ['default'], 'icon' => 'git-branch'],
+            ['id' => 'infra',      'label' => 'Infra',      'route' => 'system.infra',      'params' => [],          'icon' => 'server'],
+            ['id' => 'exchanges',  'label' => 'Exchanges',  'route' => 'system.exchanges',  'params' => [],          'icon' => 'shuffle'],
+            ['id' => 'sql',        'label' => 'SQL',        'route' => 'system.sql-query',  'params' => [],          'icon' => 'database'],
+            ['id' => 'revenue',    'label' => 'Revenue',    'route' => 'system.revenue',    'params' => [],          'icon' => 'credit-card'],
+            ['id' => 'settings',   'label' => 'Settings',   'route' => 'system.settings',   'params' => [],          'icon' => 'sliders'],
         ]
         : [
             ['id' => 'dashboard',   'label' => 'Dashboard',   'route' => 'dashboard',         'params' => [], 'icon' => 'grid'],
@@ -44,8 +46,9 @@
               x-show="$store.rail.hl"
               x-cloak
               :style="$store.rail.hl ? `left:${$store.rail.hl.left}px;top:${$store.rail.hl.top}px;width:${$store.rail.hl.width}px;height:${$store.rail.hl.height}px` : ''"
-              class="absolute z-0 bg-green-500 rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
-                     before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-green-500 before:rounded-chip
+              {{-- accent-driven: trader green, console violet — follows the surface --accent --}}
+              class="absolute z-0 bg-accent rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
+                     before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-accent before:rounded-chip
                      max-[640px]:before:hidden"></span>
 
         @foreach($items as $item)
