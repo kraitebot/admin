@@ -4,11 +4,12 @@
     'downAccount' => null,
 ])
 @php
-    // Surface follows the host: the console (sysadmin) domain swaps the
-    // whole UI to staff-mode violet via data-surface; every other host is
-    // the trader surface. EnsureAdmin already gates the console host on
-    // is_admin, so data-surface=console ⇔ a sysadmin is looking at it.
-    $surface = request()->getHost() === config('domains.console') ? 'console' : 'trader';
+    // Surface follows the route group, not the host: any `system.*` route is
+    // the sysadmin console and swaps the whole UI to staff-mode violet via
+    // data-surface; every other route is the trader surface. EnsureAdmin gates
+    // the `system.*` group on is_admin, so data-surface=console ⇔ a sysadmin
+    // is looking at it.
+    $surface = request()->routeIs('system.*') ? 'console' : 'trader';
 @endphp
 <!DOCTYPE html>
 <html lang="en" data-theme="dark" data-surface="{{ $surface }}">

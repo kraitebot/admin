@@ -2,18 +2,19 @@
      highlight — the global $store.rail does, see the <nav> comment. --}}
 @props(['active' => 'dashboard'])
 @php
-    // Surface follows the host: the console domain gets the sysadmin
-    // rail, every other host gets the trader rail. Same component, same
-    // styling — only the item set differs. Console items are provisional
-    // until the console surface gets its design pass.
-    $console = request()->getHost() === config('domains.console');
+    // Surface follows the route group, not the host: any `system.*` route gets
+    // the sysadmin rail, every other route gets the trader rail. Same
+    // component, same styling — only the item set differs. Console items are
+    // provisional until the console surface gets its design pass.
+    $console = request()->routeIs('system.*');
 
     $items = $console
         ? [
-            ['id' => 'overview',   'label' => 'Overview',   'route' => 'system.dashboard',  'params' => [],          'icon' => 'activity'],
-            ['id' => 'positions',  'label' => 'Positions',  'route' => 'system.positions',  'params' => [],          'icon' => 'layers'],
-            ['id' => 'engine',     'label' => 'Engine',     'route' => 'system.engine',     'params' => [],          'icon' => 'cpu'],
-            ['id' => 'dispatch',   'label' => 'Dispatch',   'route' => 'system.steps',      'params' => ['default'], 'icon' => 'git-branch'],
+            ['id' => 'overview',    'label' => 'Overview',   'route' => 'system.dashboard',    'params' => [],          'icon' => 'activity'],
+            ['id' => 'positions',   'label' => 'Positions',  'route' => 'system.positions',    'params' => [],          'icon' => 'layers'],
+            ['id' => 'engine',      'label' => 'Engine',     'route' => 'system.engine',       'params' => [],          'icon' => 'cpu'],
+            ['id' => 'backtesting', 'label' => 'Backtest',   'route' => 'system.backtesting',  'params' => [],          'icon' => 'bar-chart-2'],
+            ['id' => 'dispatch',    'label' => 'Dispatch',   'route' => 'system.steps',        'params' => ['default'], 'icon' => 'git-branch'],
             ['id' => 'infra',      'label' => 'Infra',      'route' => 'system.infra',      'params' => [],          'icon' => 'server'],
             ['id' => 'exchanges',  'label' => 'Exchanges',  'route' => 'system.exchanges',  'params' => [],          'icon' => 'shuffle'],
             ['id' => 'sql',        'label' => 'SQL',        'route' => 'system.sql-query',  'params' => [],          'icon' => 'database'],

@@ -76,7 +76,7 @@ function seedBacktestableToken(): void
 }
 
 it('redirects guests on the backtesting console page to login', function (): void {
-    $this->get('https://console.kraite.test/backtesting')
+    $this->get('https://admin.kraite.test/system/backtesting')
         ->assertRedirect();
 });
 
@@ -84,7 +84,7 @@ it('forbids non-admin users from the backtesting console page', function (): voi
     $user = User::factory()->create(['is_admin' => false]);
 
     $this->actingAs($user)
-        ->get('https://console.kraite.test/backtesting')
+        ->get('https://admin.kraite.test/system/backtesting')
         ->assertForbidden();
 });
 
@@ -93,7 +93,7 @@ it('renders the backtesting workspace for admins', function (): void {
     $admin = User::factory()->create(['is_admin' => true]);
 
     $response = $this->actingAs($admin)
-        ->get('https://console.kraite.test/backtesting');
+        ->get('https://admin.kraite.test/system/backtesting');
 
     $response->assertSuccessful();
     // Page chrome + the Alpine workspace bootstrap are present.

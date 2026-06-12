@@ -6,6 +6,7 @@ use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsCont
 use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\DashboardController as SystemDashboardController;
+use App\Http\Controllers\System\InfraController;
 use App\Http\Controllers\System\LifecycleController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
@@ -15,16 +16,17 @@ use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
-| Console surface — sysadmin domain
+| Console surface — sysadmin (role-gated, same host)
 |--------------------------------------------------------------------------
-| Same Laravel project, same UI library, different host. Every route here
-| binds to the console domain and sits behind `auth` + `admin`, so a
-| non-admin can't reach any of it even by typing the URL. Route names keep
-| the `system.` prefix (controllers and redirects reference them); the
-| `/system` URL prefix is gone — the host IS the system context.
+| The sysadmin console lives on the SAME admin host as the trader product,
+| under a `/system` URL prefix and behind `auth` + `admin` — so a non-admin
+| can't reach any of it even by typing the URL. The surface a page belongs
+| to is the route group, not the host: rail / top-bar / layout switch to
+| staff-mode whenever the current route matches `system.*`. Route names keep
+| the `system.` prefix (controllers, redirects, and the rail reference them).
 */
 
-Route::domain(config('domains.console'))->middleware(['auth', 'admin'])->group(function () {
+Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('system')->group(function () {
 
     Route::get('/dashboard', [SystemDashboardController::class, 'index'])->name('system.dashboard');
     Route::get('/dashboard/data', [SystemDashboardController::class, 'data'])->name('system.dashboard.data');
@@ -36,7 +38,7 @@ Route::domain(config('domains.console'))->middleware(['auth', 'admin'])->group(f
     // system.sql-query already have real pages below.)
     Route::view('/positions', 'system.positions')->name('system.positions');
     Route::view('/engine', 'system.engine')->name('system.engine');
-    Route::view('/infra', 'system.infra')->name('system.infra');
+    Route::get('/infra', [InfraController::class, 'index'])->name('system.infra');
     Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
     Route::view('/revenue', 'system.revenue')->name('system.revenue');
     Route::view('/settings', 'system.settings')->name('system.settings');

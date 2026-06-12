@@ -1,9 +1,10 @@
 @php
     $iconBtn = 'appearance-none bg-transparent border border-transparent rounded-control text-ink-7 cursor-pointer w-[34px] h-[34px] inline-flex items-center justify-center relative transition-colors duration-fast ease-out hover:text-ink-9 hover:bg-ink-1';
 
-    // Console (sysadmin) host gets the staff-mode wordmark + violet avatar;
-    // every other host is the trader surface. Mirrors the rail/layout split.
-    $console = request()->getHost() === config('domains.console');
+    // Console (sysadmin) routes get the staff-mode wordmark + violet avatar;
+    // every other route is the trader surface. Mirrors the rail/layout split:
+    // surface follows the route group (`system.*`), not the host.
+    $console = request()->routeIs('system.*');
 
     $user = auth()->user();
     $userName = $user?->name ?? 'Guest';
@@ -29,6 +30,21 @@
         @endif
     </div>
     <div class="flex-1"></div>
+
+    {{-- Surface toggle — sysadmins only. Switches between the sysadmin console
+         (`system.*`) and the trader surface. Plain <a> (NO wire:navigate): the
+         rail / top-bar / footer are x-persist'd across SPA nav, so crossing
+         surfaces needs a full page load to re-render the correct rail + accent. --}}
+    @if($user?->is_admin)
+        <a href="{{ $console ? route('dashboard') : route('system.dashboard') }}"
+           class="appearance-none no-underline inline-flex items-center gap-[7px] h-[30px] px-3 rounded-control border border-line-strong text-[11px] font-mono font-semibold tracking-[0.05em] uppercase text-ink-7 hover:text-ink-9 hover:bg-ink-1 transition-colors duration-fast ease-out max-[640px]:px-2"
+           title="{{ $console ? 'Switch to the trader surface' : 'Switch to the sysadmin console' }}">
+            <x-dynamic-component :component="'feathericon-' . ($console ? 'user' : 'shield')" class="w-[14px] h-[14px]" stroke-width="1.75"/>
+            <span class="max-[820px]:hidden">{{ $console ? 'Trader view' : 'Admin console' }}</span>
+        </a>
+        <div class="w-px h-6 bg-ink-3 max-[640px]:hidden"></div>
+    @endif
+
     <div class="font-mono text-[12px] text-ink-7 tabular-nums flex items-center gap-2 max-[820px]:hidden">
         <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>
         <span x-text="now + ' UTC'"></span>
