@@ -159,29 +159,66 @@ class DashboardController extends Controller
 
         $events = collect();
 
-        // OPEN events — every position the account has opened.
+        $pushOpen = function ($p, bool $active) use ($events, $ago): void {
+            $events->push([
+                'kind' => 'OPEN',
+                'sort' => (string) $p->opened_at,
+                'time' => $ago($p->opened_at),
+                'position_id' => (int) $p->id,
+                'active' => $active,
+                'side' => strtoupper((string) $p->direction),
+                'symbol' => $p->parsed_trading_pair,
+                'quantity' => $p->quantity !== null ? rtrim(rtrim((string) $p->quantity, '0'), '.') : null,
+                'price' => $p->opening_price !== null ? rtrim(rtrim((string) $p->opening_price, '0'), '.') : null,
+                'pnl' => null,
+            ]);
+        };
+
+        $pushWap = function ($o, bool $active) use ($events, $ago): void {
+            $events->push([
+                'kind' => 'WAP',
+                'sort' => (string) $o->filled_at,
+                'time' => $ago($o->filled_at),
+                'position_id' => (int) $o->position_id,
+                'active' => $active,
+                'side' => strtoupper((string) $o->direction),
+                'symbol' => $o->parsed_trading_pair,
+                'quantity' => $o->quantity !== null ? rtrim(rtrim((string) $o->quantity, '0'), '.') : null,
+                'price' => $o->price !== null ? rtrim(rtrim((string) $o->price, '0'), '.') : null,
+                'pnl' => null,
+            ]);
+        };
+
+        $openColumns = ['id', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'];
+        $wapColumns = ['positions.id as position_id', 'positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'];
+
+        // OPEN events for currently-open positions — fetched WITHOUT a recency
+        // cap. The client's "active only" toggle filters to these, so every
+        // open position must be present regardless of how many closed-position
+        // opens are newer; capping here would silently drop an active position
+        // whose open is older than the 30 most recent opens (heavy churn
+        // pushes active opens well past that window).
         DB::table('positions')
             ->where('account_id', $account->id)
+            ->whereIn('status', self::OPEN_POSITION_STATUSES)
+            ->whereNotNull('opened_at')
+            ->orderByDesc('opened_at')
+            ->get($openColumns)
+            ->each(fn ($p) => $pushOpen($p, true));
+
+        // OPEN events for already-terminal positions — history only, so the
+        // recent 30 are enough for the full (toggle-off) view.
+        DB::table('positions')
+            ->where('account_id', $account->id)
+            ->whereNotIn('status', self::OPEN_POSITION_STATUSES)
             ->whereNotNull('opened_at')
             ->orderByDesc('opened_at')
             ->limit(30)
-            ->get(['id', 'status', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'])
-            ->each(function ($p) use ($events, $ago): void {
-                $events->push([
-                    'kind' => 'OPEN',
-                    'sort' => (string) $p->opened_at,
-                    'time' => $ago($p->opened_at),
-                    'position_id' => (int) $p->id,
-                    'active' => in_array(strtolower((string) $p->status), self::OPEN_POSITION_STATUSES, true),
-                    'side' => strtoupper((string) $p->direction),
-                    'symbol' => $p->parsed_trading_pair,
-                    'quantity' => $p->quantity !== null ? rtrim(rtrim((string) $p->quantity, '0'), '.') : null,
-                    'price' => $p->opening_price !== null ? rtrim(rtrim((string) $p->opening_price, '0'), '.') : null,
-                    'pnl' => null,
-                ]);
-            });
+            ->get($openColumns)
+            ->each(fn ($p) => $pushOpen($p, false));
 
-        // CLOSE events — clean closes, with price-true realized PnL.
+        // CLOSE events — clean closes, with price-true realized PnL. Always
+        // terminal, so never "active"; recent 30 for the history view.
         DB::table('positions')
             ->where('account_id', $account->id)
             ->where('status', 'closed')
@@ -215,34 +252,45 @@ class DashboardController extends Controller
                 ]);
             });
 
-        // WAP events — a filled ladder rung re-anchors the position.
+        // WAP events for currently-open positions — a filled ladder rung
+        // re-anchors the position. Uncapped for the same reason as active
+        // opens: the toggle-on view must show every active position's WAPs.
         DB::table('orders')
             ->join('positions', 'positions.id', '=', 'orders.position_id')
             ->where('positions.account_id', $account->id)
+            ->whereIn('positions.status', self::OPEN_POSITION_STATUSES)
+            ->where('orders.type', 'LIMIT')
+            ->where('orders.status', 'FILLED')
+            ->whereNotNull('orders.filled_at')
+            ->orderByDesc('orders.filled_at')
+            ->get($wapColumns)
+            ->each(fn ($o) => $pushWap($o, true));
+
+        // WAP events for terminal positions — history only, recent 30.
+        DB::table('orders')
+            ->join('positions', 'positions.id', '=', 'orders.position_id')
+            ->where('positions.account_id', $account->id)
+            ->whereNotIn('positions.status', self::OPEN_POSITION_STATUSES)
             ->where('orders.type', 'LIMIT')
             ->where('orders.status', 'FILLED')
             ->whereNotNull('orders.filled_at')
             ->orderByDesc('orders.filled_at')
             ->limit(30)
-            ->get(['positions.id as position_id', 'positions.status', 'positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'])
-            ->each(function ($o) use ($events, $ago): void {
-                $events->push([
-                    'kind' => 'WAP',
-                    'sort' => (string) $o->filled_at,
-                    'time' => $ago($o->filled_at),
-                    'position_id' => (int) $o->position_id,
-                    'active' => in_array(strtolower((string) $o->status), self::OPEN_POSITION_STATUSES, true),
-                    'side' => strtoupper((string) $o->direction),
-                    'symbol' => $o->parsed_trading_pair,
-                    'quantity' => $o->quantity !== null ? rtrim(rtrim((string) $o->quantity, '0'), '.') : null,
-                    'price' => $o->price !== null ? rtrim(rtrim((string) $o->price, '0'), '.') : null,
-                    'pnl' => null,
-                ]);
-            });
+            ->get($wapColumns)
+            ->each(fn ($o) => $pushWap($o, false));
 
-        return $events
+        // Active-position events are ALWAYS kept — they're what the "active
+        // only" toggle surfaces and must never be starved. Terminal-position
+        // events fill the remaining history up to 30. Without this split the
+        // shared 30-row cap let closed-position churn evict active events
+        // before the client-side filter ever ran.
+        $active = $events->filter(fn (array $e): bool => $e['active']);
+        $history = $events->reject(fn (array $e): bool => $e['active'])
             ->sortByDesc('sort')
-            ->take(30)
+            ->take(30);
+
+        return $active->merge($history)
+            ->sortByDesc('sort')
             ->map(function (array $e): array {
                 unset($e['sort']);
 
@@ -262,6 +310,13 @@ class DashboardController extends Controller
 
     private function dbClockSkew(): int
     {
+        // TIMESTAMPDIFF / UTC_TIMESTAMP are MySQL-only; on any other driver
+        // (e.g. the SQLite test connection) the skew is both unmeasurable and
+        // irrelevant, so treat the clock as aligned.
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return 0;
+        }
+
         return $this->dbClockSkew ??= (int) DB::scalar('SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())');
     }
 

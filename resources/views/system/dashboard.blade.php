@@ -1,7 +1,11 @@
 @php
-    // ===== PLATFORM MOCK DATA =====
-    // Sysadmin fleet overview. Mock data per the Claude Design export —
-    // real wiring (Server / FleetFinancials / market-regime) is a later phase.
+    // ===== PARTIAL WIRING =====
+    // The Worker-fleet card is LIVE: it polls system.dashboard.data and renders
+    // the real fleet (kraite.fleet.servers ⋈ Redis heartbeat keys), classified
+    // online / stale / missing with per-box vitals + supervisor unit states.
+    // The KPI row, market-regime, deploy, revenue, venue + incident panels below
+    // are still the Claude Design mock — FleetFinancials / exchange wiring is a
+    // later phase.
     $regime = 'ELEVATED';
     $regimeScore = 0.63;
     $regimeOrder = ['CALM', 'WATCH', 'ELEVATED', 'CASCADE', 'BLACK SWAN'];
@@ -14,17 +18,6 @@
     ];
     $regimeColor = $regimeColors[$regime] ?? $regimeColors['CALM'];
     $regimeIdx = array_search($regime, $regimeOrder, true);
-
-    $workers = [
-        ['id' => 'kr-fra-01', 'region' => 'Frankfurt', 'code' => 'FRA', 'state' => 'healthy',  'cpu' => 41, 'mem' => 58, 'lat' => 11,  'bots' => 214, 'build' => 'v4.2.1', 'up' => '38d'],
-        ['id' => 'kr-fra-02', 'region' => 'Frankfurt', 'code' => 'FRA', 'state' => 'healthy',  'cpu' => 47, 'mem' => 61, 'lat' => 12,  'bots' => 201, 'build' => 'v4.2.1', 'up' => '38d'],
-        ['id' => 'kr-ldn-01', 'region' => 'London',    'code' => 'LDN', 'state' => 'healthy',  'cpu' => 52, 'mem' => 64, 'lat' => 19,  'bots' => 188, 'build' => 'v4.2.1', 'up' => '21d'],
-        ['id' => 'kr-nyc-01', 'region' => 'New York',  'code' => 'NYC', 'state' => 'healthy',  'cpu' => 38, 'mem' => 49, 'lat' => 38,  'bots' => 142, 'build' => 'v4.2.0', 'up' => '12d'],
-        ['id' => 'kr-nyc-02', 'region' => 'New York',  'code' => 'NYC', 'state' => 'draining', 'cpu' => 9,  'mem' => 22, 'lat' => 41,  'bots' => 18,  'build' => 'v4.2.0', 'up' => '12d'],
-        ['id' => 'kr-sgp-01', 'region' => 'Singapore', 'code' => 'SGP', 'state' => 'healthy',  'cpu' => 63, 'mem' => 70, 'lat' => 52,  'bots' => 156, 'build' => 'v4.2.1', 'up' => '7d'],
-        ['id' => 'kr-sgp-02', 'region' => 'Singapore', 'code' => 'SGP', 'state' => 'degraded', 'cpu' => 94, 'mem' => 88, 'lat' => 142, 'bots' => 161, 'build' => 'v4.2.1', 'up' => '7d'],
-        ['id' => 'kr-tok-01', 'region' => 'Tokyo',     'code' => 'TOK', 'state' => 'healthy',  'cpu' => 44, 'mem' => 55, 'lat' => 61,  'bots' => 160, 'build' => 'v4.2.1', 'up' => '4d'],
-    ];
 
     $venues = [
         ['ex' => 'Binance',  'mono' => 'B',  'state' => 'operational', 'lat' => 12,   'err' => 0.02, 'accts' => 642, 'spark' => [11, 12, 12, 11, 13, 12, 12]],
@@ -72,6 +65,71 @@
 @endphp
 
 <x-app-layout active="overview" :title="'Kraite — Fleet overview'">
+    <script>
+        // Live fleet card: polls system.dashboard.data and renders the real
+        // fleet roster (kraite.fleet.servers ⋈ Redis heartbeat keys).
+        window.systemDash = (dataUrl) => ({
+            fleet: [],
+            loaded: false,
+            loading: false,
+            _timer: null,
+
+            init() {
+                this.refresh();
+                // 15s cadence — the heartbeat writes every ~5min, so a tighter
+                // poll only sharpens the "last sync" age + status transitions.
+                this._timer = setInterval(() => this.refresh(), 15000);
+            },
+            destroy() {
+                if (this._timer) { clearInterval(this._timer); this._timer = null; }
+            },
+            async refresh() {
+                if (this.loading) return;
+                this.loading = true;
+                try {
+                    const res = await fetch(dataUrl, { headers: { Accept: 'application/json' } });
+                    if (res.ok) {
+                        const d = await res.json();
+                        this.fleet = Array.isArray(d.fleet) ? d.fleet : [];
+                        this.loaded = true;
+                    }
+                } finally {
+                    this.loading = false;
+                }
+            },
+
+            counts() {
+                const c = { online: 0, stale: 0, missing: 0 };
+                this.fleet.forEach((f) => { c[f.status] = (c[f.status] || 0) + 1; });
+                return c;
+            },
+            statusMeta(status) {
+                if (status === 'online') return { label: 'ONLINE', color: 'var(--pnl-up-fg)' };
+                if (status === 'stale') return { label: 'STALE', color: 'var(--warn)' };
+                return { label: 'MISSING', color: 'var(--danger)' };
+            },
+            barColor(pct) {
+                return pct >= 90 ? 'var(--danger)' : (pct >= 75 ? 'var(--warn)' : 'var(--pnl-up-fg)');
+            },
+            uptimeHuman(s) {
+                if (s === null || s === undefined) return '—';
+                if (s < 3600) return Math.floor(s / 60) + 'm';
+                if (s < 86400) return Math.floor(s / 3600) + 'h';
+                return Math.floor(s / 86400) + 'd';
+            },
+            ageHuman(s) {
+                if (s === null || s === undefined) return '—';
+                return s < 60 ? s + 's' : Math.floor(s / 60) + 'm';
+            },
+            unitList(units) {
+                return Object.entries(units || {}).map(([name, state]) => ({ name, state }));
+            },
+            unitOk(state) {
+                return state === 'RUNNING';
+            },
+        });
+    </script>
+
     {{-- ===================== PAGE HEADER ===================== --}}
     <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
         <div>
@@ -106,51 +164,101 @@
 
     {{-- ===================== FLEET + SIDE COLUMN ===================== --}}
     <div class="grid grid-cols-[1.6fr_1fr] gap-5 mb-5 max-[1024px]:grid-cols-1">
-        {{-- worker fleet --}}
-        <div class="card card--flat overflow-hidden">
+        {{-- worker fleet — LIVE (kraite.fleet.servers ⋈ Redis heartbeat keys) --}}
+        <div class="card card--flat overflow-hidden"
+             x-data="systemDash(@js(route('system.dashboard.data')))" x-init="init()">
             <x-ui.card-head icon="server" title="Worker fleet" :accent="true">
                 <x-slot:right>
                     <div class="flex items-center gap-3">
-                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums">6 healthy · 1 degraded · 1 draining</span>
-                        <button type="button" class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out bg-transparent text-fg-3 hover:bg-hover hover:text-fg-1 h-[30px] px-2.5 text-[12px]">
-                            <x-feathericon-zap class="w-[13px] h-[13px]" stroke-width="1.75"/>Deploy
+                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
+                              x-text="loaded ? `${counts().online} online · ${counts().stale} stale · ${counts().missing} missing` : 'loading…'"></span>
+                        <button type="button" @click="refresh()" :disabled="loading"
+                                class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out bg-transparent text-fg-3 hover:bg-hover hover:text-fg-1 h-[30px] px-2.5 text-[12px] disabled:opacity-50">
+                            <x-feathericon-refresh-cw class="w-[13px] h-[13px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>Sync
                         </button>
                     </div>
                 </x-slot:right>
             </x-ui.card-head>
-            <div class="hidden md:grid grid-cols-[minmax(150px,1.5fr)_120px_1fr_1fr_70px_64px_72px] items-center gap-4 py-2 px-5 border-b border-line-soft font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
+            <div class="hidden md:grid grid-cols-[minmax(150px,1.4fr)_104px_1fr_1fr_1fr_64px_minmax(96px,1fr)] items-center gap-4 py-2 px-5 border-b border-line-soft font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
                 <span>Node</span><span>Status</span><span>CPU</span><span>Memory</span>
-                <span class="text-right max-[1024px]:hidden">Latency</span><span class="text-right max-[1024px]:hidden">Load</span><span class="text-right max-[1024px]:hidden">Build</span>
+                <span class="max-[1024px]:hidden">Disk</span><span class="text-right max-[1024px]:hidden">Uptime</span><span class="max-[1024px]:hidden">Services</span>
             </div>
-            @foreach($workers as $w)
-                <div class="grid grid-cols-[minmax(150px,1.5fr)_120px_1fr_1fr_70px_64px_72px] items-center gap-4 py-3 px-5 border-b border-line-soft last:border-b-0 max-[1024px]:grid-cols-[minmax(140px,1.5fr)_110px_1fr_1fr] max-[640px]:px-4 transition-colors duration-fast"
-                     @if($w['state'] === 'degraded') style="background: color-mix(in srgb, var(--warn) 7%, transparent)" @endif>
+
+            {{-- loading / empty --}}
+            <div x-show="!loaded" class="py-10 text-center font-mono text-[11px] text-fg-mute">Loading fleet…</div>
+
+            <template x-for="node in fleet" :key="node.hostname">
+                <div class="grid grid-cols-[minmax(150px,1.4fr)_104px_1fr_1fr_1fr_64px_minmax(96px,1fr)] items-center gap-4 py-3 px-5 border-b border-line-soft last:border-b-0 max-[1024px]:grid-cols-[minmax(140px,1.5fr)_104px_1fr_1fr] max-[640px]:px-4 transition-colors duration-fast"
+                     :style="node.status === 'stale' ? 'background: color-mix(in srgb, var(--warn) 7%, transparent)' : (node.status === 'missing' ? 'background: color-mix(in srgb, var(--danger) 6%, transparent)' : '')">
+                    {{-- node: type + hostname + ip --}}
                     <div class="flex items-center gap-2.5 min-w-0">
-                        <span class="font-mono text-[10px] font-bold tracking-[0.06em] text-fg-mute w-[34px] flex-shrink-0">{{ $w['code'] }}</span>
+                        <span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-mute w-[44px] flex-shrink-0" x-text="node.type ?? '—'"></span>
                         <div class="flex flex-col leading-[1.2] min-w-0">
-                            <span class="font-mono text-[12.5px] font-semibold text-fg-1 tracking-[0.01em] whitespace-nowrap">{{ $w['id'] }}</span>
-                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em] whitespace-nowrap">{{ $w['region'] }} · up {{ $w['up'] }}</span>
+                            <span class="font-mono text-[12.5px] font-semibold text-fg-1 tracking-[0.01em] whitespace-nowrap inline-flex items-center gap-1.5">
+                                <span x-text="node.hostname"></span>
+                                <span x-show="node.recently_rebooted" class="font-mono text-[8px] font-bold tracking-[0.06em] uppercase py-px px-1 rounded-chip" style="color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)">rebooted</span>
+                            </span>
+                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em] whitespace-nowrap" x-text="node.ip_address ?? '—'"></span>
                         </div>
                     </div>
-                    <x-ui.health-chip :state="$w['state']"/>
-                    <x-ui.usage-bar :pct="$w['cpu']" label="CPU"/>
-                    <x-ui.usage-bar :pct="$w['mem']" label="MEM"/>
-                    <div class="flex flex-col items-end leading-tight max-[1024px]:hidden">
-                        <span class="font-mono text-[12px] font-semibold tabular-nums" style="color: {{ $w['lat'] >= 100 ? 'var(--warn)' : 'var(--fg-1)' }}">{{ $w['lat'] }}ms</span>
-                        <span class="font-mono text-[9px] tracking-[0.06em] uppercase text-fg-mute">latency</span>
+                    {{-- status --}}
+                    <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" :style="`color: ${statusMeta(node.status).color}`">
+                        <span class="w-[6px] h-[6px] rounded-chip" :class="node.status === 'online' && 'animate-pulse'" :style="`background: ${statusMeta(node.status).color}`"></span>
+                        <span x-text="statusMeta(node.status).label"></span>
+                    </span>
+                    {{-- cpu --}}
+                    <div>
+                        <template x-if="node.cpu && node.cpu.percent !== null">
+                            <div class="flex flex-col gap-1 min-w-[64px]">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span>
+                                    <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${node.cpu.percent >= 75 ? barColor(node.cpu.percent) : 'var(--fg-2)'}`" x-text="node.cpu.percent + '%'"></span>
+                                </div>
+                                <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${node.cpu.percent}%; background: ${barColor(node.cpu.percent)}`"></div></div>
+                            </div>
+                        </template>
+                        <span x-show="!node.cpu || node.cpu.percent === null" class="font-mono text-[11px] text-fg-mute">—</span>
                     </div>
-                    <div class="flex flex-col items-end leading-tight max-[1024px]:hidden">
-                        <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1">{{ $w['bots'] }}</span>
-                        <span class="font-mono text-[9px] tracking-[0.06em] uppercase text-fg-mute">bots</span>
+                    {{-- memory --}}
+                    <div>
+                        <template x-if="node.ram && node.ram.percent !== null">
+                            <div class="flex flex-col gap-1 min-w-[64px]">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">MEM</span>
+                                    <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${node.ram.percent >= 75 ? barColor(node.ram.percent) : 'var(--fg-2)'}`" x-text="node.ram.percent + '%'"></span>
+                                </div>
+                                <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${node.ram.percent}%; background: ${barColor(node.ram.percent)}`"></div></div>
+                            </div>
+                        </template>
+                        <span x-show="!node.ram || node.ram.percent === null" class="font-mono text-[11px] text-fg-mute">—</span>
                     </div>
-                    <div class="flex items-center justify-end gap-1.5 max-[1024px]:hidden">
-                        <span class="font-mono text-[10px] text-fg-mute tabular-nums">{{ $w['build'] }}</span>
-                        <button type="button" class="appearance-none bg-transparent border-0 cursor-pointer text-fg-mute hover:text-fg-1 w-[24px] h-[24px] inline-flex items-center justify-center rounded-[6px] hover:bg-hover transition-colors">
-                            <x-feathericon-more-horizontal class="w-4 h-4" stroke-width="1.75"/>
-                        </button>
+                    {{-- disk --}}
+                    <div class="max-[1024px]:hidden">
+                        <template x-if="node.disk && node.disk.percent !== null">
+                            <div class="flex flex-col gap-1 min-w-[64px]">
+                                <div class="flex items-center justify-between gap-2">
+                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">DISK</span>
+                                    <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${node.disk.percent >= 75 ? barColor(node.disk.percent) : 'var(--fg-2)'}`" x-text="node.disk.percent + '%'"></span>
+                                </div>
+                                <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${node.disk.percent}%; background: ${barColor(node.disk.percent)}`"></div></div>
+                            </div>
+                        </template>
+                        <span x-show="!node.disk || node.disk.percent === null" class="font-mono text-[11px] text-fg-mute">—</span>
+                    </div>
+                    {{-- uptime + last sync --}}
+                    <div class="flex flex-col items-end leading-tight max-[1024px]:hidden">
+                        <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1" x-text="uptimeHuman(node.uptime_seconds)"></span>
+                        <span class="font-mono text-[9px] tracking-[0.06em] uppercase text-fg-mute" x-text="node.status === 'missing' ? 'no data' : ('sync ' + ageHuman(node.age_seconds))"></span>
+                    </div>
+                    {{-- supervisor services --}}
+                    <div class="flex items-center gap-[5px] flex-wrap max-[1024px]:hidden">
+                        <span x-show="unitList(node.units).length === 0" class="font-mono text-[10px] text-fg-mute">—</span>
+                        <template x-for="u in unitList(node.units)" :key="u.name">
+                            <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" :title="`${u.name}: ${u.state}`"></span>
+                        </template>
                     </div>
                 </div>
-            @endforeach
+            </template>
         </div>
 
         {{-- right column: regime / deploy / revenue --}}

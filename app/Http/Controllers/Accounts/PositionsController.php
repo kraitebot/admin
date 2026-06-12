@@ -9,6 +9,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\Position;
 
 class PositionsController extends Controller
 {
@@ -180,24 +181,228 @@ class PositionsController extends Controller
             $query->where('user_id', Auth::id());
         }
 
-        $accounts = $query
-            ->orderBy('user_id')
-            ->orderBy('name')
-            ->get()
-            ->map(fn (Account $account) => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'exchange' => $account->apiSystem?->name ?? 'Unknown',
-                'exchange_canonical' => $account->apiSystem?->canonical,
-                'exchange_logo' => $this->exchangeLogoUrl($account->apiSystem?->canonical),
-                'user' => $account->user?->name ?? 'Unknown',
-                'can_trade' => (bool) $account->can_trade,
-            ]);
+        $accountModels = $query->orderBy('user_id')->orderBy('name')->get();
+
+        $accounts = $accountModels->map(fn (Account $account) => [
+            'id' => $account->id,
+            'name' => $account->name,
+            'exchange' => $account->apiSystem?->name ?? 'Unknown',
+            'exchange_canonical' => $account->apiSystem?->canonical,
+            'exchange_logo' => $this->exchangeLogoUrl($account->apiSystem?->canonical),
+            'user' => $account->user?->name ?? 'Unknown',
+            'can_trade' => (bool) $account->can_trade,
+        ]);
+
+        // REAL DATA (DB) for both tables across the user's accounts. The
+        // open table's Liq price + the DB-vs-exchange reconcile sub-row come
+        // from the live exchange (data()) and are NOT wired into this SSR
+        // render yet — Liq shows "—" and the reconcile row is omitted.
+        $accountIds = $accountModels->pluck('id')->all();
+        $with = ['exchangeSymbol.symbol', 'account.apiSystem', 'orders' => fn ($q) => $q->orderBy('id')];
+
+        $openModels = Position::query()
+            ->whereIn('account_id', $accountIds)
+            ->whereIn('status', self::OPEN_POSITION_STATUSES)
+            ->select('positions.*')
+            ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago')
+            ->with($with)
+            ->orderByDesc('opened_at')
+            ->get();
+
+        $closedModels = Position::query()
+            ->whereIn('account_id', $accountIds)
+            ->where('status', 'closed')
+            ->select('positions.*')
+            ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), COALESCE(closed_at, NOW())) as held_seconds')
+            ->selectRaw('TIMESTAMPDIFF(SECOND, closed_at, NOW()) as closed_seconds_ago')
+            ->with($with)
+            ->orderByDesc('closed_at')
+            ->limit(50)
+            ->get();
+
+        $positions = $openModels->map(fn ($p) => $this->mapOpenRow($p))->all();
+        $closed = $closedModels->map(fn ($p) => $this->mapClosedRow($p))->all();
+
+        $details = [];
+        foreach ($openModels as $p) {
+            $details[$p->id] = $this->mapDetail($p, false);
+        }
+        foreach ($closedModels as $p) {
+            $details[$p->id] = $this->mapDetail($p, true);
+        }
 
         return view('accounts.positions', [
             'accounts' => $accounts,
             'isAdmin' => $isAdmin,
+            'positions' => $positions,
+            'closed' => $closed,
+            'details' => $details,
         ]);
+    }
+
+    /** Trailing-zero-trimmed numeric string for display. */
+    private function fmtNum(mixed $v): string
+    {
+        if ($v === null || $v === '') {
+            return '—';
+        }
+
+        return $this->trim((string) $v);
+    }
+
+    /** Human age from a seconds count (e.g. "28h", "2d 4h"). */
+    private function humanAge(?int $seconds): string
+    {
+        $h = (int) round(((int) $seconds) / 3600);
+        if ($h < 1) {
+            return max(1, (int) round(((int) $seconds) / 60)).'m';
+        }
+        if ($h < 24) {
+            return $h.'h';
+        }
+        $d = intdiv($h, 24);
+        $rem = $h % 24;
+
+        return $d.'d'.($rem ? ' '.$rem.'h' : '');
+    }
+
+    /**
+     * Map a DB open position to the open-table row shape. Liq is exchange-only
+     * (not stored) so it renders "—".
+     *
+     * @return array<string, mixed>
+     */
+    private function mapOpenRow($p): array
+    {
+        [$pnl] = $this->computePnl($p);
+        $pnlF = $pnl !== null ? (float) $pnl : 0.0;
+        $marginF = (float) ($p->margin ?? 0);
+        $qtyF = (float) ($p->quantity ?? 0);
+        $mark = $p->exchangeSymbol?->mark_price;
+        $markF = ($mark !== null && (string) $mark !== '') ? (float) $mark : (float) $p->opening_price;
+        $notional = $qtyF * $markF;
+        $limits = $p->orders->where('type', 'LIMIT');
+        $total = max(1, (int) ($p->total_limit_orders ?? $limits->count()));
+        $filled = $limits->where('status', 'FILLED')->count();
+        $statusLower = strtolower((string) $p->status);
+
+        return [
+            'rowId' => $p->id,
+            'sym' => $p->exchangeSymbol?->symbol?->token ?? $p->parsed_trading_pair ?? '—',
+            'market' => $p->parsed_trading_pair ?? ($p->exchangeSymbol?->symbol ?? '—'),
+            'name' => $p->exchangeSymbol?->symbol?->name ?? '',
+            'icon' => $p->exchangeSymbol?->symbol?->image_url,
+            'side' => strtolower((string) $p->direction),
+            'lev' => ((int) $p->leverage).'×',
+            'status' => $statusLower === 'waping' ? 'waped' : ($statusLower === 'opening' ? 'opening' : null),
+            'filled' => $filled.' / '.$total,
+            'open' => $this->fmtNum($p->opening_price),
+            'tp' => $this->fmtNum($p->orders->firstWhere('type', 'PROFIT-LIMIT')?->price ?? $p->first_profit_price),
+            'mark' => ($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—',
+            'liq' => '—',
+            'pnl' => round($pnlF, 2),
+            'size' => $this->fmtNum($p->quantity),
+            'notional' => (int) round($notional),
+            'margin' => (int) round($marginF),
+            'roe' => $marginF > 0 ? round($pnlF / $marginF * 100, 2) : 0.0,
+            'ageH' => round(((int) ($p->opened_seconds_ago ?? 0)) / 3600, 2),
+        ];
+    }
+
+    /**
+     * Map a DB closed position to the closed-table row shape.
+     *
+     * @return array<string, mixed>
+     */
+    private function mapClosedRow($p): array
+    {
+        [$pnl] = $this->computePnl($p);
+        $pnlF = $pnl !== null ? (float) $pnl : 0.0;
+        $marginF = (float) ($p->margin ?? 0);
+
+        return [
+            'rowId' => $p->id,
+            'sym' => $p->exchangeSymbol?->symbol?->token ?? $p->parsed_trading_pair ?? '—',
+            'name' => $p->exchangeSymbol?->symbol?->name ?? '',
+            'icon' => $p->exchangeSymbol?->symbol?->image_url,
+            'side' => strtolower((string) $p->direction),
+            'lev' => ((int) $p->leverage).'×',
+            'entry' => $this->fmtNum($p->opening_price),
+            'exit' => $this->fmtNum($p->closing_price),
+            'size' => $this->fmtNum($p->quantity),
+            'pnl' => round($pnlF, 2),
+            'roe' => $marginF > 0 ? round($pnlF / $marginF * 100, 2) : 0.0,
+            'durH' => round(((int) ($p->held_seconds ?? 0)) / 3600, 2),
+            'closedAgo' => $this->humanAge((int) ($p->closed_seconds_ago ?? 0)),
+            'reason' => $this->closeReason($p),
+        ];
+    }
+
+    /**
+     * Infer a close reason from the position's filled exit orders.
+     * Approximate — there's no stored reason column.
+     */
+    private function closeReason($p): string
+    {
+        $filledExit = $p->orders->first(fn ($o) => strtoupper((string) $o->status) === 'FILLED'
+            && in_array(strtoupper((string) $o->type), ['PROFIT-LIMIT', 'PROFIT-MARKET'], true));
+        if ($filledExit) {
+            return 'tp';
+        }
+
+        $filledStop = $p->orders->first(fn ($o) => in_array(strtoupper((string) $o->status), ['FILLED', 'TRIGGERED'], true)
+            && str_contains(strtoupper((string) $o->type), 'STOP'));
+        if ($filledStop) {
+            return 'stop';
+        }
+
+        return 'manual';
+    }
+
+    /**
+     * Build the expandable detail panel payload from real orders.
+     *
+     * @return array<string, mixed>
+     */
+    private function mapDetail($p, bool $closed): array
+    {
+        [$pnl] = $this->computePnl($p);
+        $mark = $p->exchangeSymbol?->mark_price;
+
+        $orders = $p->orders->map(fn ($o) => [
+            'id' => $o->id,
+            'type' => strtoupper((string) $o->type),
+            'side' => strtoupper((string) $o->side),
+            'status' => strtoupper((string) $o->status),
+            'qty' => $this->fmtNum($o->quantity),
+            'price' => $this->fmtNum($o->price),
+            'opened' => optional($o->opened_at ?? $o->created_at)?->timestamp,
+            'filled' => optional($o->filled_at)?->timestamp,
+        ])->all();
+
+        $heldSeconds = $closed ? (int) ($p->held_seconds ?? 0) : (int) ($p->opened_seconds_ago ?? 0);
+
+        return [
+            'closed' => $closed,
+            'reason' => $closed ? $this->closeReason($p) : null,
+            'exch' => $p->account?->apiSystem?->name ?? 'Exchange',
+            'account' => $p->account?->name ?? '',
+            'openedAt' => optional($p->opened_at ?? $p->created_at)?->timestamp,
+            'closedAt' => $closed ? optional($p->closed_at)?->timestamp : null,
+            'duration' => $this->humanAge($heldSeconds),
+            'leverage' => ((int) $p->leverage).'×',
+            'margin' => (int) round((float) ($p->margin ?? 0)),
+            'qty' => $this->fmtNum($p->quantity),
+            'total' => max(1, (int) ($p->total_limit_orders ?? $p->orders->where('type', 'LIMIT')->count())),
+            'openPrice' => $this->fmtNum($p->opening_price),
+            'markPrice' => $closed ? $this->fmtNum($p->closing_price) : (($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—'),
+            'pnl' => $pnl !== null ? round((float) $pnl, 2) : 0.0,
+            'tpPct' => $p->profit_percentage !== null ? (float) $p->profit_percentage : 0.0,
+            'slPct' => $p->stop_market_percentage !== null ? (float) $p->stop_market_percentage : 0.0,
+            'firstProfit' => $this->fmtNum($p->first_profit_price),
+            'tf' => $p->indicators_timeframe ?? '—',
+            'orders' => $orders,
+        ];
     }
 
     public function data(Request $request): JsonResponse

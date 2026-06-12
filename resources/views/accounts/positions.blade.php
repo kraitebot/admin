@@ -1,10 +1,10 @@
 @php
-    // ============================================================
-    // MOCK DATA — design-fidelity port. Wire to backend later.
-    // The first-run gate below is REAL: an account that has never
-    // opened a single position gets the first-run empty state
-    // instead of the mock tables.
-    // ============================================================
+    // Positions — REAL DATA (DB), rendered server-side from
+    // PositionsController::index ($positions, $closed, $details). NOT wired:
+    //  - Liq price (exchange-only) shows "—"
+    //  - the DB-vs-exchange reconcile sub-row (live data() endpoint) is omitted
+    //  - the "All accounts" picker is display-only (positions already span all
+    //    of the user's accounts); per-account filtering isn't wired yet
     $accountIds = auth()->user()->is_admin
         ? null
         : Kraite\Core\Models\Account::where('user_id', auth()->id())->pluck('id');
@@ -12,48 +12,7 @@
         ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
         ->exists();
 
-    $regime = 'ELEVATED';
-    $score = 0.63;
-
-    $regimes = [
-        'CALM'        => ['color' => 'var(--bsi-calm)'],
-        'WATCH'       => ['color' => 'var(--bsi-watch)'],
-        'ELEVATED'    => ['color' => 'var(--bsi-cascade)'],
-        'CASCADE'     => ['color' => 'var(--bsi-cascade)'],
-        'BLACK SWAN'  => ['color' => 'var(--bsi-blackswan)'],
-    ];
-    $r = $regimes[$regime] ?? $regimes['CALM'];
-
-    // ---- open positions ----
-    $positions = [
-        ['sym' => 'BTC',  'market' => 'BTC-PERP',  'name' => 'Bitcoin',   'cmcId' => 1,     'side' => 'long',  'lev' => '3×', 'filled' => '1 / 4', 'open' => '67,420.00', 'tp' => '70,250.00', 'pnl' => 1266.93,  'mark' => '68,910.50', 'size' => '0.850',  'notional' => 57307, 'margin' => 19102, 'liq' => '45,910.00', 'roe' => 6.63,  'ageH' => 28],
-        ['sym' => 'ETH',  'market' => 'ETH-PERP',  'name' => 'Ethereum',  'cmcId' => 1027,  'status' => 'opening', 'side' => 'long',  'lev' => '3×', 'filled' => '0 / 4', 'open' => '3,512.00',  'tp' => '3,624.00',  'pnl' => 448.88,   'mark' => '3,548.17',  'size' => '12.40',  'notional' => 43549, 'margin' => 14516, 'liq' => '2,389.50',  'roe' => 3.09,  'ageH' => 0.2],
-        ['sym' => 'SOL',  'market' => 'SOL-PERP',  'name' => 'Solana',    'cmcId' => 5426,  'status' => 'waped',   'side' => 'short', 'lev' => '2×', 'filled' => '2 / 4', 'open' => '168.40',    'tp' => '162.10',    'pnl' => 1386.00,  'mark' => '162.10',    'size' => '308',    'notional' => 51867, 'margin' => 25933, 'liq' => '244.10',    'roe' => 5.34,  'ageH' => 54],
-        ['sym' => 'ARB',  'market' => 'ARB-PERP',  'name' => 'Arbitrum',  'cmcId' => 11841, 'side' => 'long',  'lev' => '4×', 'filled' => '0 / 4', 'open' => '0.8920',    'tp' => '0.9180',    'pnl' => -113.40,  'mark' => '0.8710',    'size' => '5,400',  'notional' => 4817,  'margin' => 1204,  'liq' => '0.6920',    'roe' => -9.42, 'ageH' => 8],
-        ['sym' => 'AVAX', 'market' => 'AVAX-PERP', 'name' => 'Avalanche', 'cmcId' => 5805,  'side' => 'short', 'lev' => '2×', 'filled' => '1 / 4', 'open' => '38.20',     'tp' => '36.40',     'pnl' => -80.75,   'mark' => '39.05',     'size' => '95',     'notional' => 3629,  'margin' => 1814,  'liq' => '55.10',     'roe' => -4.45, 'ageH' => 14],
-        ['sym' => 'DOGE', 'market' => 'DOGE-PERP', 'name' => 'Dogecoin',  'cmcId' => 74,    'side' => 'long',  'lev' => '3×', 'filled' => '0 / 4', 'open' => '0.16200',   'tp' => '0.16850',   'pnl' => 140.00,   'mark' => '0.16550',   'size' => '43,000', 'notional' => 6966,  'margin' => 2322,  'liq' => '0.11000',   'roe' => 6.03,  'ageH' => 22],
-        ['sym' => 'LINK', 'market' => 'LINK-PERP', 'name' => 'Chainlink', 'cmcId' => 1975,  'side' => 'long',  'lev' => '3×', 'filled' => '1 / 4', 'open' => '18.92',     'tp' => '20.10',     'pnl' => 318.50,   'mark' => '19.25',     'size' => '970',    'notional' => 18352, 'margin' => 6117,  'liq' => '12.85',     'roe' => 5.21,  'ageH' => 26],
-        ['sym' => 'OP',   'market' => 'OP-PERP',   'name' => 'Optimism',  'cmcId' => 11840, 'side' => 'long',  'lev' => '4×', 'filled' => '0 / 4', 'open' => '2.480',     'tp' => '2.610',     'pnl' => -54.20,   'mark' => '2.451',     'size' => '1,850',  'notional' => 4588,  'margin' => 1147,  'liq' => '1.9250',    'roe' => -4.73, 'ageH' => 6],
-        ['sym' => 'XRP',  'market' => 'XRP-PERP',  'name' => 'XRP',       'cmcId' => 52,    'side' => 'short', 'lev' => '2×', 'filled' => '2 / 4', 'open' => '0.5420',    'tp' => '0.5180',    'pnl' => 412.00,   'mark' => '0.5278',    'size' => '13,800', 'notional' => 7480,  'margin' => 3740,  'liq' => '0.7850',    'roe' => 11.02, 'ageH' => 16],
-        ['sym' => 'INJ',  'market' => 'INJ-PERP',  'name' => 'Injective', 'cmcId' => 7226,  'side' => 'short', 'lev' => '2×', 'filled' => '0 / 4', 'open' => '24.80',     'tp' => '23.40',     'pnl' => -38.90,   'mark' => '25.05',     'size' => '310',    'notional' => 7688,  'margin' => 3844,  'liq' => '36.10',     'roe' => -1.01, 'ageH' => 10],
-    ];
-
-    // ---- closed / historical positions (realized) ----
-    // reason: 'tp' (target hit) · 'stop' (stop-loss) · 'manual' · 'regime' (closed by Black-Swan halt)
-    $closed = [
-        ['sym' => 'LINK', 'name' => 'Chainlink', 'cmcId' => 1975,  'side' => 'long',  'lev' => '3×', 'entry' => '17.80',     'exit' => '18.92',     'size' => '970',    'pnl' => 312.40,   'roe' => 6.0,  'durH' => 28, 'closedAgo' => '1h',    'reason' => 'tp'],
-        ['sym' => 'APT',  'name' => 'Aptos',     'cmcId' => 21794, 'side' => 'short', 'lev' => '2×', 'entry' => '8.900',     'exit' => '9.140',     'size' => '1,200',  'pnl' => -96.10,   'roe' => -2.7, 'durH' => 3,  'closedAgo' => '3h',    'reason' => 'stop'],
-        ['sym' => 'BTC',  'name' => 'Bitcoin',   'cmcId' => 1,     'side' => 'long',  'lev' => '3×', 'entry' => '64,200.00', 'exit' => '66,980.00', 'size' => '0.620',  'pnl' => 1722.60,  'roe' => 8.1,  'durH' => 41, 'closedAgo' => '6h',    'reason' => 'tp'],
-        ['sym' => 'SUI',  'name' => 'Sui',       'cmcId' => 20947, 'side' => 'long',  'lev' => '3×', 'entry' => '1.840',     'exit' => '1.762',     'size' => '3,400',  'pnl' => -265.20,  'roe' => -7.2, 'durH' => 11, 'closedAgo' => '9h',    'reason' => 'stop'],
-        ['sym' => 'SOL',  'name' => 'Solana',    'cmcId' => 5426,  'side' => 'short', 'lev' => '2×', 'entry' => '178.20',    'exit' => '171.40',    'size' => '290',    'pnl' => 1972.00,  'roe' => 7.6,  'durH' => 33, 'closedAgo' => '12h',   'reason' => 'tp'],
-        ['sym' => 'DOGE', 'name' => 'Dogecoin',  'cmcId' => 74,    'side' => 'long',  'lev' => '3×', 'entry' => '0.15800',   'exit' => '0.16240',   'size' => '38,000', 'pnl' => 167.20,   'roe' => 5.4,  'durH' => 19, 'closedAgo' => '14h',   'reason' => 'manual'],
-        ['sym' => 'ETH',  'name' => 'Ethereum',  'cmcId' => 1027,  'side' => 'long',  'lev' => '3×', 'entry' => '3,640.00',  'exit' => '3,512.00',  'size' => '9.80',   'pnl' => -1254.40, 'roe' => -8.8, 'durH' => 7,  'closedAgo' => '18h',   'reason' => 'regime'],
-        ['sym' => 'AVAX', 'name' => 'Avalanche', 'cmcId' => 5805,  'side' => 'short', 'lev' => '2×', 'entry' => '41.20',     'exit' => '38.60',     'size' => '120',    'pnl' => 312.00,   'roe' => 5.1,  'durH' => 22, 'closedAgo' => '1d',    'reason' => 'tp'],
-        ['sym' => 'TIA',  'name' => 'Celestia',  'cmcId' => 22861, 'side' => 'short', 'lev' => '2×', 'entry' => '9.800',     'exit' => '10.120',    'size' => '2,100',  'pnl' => -134.40,  'roe' => -3.6, 'durH' => 5,  'closedAgo' => '1d 4h', 'reason' => 'stop'],
-        ['sym' => 'XRP',  'name' => 'XRP',       'cmcId' => 52,    'side' => 'long',  'lev' => '3×', 'entry' => '0.5180',    'exit' => '0.5420',    'size' => '12,000', 'pnl' => 288.00,   'roe' => 6.7,  'durH' => 26, 'closedAgo' => '1d 8h', 'reason' => 'tp'],
-    ];
-
-    // ---- formatters ----
+    // ---- formatters (shared with partials.position-detail) ----
     $num = fn (string|int|float $s): float => (float) str_replace(',', '', (string) $s);
     $usd0 = fn (float|int $n): string => '$' . number_format(round($n));
     $usdSigned = fn (float $n): string => ($n >= 0 ? '+$' : '−$') . number_format(abs($n), 2);
@@ -69,25 +28,7 @@
         $rem = round(fmod($h, 24));
         return $d . 'd' . ($rem ? ' ' . $rem . 'h' : '');
     };
-    $fmtTime = fn (int $ts): string => gmdate('M j, H:i', $ts) . ' UTC';
-    $decimalsOf = function (string $s): int {
-        $parts = explode('.', $s);
-        return isset($parts[1]) ? strlen($parts[1]) : 0;
-    };
-    $fmtPrice = fn (float $n, int $dec): string => number_format($n, $dec);
-    $parseAgo = function (string $s): float {
-        $h = 0.0;
-        if (preg_match('/(\d+)\s*d/', $s, $m)) {
-            $h += (int) $m[1] * 24;
-        }
-        if (preg_match('/(\d+)\s*h/', $s, $m)) {
-            $h += (int) $m[1];
-        }
-        if (preg_match('/(\d+)\s*m/', $s, $m)) {
-            $h += (int) $m[1] / 60;
-        }
-        return $h ?: 1.0;
-    };
+    $fmtTime = fn (?int $ts): string => $ts ? gmdate('M j, H:i', $ts) . ' UTC' : '—';
 
     // close-reason metadata
     $reasonMeta = [
@@ -97,115 +38,17 @@
         'regime' => ['label' => 'REGIME', 'color' => 'var(--bsi-blackswan)'],
     ];
 
-    // ---- per-position record (derived deterministically from the row) ----
-    // In production these fields resolve from exchange_symbol_id / account_id
-    // and the order log; here they're synthesised from the position so the
-    // panel reads real. NOW is frozen so records stay deterministic.
-    $NOW = strtotime('2026-06-02T14:30:00Z');
-    $buildDetail = function (array $p) use ($num, $decimalsOf, $fmtPrice, $fmtAge, $parseAgo, $NOW): array {
-        $closed = array_key_exists('exit', $p);
-        $seed = 0;
-        foreach (str_split($p['sym']) as $c) {
-            $seed = (($seed * 31) + ord($c)) & 0xFFFFFFFF;
-        }
-        $rng = function () use (&$seed): float {
-            $seed = ($seed * 1103515245 + 12345) & 0x7FFFFFFF;
-            return $seed / 0x7FFFFFFF;
-        };
-        $long = $p['side'] === 'long';
-        $openStr = $closed ? $p['entry'] : $p['open'];
-        $dec = $decimalsOf($openStr);
-        $openN = $num($openStr);
-        $qtyDec = $decimalsOf($p['size']);
-        $qtyN = $num($p['size']);
-        $fmtQty = fn (float $frac): string => number_format($qtyN * $frac, $qtyDec);
-
-        $durH = $closed ? $p['durH'] : $p['ageH'];
-        $closedAt = $closed ? $NOW - (int) round($parseAgo($p['closedAgo']) * 3600) : null;
-        $openedAt = ($closed ? $closedAt : $NOW) - (int) round($durH * 3600);
-
-        $levN = ((int) $p['lev']) ?: 2;
-        $notional = $closed ? (int) round($openN * $qtyN) : $p['notional'];
-        $margin = $closed ? (int) round($notional / $levN) : $p['margin'];
-
-        $tpPct = $closed ? (4 + $rng() * 3) : abs(($num($p['tp']) - $openN) / $openN) * 100;
-        $slPct = 6 + (int) round($rng() * 5); // frozen at open
-        $tf = ['5m', '15m', '1h', '4h'][(int) floor($rng() * 4)];
-        $firstProfit = $closed ? $fmtPrice($openN * (1 + ($long ? 1 : -1) * $tpPct / 100), $dec) : $p['tp'];
-
-        $total = $closed ? 4 : (((int) explode('/', $p['filled'])[1]) ?: 4);
-        $filledN = $closed ? (1 + (int) floor($rng() * 3)) : (int) $p['filled'];
-
-        // orders — entry market, limit ladder (avg-down), then the close (open:
-        // live profit target; closed: the realized close + cancelled ladder)
-        $entrySide = $long ? 'BUY' : 'SELL';
-        $closeSide = $long ? 'SELL' : 'BUY';
-        $orders = [];
-        $orders[] = ['type' => 'MARKET', 'side' => $entrySide, 'status' => 'FILLED', 'qty' => $fmtQty(0.40), 'price' => $fmtPrice($openN, $dec), 'opened' => $openedAt, 'filled' => $openedAt];
-        // demo: BTC's entry order is OUT OF SYNC with the exchange — the
-        // exchange reports a slightly different fill qty/price and a later
-        // fill timestamp than Kraite's DB. Drives the reconcile sub-row.
-        if (! $closed && $p['sym'] === 'BTC') {
-            $orders[0]['sync'] = [
-                'type' => 'MARKET',
-                'side' => $entrySide,
-                'status' => 'FILLED',
-                'qty' => number_format($qtyN * 0.40 + 0.002, $qtyDec),
-                'price' => $fmtPrice($openN - 1.5, $dec),
-                'opened' => $openedAt,
-                'filled' => $openedAt + 60,
-            ];
-        }
-        for ($i = 0; $i < $total; $i++) {
-            $done = $i < $filledN;
-            $px = $openN * (1 + ($long ? -1 : 1) * 0.012 * ($i + 1));
-            $t = $openedAt + ($i + 1) * 22 * 60;
-            $orders[] = ['type' => 'LIMIT', 'side' => $entrySide, 'status' => $done ? 'FILLED' : ($closed ? 'CANCELLED' : 'NEW'), 'qty' => $fmtQty(0.15), 'price' => $fmtPrice($px, $dec), 'opened' => $openedAt, 'filled' => $done ? $t : null];
-        }
-        if ($closed) {
-            $tpHit = $p['reason'] === 'tp';
-            $orders[] = ['type' => $tpHit ? 'PROFIT' : 'MARKET', 'side' => $closeSide, 'status' => 'FILLED', 'qty' => $fmtQty(1.0), 'price' => $p['exit'], 'opened' => $tpHit ? $openedAt : $closedAt, 'filled' => $closedAt];
-        } else {
-            if (($p['status'] ?? null) === 'waped') {
-                $orders[] = ['type' => 'CANCEL-MARKET', 'side' => $closeSide, 'status' => 'CANCELLED', 'qty' => $fmtQty(0.15), 'price' => $fmtPrice($openN * (1 + ($long ? -1 : 1) * 0.05), $dec), 'opened' => $openedAt + 90 * 60, 'filled' => null];
-            }
-            $orders[] = ['type' => 'PROFIT', 'side' => $closeSide, 'status' => 'NEW', 'qty' => $fmtQty(1.0), 'price' => $p['tp'], 'opened' => $openedAt, 'filled' => null];
-        }
-
-        return [
-            'closed' => $closed,
-            'reason' => $p['reason'] ?? null,
-            'exch' => ['Binance Futures', 'Bybit', 'OKX'][$seed % 3],
-            'account' => ['Kraite-Main', 'Kraite-Alpha', 'Hedge-01', 'Scout-02'][($seed >> 3) % 4],
-            'openedAt' => $openedAt,
-            'closedAt' => $closedAt,
-            'duration' => $fmtAge($durH),
-            'leverage' => $p['lev'],
-            'margin' => $margin,
-            'qty' => $p['size'],
-            'total' => $total,
-            'openPrice' => $openStr,
-            'markPrice' => $closed ? $p['exit'] : $p['mark'],
-            'pnl' => $p['pnl'],
-            'tpPct' => $tpPct,
-            'slPct' => $slPct,
-            'firstProfit' => $firstProfit,
-            'tf' => $tf,
-            'orders' => $orders,
-        ];
-    };
-
-    // ---- aggregate summary strip ----
+    // ---- aggregate summary strip (from real open positions) ----
     $longCount = count(array_filter($positions, fn ($p) => $p['side'] === 'long'));
     $shortCount = count($positions) - $longCount;
     $exposure = array_sum(array_column($positions, 'notional'));
     $marginUsed = array_sum(array_column($positions, 'margin'));
     $unrealized = array_sum(array_column($positions, 'pnl'));
-    $aggRoe = ($unrealized / $marginUsed) * 100;
+    $aggRoe = $marginUsed > 0 ? ($unrealized / $marginUsed) * 100 : 0.0;
     $aggCells = [
         ['label' => 'Open positions', 'value' => (string) count($positions), 'sub' => $longCount . 'L · ' . $shortCount . 'S', 'tone' => null],
         ['label' => 'Total exposure', 'value' => $usd0($exposure), 'sub' => 'NOTIONAL', 'tone' => null],
-        ['label' => 'Margin used', 'value' => $usd0($marginUsed), 'sub' => round(($marginUsed / $exposure) * 100) . '% OF NOTIONAL', 'tone' => null],
+        ['label' => 'Margin used', 'value' => $usd0($marginUsed), 'sub' => ($exposure > 0 ? round(($marginUsed / $exposure) * 100) : 0) . '% OF NOTIONAL', 'tone' => null],
         ['label' => 'Unrealized P&L', 'value' => $usdSigned($unrealized), 'sub' => $pctSigned($aggRoe) . ' ROE', 'tone' => $unrealized >= 0 ? 'up' : 'down'],
         ['label' => 'Capacity', 'value' => count($positions) . ' / 12', 'sub' => 'MAX 6 / DIR', 'tone' => null],
     ];
@@ -216,14 +59,12 @@
     usort($closed, fn ($a, $b) => $b['pnl'] <=> $a['pnl']);
     $closedPer = 6;
 
-    $downAccount = ['ex' => 'OKX', 'tag' => 'arb', 'note' => 'last seen 4m ago'];
-
     // shared row cell class strings (color applied per cell to avoid conflicts)
     $tdNum = 'py-[12px] px-3 border-b border-line-soft whitespace-nowrap tabular-nums font-mono text-[12.5px] text-right';
     $tdNumClosed = 'py-[11px] px-3 border-b border-line-soft whitespace-nowrap tabular-nums font-mono text-[12.5px] text-right';
 @endphp
 
-<x-app-layout active="positions" :title="'Kraite — Positions'" :showBanner="true" :downAccount="$downAccount">
+<x-app-layout active="positions" :title="'Kraite — Positions'">
 
     <script>
         // Shared controller for the sortable / filterable / pageable position
@@ -231,6 +72,11 @@
         // expandable detail row); sorting reorders them in the DOM, filtering
         // and pagination toggle their visibility.
         window.posTable = (cfg) => ({
+            // Per-section UI state (which row is expanded, sort, filter, page)
+            // is persisted in a global store keyed by cfg.key, so it survives
+            // the 10s content swap — an expanded row stays open, the chosen
+            // sort/filter/page stick.
+            key: cfg.key || cfg.sortKey,
             filter: 'ALL',
             sortKey: cfg.sortKey,
             sortDir: 'desc',
@@ -239,15 +85,34 @@
             pageCount: 1,
             count: 0,
             open: null,
-            init() { this.update(); },
-            setFilter(f) { this.filter = f; this.page = 0; this.open = null; this.update(); },
+            _store() {
+                if (! window.Alpine.store('posUi')) window.Alpine.store('posUi', {});
+                return window.Alpine.store('posUi');
+            },
+            init() {
+                const s = this._store()[this.key] || {};
+                this.filter = s.filter ?? 'ALL';
+                this.sortKey = s.sortKey ?? cfg.sortKey;
+                this.sortDir = s.sortDir ?? 'desc';
+                this.page = s.page ?? 0;
+                this.open = s.open ?? null;
+                this.update();
+            },
+            persist() {
+                this._store()[this.key] = {
+                    filter: this.filter, sortKey: this.sortKey, sortDir: this.sortDir,
+                    page: this.page, open: this.open,
+                };
+            },
+            setFilter(f) { this.filter = f; this.page = 0; this.open = null; this.persist(); this.update(); },
             setSort(key) {
                 this.sortDir = this.sortKey === key ? (this.sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
                 this.sortKey = key;
+                this.persist();
                 this.update();
             },
-            setPage(p) { this.page = p; this.open = null; this.update(); },
-            toggle(id) { this.open = this.open === id ? null : id; },
+            setPage(p) { this.page = p; this.open = null; this.persist(); this.update(); },
+            toggle(id) { this.open = this.open === id ? null : id; this.persist(); },
             update() {
                 const table = this.$refs.table;
                 const rows = Array.from(table.querySelectorAll('tbody[data-row]'));
@@ -276,7 +141,114 @@
                 visible.forEach((r, i) => { if (i >= from && i < to) r.style.display = ''; });
             },
         });
+
+        // Page-level auto-refresh + reconcile. Two independent cadences,
+        // both only while the user is on this page:
+        //   • 10s — re-fetch the page, swap the #posContent fragment, re-init
+        //     the Alpine inside (posTable, x-collapse). Cheap DB read.
+        //   • 5min — reconcile DB vs exchange via the live data() endpoint
+        //     (one call per account). Drift lands in the global `reconcile`
+        //     store keyed by position id, so a drifting row auto-expands and
+        //     shows a warning icon — and survives the 10s content swaps.
+        window.positionsRefresh = (url, dataUrl, accountIds) => ({
+            url,
+            dataUrl,
+            accountIds: accountIds || [],
+            spinning: false,
+            _timer: null,
+            _recTimer: null,
+            init() {
+                if (! window.Alpine.store('reconcile')) {
+                    window.Alpine.store('reconcile', { drift: {}, orderDrift: {}, orphans: 0, checking: false, lastAt: null, apiError: null });
+                }
+                if (this.$refs.content) {
+                    this._timer = setInterval(() => this.refresh(), 10000);
+                    this.reconcile();                                       // initial check on landing
+                    this._recTimer = setInterval(() => this.reconcile(), 300000);  // every 5 min
+                }
+            },
+            // wire:navigate swaps the body but the intervals outlive the DOM
+            destroy() {
+                if (this._timer) clearInterval(this._timer);
+                if (this._recTimer) clearInterval(this._recTimer);
+                this._timer = this._recTimer = null;
+            },
+            async refresh() {
+                const el = this.$refs.content;
+                if (! el || this.spinning) {
+                    return;
+                }
+                const started = Date.now();
+                this.spinning = true;
+                try {
+                    const res = await fetch(this.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                    if (res.ok) {
+                        const doc = new DOMParser().parseFromString(await res.text(), 'text/html');
+                        const fresh = doc.getElementById('posContent');
+                        if (fresh) {
+                            if (window.Alpine?.destroyTree) window.Alpine.destroyTree(el);
+                            el.innerHTML = fresh.innerHTML;
+                            if (window.Alpine?.initTree) window.Alpine.initTree(el);
+                        }
+                    }
+                } finally {
+                    // Hold the spin ≥1s so a fast local fetch still reads as a sync.
+                    setTimeout(() => { this.spinning = false; }, Math.max(0, 1000 - (Date.now() - started)));
+                }
+            },
+            // Live DB-vs-exchange reconcile across every account on the page.
+            async reconcile() {
+                const store = window.Alpine.store('reconcile');
+                if (store.checking) {
+                    return;
+                }
+                store.checking = true;
+                const drift = {};
+                const orderDrift = {};
+                let orphans = 0;
+                let apiError = null;
+                try {
+                    for (const id of this.accountIds) {
+                        const res = await fetch(`${this.dataUrl}?account_id=${id}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                        if (! res.ok) {
+                            continue;
+                        }
+                        const json = await res.json();
+                        (json.pairs || []).forEach((pair) => {
+                            const posFields = pair.position_drift_fields || [];
+                            const driftingOrders = (pair.orders || []).filter((o) => o.status && o.status !== 'synced');
+                            const misaligned = (pair.status && pair.status !== 'synced') || posFields.length > 0 || driftingOrders.length > 0;
+                            // Position-level drift, keyed by DB position id (lines up with rowId).
+                            if (misaligned && pair.db && pair.db.id) {
+                                drift[pair.db.id] = { status: pair.status, posFields, orderDrift: driftingOrders.length };
+                            }
+                            // Per-order drift, keyed by DB order id, so the exact
+                            // order is marked and its exchange values are shown.
+                            driftingOrders.forEach((o) => {
+                                if (o.db && o.db.id) {
+                                    orderDrift[o.db.id] = { status: o.status, fields: o.drift_fields || [], exchange: o.exchange };
+                                }
+                            });
+                        });
+                        orphans += (json.orphan_orders || []).length;
+                        if (json.api_error) {
+                            apiError = json.api_error;
+                        }
+                    }
+                    store.drift = drift;
+                    store.orderDrift = orderDrift;
+                    store.orphans = orphans;
+                    store.apiError = apiError;
+                    store.lastAt = Date.now();
+                } finally {
+                    store.checking = false;
+                }
+            },
+        });
     </script>
+
+    <div x-data="positionsRefresh('{{ route('accounts.positions') }}', '{{ route('accounts.positions.data') }}', @js($accounts->pluck('id')->values()))"
+         @positions-reconcile.window="reconcile()">
 
     {{-- ===================== PAGE HEADER ===================== --}}
     <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -288,15 +260,23 @@
             <div class="text-[13px] text-fg-3 mt-1.5">{{ $noPositions ? 'Full lifecycle — no positions opened or closed yet on this account.' : 'Full lifecycle — open positions, realized history, and per-market detail.' }}</div>
         </div>
         <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
-            {{-- Regime pill --}}
-            <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
-                  style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
-                <span class="w-2 h-2 rounded-chip {{ in_array($regime, ['CASCADE', 'BLACK SWAN'], true) ? 'animate-pulse-soft' : '' }}" style="background: {{ $r['color'] }};"></span>
-                {{ $regime }}<span class="opacity-70 ml-0.5">{{ number_format($score, 2) }}</span>
+            {{-- live reconcile status (5-min DB↔exchange check) --}}
+            <span x-show="$store.reconcile && ($store.reconcile.lastAt || $store.reconcile.checking)" x-cloak
+                  class="inline-flex items-center gap-[7px] font-mono text-[10.5px] tracking-[0.04em]"
+                  :class="(Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) ? 'text-warn' : 'text-fg-mute'">
+                <template x-if="$store.reconcile?.checking">
+                    <span class="inline-flex items-center gap-[6px]"><span class="w-1.5 h-1.5 rounded-chip animate-pulse-soft" style="background: var(--info)"></span>Reconciling…</span>
+                </template>
+                <template x-if="!$store.reconcile?.checking">
+                    <span class="inline-flex items-center gap-[6px]">
+                        <span class="w-1.5 h-1.5 rounded-chip" :style="`background: ${(Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) ? 'var(--warn)' : 'var(--pnl-up-fg)'}`"></span>
+                        <span x-text="(Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) ? ((Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) + ' out of sync') : 'In sync with exchange'"></span>
+                    </span>
+                </template>
             </span>
-            <div class="w-px h-[22px] bg-line"></div>
-            <button type="button" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
-                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
+            <button type="button" @click="refresh()" :disabled="spinning"
+                    class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover disabled:opacity-60">
+                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="spinning ? 'animate-spin' : ''"/>Sync
             </button>
         </div>
     </div>
@@ -314,6 +294,8 @@
             </span>
         </div>
     @else
+    {{-- auto-refreshable region: swapped wholesale on each 10s sync --}}
+    <div id="posContent" x-ref="content">
     {{-- ===================== AGGREGATE SUMMARY STRIP ===================== --}}
     <div class="card flex items-stretch mb-7 max-[900px]:flex-wrap">
         @foreach($aggCells as $i => $c)
@@ -326,7 +308,7 @@
     </div>
 
     {{-- ===================== OPEN POSITIONS ===================== --}}
-    <section class="mb-8" x-data="posTable({ sortKey: 'notional' })">
+    <section class="mb-8" x-data="posTable({ key: 'open', sortKey: 'notional' })">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
                 <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px]">
@@ -363,8 +345,9 @@
                         </tr>
                     </thead>
                     @foreach($positions as $p)
-                        @php $d = $buildDetail($p); @endphp
+                        @php $d = $details[$p['rowId']]; @endphp
                         <tbody data-row
+                               data-pid="{{ $p['rowId'] }}"
                                data-side="{{ strtoupper($p['side']) }}"
                                data-s-sym="{{ $p['sym'] }}"
                                data-s-side="{{ $p['side'] === 'long' ? 1 : 0 }}"
@@ -377,12 +360,13 @@
                                data-s-roe="{{ $p['roe'] }}"
                                data-s-age="{{ $p['ageH'] }}">
                             <tr @click="toggle('{{ $p['sym'] }}')"
-                                :class="open === '{{ $p['sym'] }}' ? 'bg-hover' : ''"
+                                :class="(open === '{{ $p['sym'] }}' || $store.reconcile.drift[{{ $p['rowId'] }}]) ? 'bg-hover' : ''"
+                                :style="$store.reconcile.drift[{{ $p['rowId'] }}] ? 'box-shadow: inset 3px 0 0 var(--warn)' : ''"
                                 class="cursor-pointer transition-colors duration-fast ease-out hover:bg-hover">
                                 <td class="py-[12px] pl-5 pr-3 border-b border-line-soft">
                                     <div class="flex items-center gap-2.5 min-w-0">
-                                        <span class="w-[26px] h-[26px] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/{{ $p['cmcId'] }}.png" alt="{{ $p['sym'] }}" class="block w-full h-full object-cover"/>
+                                        <span class="w-[26px] h-[26px] rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-surface-3 font-mono font-bold text-[10px] text-fg-2">
+                                            @if($p['icon'])<img src="{{ $p['icon'] }}" alt="{{ $p['sym'] }}" class="block w-full h-full object-cover"/>@else{{ mb_substr($p['sym'], 0, 1) }}@endif
                                         </span>
                                         <div class="flex flex-col leading-[1.2] min-w-0">
                                             <span class="font-sans font-bold text-[13px] text-fg-1 tracking-[-0.01em] whitespace-nowrap">{{ $p['market'] }}</span>
@@ -394,6 +378,10 @@
                                         @if(($p['status'] ?? null) === 'waped')
                                             <span class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase text-warn rounded-chip py-0.5 px-1.5" style="background: color-mix(in srgb, var(--warn) 16%, transparent);">WAP'D</span>
                                         @endif
+                                        {{-- live reconcile: DB ↔ exchange mismatch on this position --}}
+                                        <span x-show="$store.reconcile.drift[{{ $p['rowId'] }}]" x-cloak class="inline-flex items-center text-warn flex-shrink-0" title="Out of sync with the exchange">
+                                            <x-feathericon-alert-triangle class="w-[14px] h-[14px]" stroke-width="2"/>
+                                        </span>
                                     </div>
                                 </td>
                                 <td class="py-[12px] px-3 border-b border-line-soft text-left">@include('partials.side-tag', ['side' => $p['side'], 'lev' => $p['lev']])</td>
@@ -407,14 +395,14 @@
                                 <td class="{{ $tdNum }} text-fg-3">{{ $fmtAge($p['ageH']) }}</td>
                                 <td class="py-[12px] pr-5 pl-1 border-b border-line-soft text-right">
                                     <span class="inline-flex text-fg-mute transition-transform duration-fast ease-out"
-                                          :style="open === '{{ $p['sym'] }}' ? 'transform: rotate(180deg)' : ''">
+                                          :style="(open === '{{ $p['sym'] }}' || $store.reconcile.drift[{{ $p['rowId'] }}]) ? 'transform: rotate(180deg)' : ''">
                                         <x-feathericon-chevron-down class="w-4 h-4" stroke-width="1.75"/>
                                     </span>
                                 </td>
                             </tr>
-                            <tr :aria-hidden="open !== '{{ $p['sym'] }}'">
+                            <tr :aria-hidden="!(open === '{{ $p['sym'] }}' || $store.reconcile.drift[{{ $p['rowId'] }}])">
                                 <td colspan="11" class="p-0 border-0">
-                                    <div x-show="open === '{{ $p['sym'] }}'" x-collapse.duration.360ms x-cloak>
+                                    <div x-show="open === '{{ $p['sym'] }}' || $store.reconcile.drift[{{ $p['rowId'] }}]" x-collapse.duration.360ms x-cloak>
                                         @include('partials.position-detail', ['p' => $p, 'd' => $d])
                                     </div>
                                 </td>
@@ -440,7 +428,7 @@
     </div>
 
     {{-- ===================== CLOSED POSITIONS ===================== --}}
-    <section x-data="posTable({ sortKey: 'pnl', per: {{ $closedPer }} })">
+    <section x-data="posTable({ key: 'closed', sortKey: 'pnl', per: {{ $closedPer }} })">
         <div class="flex items-end justify-between gap-4 mb-4 max-[640px]:flex-col max-[640px]:items-start">
             <div>
                 <div class="font-sans font-semibold text-[16px] text-fg-1 flex items-center gap-[9px]">
@@ -469,10 +457,11 @@
                     </thead>
                     @foreach($closed as $i => $p)
                         @php
-                            $d = $buildDetail($p);
+                            $d = $details[$p['rowId']];
                             $rm = $reasonMeta[$p['reason']] ?? $reasonMeta['manual'];
                         @endphp
                         <tbody data-row
+                               data-pid="{{ $p['rowId'] }}"
                                data-side="{{ strtoupper($p['side']) }}"
                                data-s-sym="{{ $p['sym'] }}"
                                data-s-side="{{ $p['side'] === 'long' ? 1 : 0 }}"
@@ -488,8 +477,8 @@
                                 class="cursor-pointer transition-colors duration-fast ease-out hover:bg-hover">
                                 <td class="py-[11px] pl-5 pr-3 border-b border-line-soft">
                                     <div class="flex items-center gap-2.5">
-                                        <span class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
-                                            <img src="https://s2.coinmarketcap.com/static/img/coins/64x64/{{ $p['cmcId'] }}.png" alt="{{ $p['sym'] }}" class="block w-full h-full object-cover"/>
+                                        <span class="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden bg-surface-3 font-mono font-bold text-[10px] text-fg-2">
+                                            @if($p['icon'])<img src="{{ $p['icon'] }}" alt="{{ $p['sym'] }}" class="block w-full h-full object-cover"/>@else{{ mb_substr($p['sym'], 0, 1) }}@endif
                                         </span>
                                         <div class="flex flex-col leading-[1.2]">
                                             <span class="font-sans font-bold text-[12.5px] text-fg-1 tracking-[-0.01em] whitespace-nowrap">{{ $p['sym'] }}-PERP</span>
@@ -550,7 +539,10 @@
             </div>
         </div>
     </section>
+    </div>{{-- /#posContent --}}
     @endif
+
+    </div>{{-- /positionsRefresh --}}
 
     <style>[x-cloak] { display: none !important; }</style>
 </x-app-layout>

@@ -1,66 +1,71 @@
 @php
-    // ============================================================
-    // MOCK DATA — design-fidelity port. Wire to BillingController later
-    // (index payload + start-trading / subscription / pause / resume /
-    // topup endpoints already exist).
-    // ============================================================
-    $regime = 'ELEVATED';
-    $score = 0.63;
+    // Billing — REAL DATA. Display is fed from BillingController::index
+    // (subscriptions, wallet, transactions, accounts, top-up coins) and the
+    // derived state machine below. NOTE: the money-mutating actions (plan
+    // switch, pause/resume, top-up → NOWPayments) are still the design's
+    // local Alpine flow — wiring them to the live POST endpoints is the next
+    // pass (real wallet debits + live gateway redirect; needs sign-off).
 
-    $regimes = [
-        'CALM'        => ['color' => 'var(--bsi-calm)'],
-        'WATCH'       => ['color' => 'var(--bsi-watch)'],
-        'ELEVATED'    => ['color' => 'var(--bsi-cascade)'],
-        'CASCADE'     => ['color' => 'var(--bsi-cascade)'],
-        'BLACK SWAN'  => ['color' => 'var(--bsi-blackswan)'],
-    ];
-    $r = $regimes[$regime] ?? $regimes['CALM'];
+    // ---- plans (real subscription tiers) ----
+    $plans = $subscriptions->map(fn ($s) => [
+        'id' => $s->canonical ?? (string) $s->id,
+        'name' => $s->name,
+        'price' => (float) $s->monthly_rate_usdt,
+        'popular' => $s->max_accounts === null,
+        'blurb' => $s->description ?? '',
+        // Account-count feature is real (max_accounts); the rest are
+        // platform-wide copy (not modelled per-tier in the DB).
+        'features' => [
+            $s->max_accounts === null ? 'Unlimited exchange accounts' : ($s->max_accounts . ' exchange account' . ($s->max_accounts === 1 ? '' : 's')),
+            'Full autonomous trading',
+            'Priority support',
+        ],
+    ])->values()->all();
 
-    $downAccount = ['ex' => 'OKX', 'tag' => 'arb', 'note' => 'last seen 4m ago'];
+    // ---- accepted coins strip (real curated list) ----
+    $coinColors = ['USDT' => '#26a17b', 'USDC' => '#2775ca', 'BTC' => '#f7931a', 'ETH' => '#627eea', 'SOL' => '#9945ff', 'LTC' => '#345d9d', 'BNB' => '#f3ba2f', 'TRX' => '#ff060a', 'XRP' => '#23292f'];
+    $coins = $topUpCoins->map(function ($c) use ($coinColors) {
+        $label = strtoupper($c->display_name ?: $c->canonical);
+        $key = collect($coinColors)->keys()->first(fn ($k) => str_contains($label, $k));
 
-    // plans — two live paid tiers, both with a 7-day free trial
-    $plans = [
-        ['id' => 'basic',     'name' => 'Basic',     'price' => 75,  'popular' => false, 'blurb' => 'Full automation on one account.',
-         'features' => ['1 exchange account', 'Full autonomous trading', 'Priority support']],
-        ['id' => 'unlimited', 'name' => 'Unlimited', 'price' => 150, 'popular' => true,  'blurb' => 'Every account you connect, no caps.',
-         'features' => ['Unlimited exchange accounts', 'Full autonomous trading', 'Priority support']],
-    ];
+        return ['sym' => $label, 'color' => $coinColors[$key] ?? 'var(--fg-mute)'];
+    })->values()->all();
 
-    // accepted coins strip (selection happens on the NOWPayments checkout)
-    $coins = [
-        ['sym' => 'USDT', 'color' => '#26a17b'],
-        ['sym' => 'USDC', 'color' => '#2775ca'],
-        ['sym' => 'BTC',  'color' => '#f7931a'],
-        ['sym' => 'ETH',  'color' => '#627eea'],
-        ['sym' => 'SOL',  'color' => '#9945ff'],
-        ['sym' => 'LTC',  'color' => '#345d9d'],
-        ['sym' => 'BNB',  'color' => '#f3ba2f'],
-    ];
+    // ---- downgrade "keep which active?" picker (real accounts) ----
+    $pickerAccounts = $accounts->map(fn ($a) => [
+        'id' => $a->id,
+        'mono' => mb_strtoupper(mb_substr($a->apiSystem?->name ?? '?', 0, 1)),
+        'ex' => $a->apiSystem?->name ?? 'Unknown',
+        'tag' => $a->name,
+        'equity' => '—',   // per-account equity not surfaced here yet
+    ])->values()->all();
 
-    // exchange accounts for the downgrade "keep which active?" picker
-    $pickerAccounts = [
-        ['mono' => 'B',  'ex' => 'Binance', 'tag' => 'main',    'equity' => '$184,210.08'],
-        ['mono' => 'BY', 'ex' => 'Bybit',   'tag' => 'hedge',   'equity' => '$62,840.12'],
-        ['mono' => 'O',  'ex' => 'OKX',     'tag' => 'arb',     'equity' => '$24,980.55'],
-        ['mono' => 'D',  'ex' => 'Deribit', 'tag' => 'options', 'equity' => '$12,879.67'],
-    ];
+    // ---- wallet ledger (real transactions, newest first) ----
+    $ledger = $transactions->map(fn ($t) => [
+        'date' => optional($t->created_at)->format('M j'),
+        'type' => $t->type,
+        'desc' => $t->description,
+        'amount' => (float) $t->amount_usdt,
+        'balance' => $t->balance_after !== null ? (float) $t->balance_after : null,
+    ])->values()->all();
 
-    // wallet ledger (newest first) — running balance computed client-side
-    // from the live wallet so the demo credit row stays consistent.
-    $ledger = [
-        ['date' => 'Jun 5',  'type' => 'credit-topup',  'desc' => 'Top-up · USDT (Tron · TRC-20)',          'amount' => 75.0],
-        ['date' => 'Jun 1',  'type' => 'debit-sub',     'desc' => 'Subscription · Basic — Jun cycle',       'amount' => -75.0],
-        ['date' => 'May 28', 'type' => 'credit-bonus',  'desc' => 'Top-up bonus · +5% over 100 USDT',       'amount' => 5.0],
-        ['date' => 'May 28', 'type' => 'credit-topup',  'desc' => 'Top-up · ETH (Ethereum)',                'amount' => 60.0],
-        ['date' => 'May 22', 'type' => 'credit-refund', 'desc' => 'Prorate refund · Unlimited → Basic',      'amount' => 12.5],
-        ['date' => 'May 22', 'type' => 'debit-sub',     'desc' => 'Subscription · Basic — mid-cycle start',  'amount' => -50.0],
-        ['date' => 'May 9',  'type' => 'credit-topup',  'desc' => 'Top-up · USDT (BNB Chain · BEP-20)',     'amount' => 20.0],
-        ['date' => 'Apr 26', 'type' => 'credit-topup',  'desc' => 'Top-up · BTC (Bitcoin)',                 'amount' => 30.0],
-        ['date' => 'Apr 18', 'type' => 'debit-admin',   'desc' => 'Admin debit · duplicate credit reversal', 'amount' => -8.0],
-        ['date' => 'Apr 12', 'type' => 'credit-bonus',  'desc' => 'Top-up bonus · first deposit',           'amount' => 4.0],
-        ['date' => 'Apr 12', 'type' => 'credit-topup',  'desc' => 'Top-up · SOL (Solana)',                  'amount' => 36.0],
-        ['date' => 'Mar 27', 'type' => 'credit-admin',  'desc' => 'Admin credit · referral reward',         'amount' => 15.0],
-        ['date' => 'Mar 19', 'type' => 'credit-topup',  'desc' => 'Top-up · USDC (BNB Chain · BEP-20)',     'amount' => 40.0],
+    // ---- derived state machine + Alpine config ----
+    $currentPlan = $tier ? ($tier->canonical ?? (string) $tier->id) : null;
+    $view = ! $tier ? 'no-plan'
+        : ($user->trial_started_at === null ? 'trial-ready'
+        : ($trialActive ? 'trial'
+        : ($isPaused ? 'paused'
+        : ($inClosingMode ? 'read-only' : 'active'))));
+
+    $billingCfg = [
+        'view' => $view,
+        'plan' => $currentPlan,
+        'wallet' => (float) $user->wallet_balance_usdt,
+        'rates' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => (float) $s->monthly_rate_usdt])->all(),
+        'names' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->name])->all(),
+        'renewalLabel' => $renewsAt ? $renewsAt->format('M j, Y') : '—',
+        'daysLeft' => $renewsAt ? max(0, (int) ceil(now()->floatDiffInDays($renewsAt, false))) : 0,
+        'ledger' => $ledger,
     ];
 
     // billing terms (fine print)
@@ -84,64 +89,52 @@
     $btnPrimary = 'appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px text-[12px] bg-accent text-accent-on hover:bg-accent-hover';
     $btnSecondary = 'appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover';
 
-    // ledger badge metadata
+    // ledger badge metadata — keyed by the real WalletTransaction type
+    // constants. A fallback covers any unmapped type.
     $ledgerTypes = [
-        'debit-sub'     => ['label' => 'Subscription',   'icon' => 'refresh-cw',      'credit' => false],
-        'credit-topup'  => ['label' => 'Top-up',         'icon' => 'arrow-down-left', 'credit' => true],
-        'credit-bonus'  => ['label' => 'Bonus',          'icon' => 'gift',            'credit' => true],
-        'credit-refund' => ['label' => 'Prorate refund', 'icon' => 'refresh-cw',      'credit' => true],
-        'credit-admin'  => ['label' => 'Admin credit',   'icon' => 'shield',          'credit' => true],
-        'debit-admin'   => ['label' => 'Admin debit',    'icon' => 'shield',          'credit' => false],
+        'debit_subscription'    => ['label' => 'Subscription',   'icon' => 'refresh-cw',      'credit' => false],
+        'credit_topup'          => ['label' => 'Top-up',         'icon' => 'arrow-down-left', 'credit' => true],
+        'credit_topup_bonus'    => ['label' => 'Bonus',          'icon' => 'gift',            'credit' => true],
+        'credit_prorate_refund' => ['label' => 'Prorate refund', 'icon' => 'refresh-cw',      'credit' => true],
+        'credit_admin'          => ['label' => 'Admin credit',   'icon' => 'shield',          'credit' => true],
+        'debit_admin'           => ['label' => 'Admin debit',    'icon' => 'shield',          'credit' => false],
     ];
 @endphp
 
-<x-app-layout active="billing" :title="'Kraite — Billing'" :showBanner="true" :downAccount="$downAccount">
+<x-app-layout active="billing" :title="'Kraite — Billing'">
 
     <script>
         // Billing page state machine — prepaid USDT wallet, monthly debits.
         // Views: no-plan · trial-ready · trial · paused · read-only · active.
         // Mock opens on 'active'; the other views are wired and reachable via
         // the interactive actions (pause/resume, plan flows) or backend later.
-        window.billingPage = () => {
-            const RATES = { basic: 75, unlimited: 150 };
-            const NAMES = { basic: 'Basic', unlimited: 'Unlimited' };
+        window.billingPage = (cfg) => {
+            const RATES = cfg.rates || {};
+            const NAMES = cfg.names || {};
             const CYCLE_DAYS = 30;
-            const DAYS_LEFT = 25;
-            const RENEWAL_LABEL = 'Jul 1, 2026';
-            const TODAY_LABEL = 'Jun 6, 2026';
-            const BASE_LEDGER = @js($ledger);
+            const BASE_LEDGER = cfg.ledger || [];
 
             const fmt = (n, dp = 4) => Number(n).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp });
+            const defaultAmount = (cfg.plan && RATES[cfg.plan]) ? RATES[cfg.plan] : 20;
 
             return {
-                view: 'active',
-                plan: 'basic',
-                wallet: 164.5,
+                view: cfg.view,
+                plan: cfg.plan,
+                wallet: Number(cfg.wallet) || 0,
                 pausedSince: null,
                 pausing: false,
                 switchTo: null,
                 keepAcct: 0,
                 credited: null,
-                extraLedger: [],
                 trialSecs: 0,
                 invoice: null,
-                amount: '75',
-                renewalLabel: RENEWAL_LABEL,
-                daysLeft: DAYS_LEFT,
+                amount: String(defaultAmount),
+                renewalLabel: cfg.renewalLabel,
+                daysLeft: cfg.daysLeft,
                 _timers: [],
 
                 init() {
-                    // live "credited" moment — one top-up confirmation lands
-                    // shortly after load (demonstrates polling + the flash)
-                    this._timers.push(setTimeout(() => {
-                        if (this.view !== 'active') return;
-                        const amt = 25;
-                        this.wallet = +(this.wallet + amt).toFixed(4);
-                        this.extraLedger.unshift({ date: 'Jun 6', type: 'credit-topup', desc: 'Top-up · USDT (Solana · SPL)', amount: amt });
-                        this.credited = amt;
-                        this._timers.push(setTimeout(() => { this.credited = null; }, 4200));
-                    }, 5200));
-                    // trial countdown tick
+                    // trial countdown tick (display only)
                     this._timers.push(setInterval(() => {
                         if (this.view === 'trial' && this.trialSecs > 0) this.trialSecs--;
                     }, 1000));
@@ -179,7 +172,7 @@
                 // proration preview for the pending switch
                 prorationRefund() {
                     if (!this.switchTo || !this.plan) return 0;
-                    return +((RATES[this.plan] * DAYS_LEFT) / CYCLE_DAYS).toFixed(4);
+                    return +((RATES[this.plan] * this.daysLeft) / CYCLE_DAYS).toFixed(4);
                 },
                 prorationDebit() { return this.switchTo ? RATES[this.switchTo] : 0; },
                 walletAfter() { return +(this.wallet + this.prorationRefund() - this.prorationDebit()).toFixed(4); },
@@ -198,9 +191,14 @@
 
                 // ledger with running balance (top row = balance now)
                 ledgerRows() {
-                    const rows = [...this.extraLedger, ...BASE_LEDGER];
+                    // Real transactions carry their own balance_after snapshot;
+                    // prefer it, fall back to a client running balance if absent.
                     let bal = this.wallet;
-                    return rows.map(m => { const post = bal; bal = bal - m.amount; return { ...m, balance: post }; });
+                    return BASE_LEDGER.map(m => {
+                        const balance = (m.balance !== null && m.balance !== undefined) ? m.balance : bal;
+                        bal = bal - m.amount;
+                        return { ...m, balance };
+                    });
                 },
                 emptyLedger() { return this.view === 'no-plan' || this.view === 'trial-ready'; },
 
@@ -215,7 +213,7 @@
                 },
                 choosePlan(id) { this.plan = id; this.view = 'trial-ready'; },
                 startTrial() { this.trialSecs = 167.5 * 3600; this.view = 'trial'; },
-                pauseConfirm() { this.pausing = false; this.pausedSince = TODAY_LABEL; this.view = 'paused'; },
+                pauseConfirm() { this.pausing = false; this.pausedSince = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); this.view = 'paused'; },
                 resume() { this.view = 'active'; this.pausedSince = null; },
                 topUpGo() { if (!this.belowMin() && this.amtNum() > 0) this.invoice = { amount: this.amtNum() }; },
                 continueGateway() { this.invoice = null; },   // real flow redirects to NOWPayments
@@ -230,7 +228,7 @@
         };
     </script>
 
-    <div x-data="billingPage()">
+    <div x-data="billingPage(@js($billingCfg))">
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -242,15 +240,9 @@
                 <div class="text-[13px] text-fg-3 mt-1.5">Fund and manage your Kraite subscription — prepaid in USDT, debited monthly by your plan.</div>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
-                <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
-                      style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
-                    <span class="w-2 h-2 rounded-chip {{ in_array($regime, ['CASCADE', 'BLACK SWAN'], true) ? 'animate-pulse-soft' : '' }}" style="background: {{ $r['color'] }};"></span>
-                    {{ $regime }}<span class="opacity-70 ml-0.5">{{ number_format($score, 2) }}</span>
-                </span>
-                <div class="w-px h-[22px] bg-line"></div>
-                <button type="button" class="{{ $btnSecondary }} h-[34px] px-3">
-                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
-                </button>
+                <a href="{{ route('billing') }}" class="{{ $btnSecondary }} h-[34px] px-3 no-underline">
+                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Refresh
+                </a>
             </div>
         </div>
 

@@ -8,10 +8,12 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\MarketRegimeSnapshot;
+use Kraite\Core\Support\Fleet\FleetMetricsRepository;
 use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
 
 class DashboardController extends Controller
@@ -94,6 +96,9 @@ class DashboardController extends Controller
             'total_longs' => $result->sum('tradeable_longs'),
             'total_shorts' => $result->sum('tradeable_shorts'),
             'bscs' => $this->bscsPayload(),
+            // Live fleet roster — every kraite.fleet.servers host joined
+            // against its heartbeat key, classified online / stale / missing.
+            'fleet' => app(FleetMetricsRepository::class)->all(),
         ]);
     }
 
@@ -107,7 +112,7 @@ class DashboardController extends Controller
     private function bscsPayload(): array
     {
         $payload = BlackSwanIndex::current()->toArray();
-        $payload['override_reason'] = Kraite::query()->value('bscs_override_reason');
+        $payload['override_reason'] = $this->bscsOverrideReason();
 
         $payload['sparkline'] = MarketRegimeSnapshot::query()
             ->orderByDesc('computed_at')
@@ -126,6 +131,27 @@ class DashboardController extends Controller
     }
 
     /**
+     * Manual-override audit reason for the BSCS panel. The override columns
+     * (`bscs_override_reason` / `bscs_override_until`) are owned by
+     * kraitebot/core — admin holds no schema. Until that migration lands on a
+     * given database the column is absent, so this read is gated on column
+     * existence: a missing column yields null rather than throwing and taking
+     * the ENTIRE dashboard data feed (exchanges, symbols, live fleet) down
+     * with it. The existence check is cached so the 15s poll doesn't re-hit
+     * information_schema every tick.
+     */
+    private function bscsOverrideReason(): ?string
+    {
+        $hasColumn = Cache::remember(
+            'system.dashboard.kraite-has-override-reason',
+            300,
+            static fn (): bool => Schema::hasColumn('kraite', 'bscs_override_reason'),
+        );
+
+        return $hasColumn ? Kraite::query()->value('bscs_override_reason') : null;
+    }
+
+    /**
      * Vitals JSON for the dashboard's top ribbon — server load, dispatcher
      * throughput, slow-query counts. Polled every 5 s by the ribbon.
      * Was previously /system/heartbeat/data; the standalone Heartbeat
@@ -140,32 +166,71 @@ class DashboardController extends Controller
         ]);
     }
 
+    /**
+     * Vitals of the host actually serving the console (the web box). Every
+     * probe is defensive: a dev box without `/proc` (macOS) yields null for
+     * that field instead of throwing, so the Infra control-plane panel renders
+     * "—" rather than 500-ing. Real core count drives the load→percent math —
+     * a hardcoded count silently skews every reading the day the box resizes.
+     *
+     * @return array{hostname: string|null, cpu_percent: float|null, ram_used_mb: int|null, ram_total_mb: int|null, hdd_used_gb: float|null, hdd_total_gb: float|null}
+     */
     private function serverMetrics(): array
     {
-        // CPU: load average / number of CPUs
-        $load = sys_getloadavg()[0];
-        $cpuCount = 32;
-        $cpuPercent = min(round(($load / $cpuCount) * 100, 1), 100);
+        // CPU: 1-minute load average over the real logical-core count.
+        $load = function_exists('sys_getloadavg') ? (sys_getloadavg()[0] ?? null) : null;
+        $cores = $this->cpuCores();
+        $cpuPercent = ($load !== null && $cores !== null && $cores > 0)
+            ? min(round(((float) $load / $cores) * 100, 1), 100)
+            : null;
 
-        // RAM: parse /proc/meminfo
-        $meminfo = file_get_contents('/proc/meminfo');
-        preg_match('/MemTotal:\s+(\d+)/', $meminfo, $totalMatch);
-        preg_match('/MemAvailable:\s+(\d+)/', $meminfo, $availMatch);
-        $ramTotalMb = (int) ($totalMatch[1] ?? 0) / 1024;
-        $ramUsedMb = $ramTotalMb - ((int) ($availMatch[1] ?? 0) / 1024);
+        // RAM: parse /proc/meminfo (Linux only — used = Total − Available).
+        $ramTotalMb = null;
+        $ramUsedMb = null;
+        $meminfo = @file_get_contents('/proc/meminfo');
+        if (is_string($meminfo)
+            && preg_match('/MemTotal:\s+(\d+)/', $meminfo, $totalMatch) === 1
+        ) {
+            preg_match('/MemAvailable:\s+(\d+)/', $meminfo, $availMatch);
+            $totalKb = (int) $totalMatch[1];
+            $availKb = (int) ($availMatch[1] ?? 0);
+            $ramTotalMb = (int) round($totalKb / 1024);
+            $ramUsedMb = (int) round(max($totalKb - $availKb, 0) / 1024);
+        }
 
-        // HDD: disk space
-        $hddTotalGb = round(disk_total_space('/') / 1073741824, 1);
-        $hddFreeGb = round(disk_free_space('/') / 1073741824, 1);
-        $hddUsedGb = round($hddTotalGb - $hddFreeGb, 1);
+        // HDD: disk space (works cross-platform).
+        $total = @disk_total_space('/');
+        $free = @disk_free_space('/');
+        $hddTotalGb = is_float($total) && $total > 0 ? round($total / 1073741824, 1) : null;
+        $hddUsedGb = ($hddTotalGb !== null && is_float($free))
+            ? round($hddTotalGb - ($free / 1073741824), 1)
+            : null;
 
         return [
+            'hostname' => gethostname() ?: null,
             'cpu_percent' => $cpuPercent,
-            'ram_used_mb' => round($ramUsedMb),
-            'ram_total_mb' => round($ramTotalMb),
+            'ram_used_mb' => $ramUsedMb,
+            'ram_total_mb' => $ramTotalMb,
             'hdd_used_gb' => $hddUsedGb,
             'hdd_total_gb' => $hddTotalGb,
         ];
+    }
+
+    /**
+     * Logical CPU count from /proc/cpuinfo; null off Linux (no fallback — a
+     * wrong count would silently skew the percent rather than honestly read "—").
+     */
+    private function cpuCores(): ?int
+    {
+        $raw = @file_get_contents('/proc/cpuinfo');
+
+        if (! is_string($raw)) {
+            return null;
+        }
+
+        $count = preg_match_all('/^processor\s*:/m', $raw);
+
+        return $count > 0 ? $count : null;
     }
 
     private function stepDispatcherSummary(): array

@@ -1,23 +1,18 @@
 @php
-    // ============================================================
-    // MOCK DATA — design-fidelity port. Wire to AccountController later
-    // (edit payload + quotes/test/save endpoints already exist).
-    // ============================================================
-    $regime = 'ELEVATED';
-    $score = 0.63;
+    // Accounts — REAL DATA (display). The accordion is built from the
+    // AccountController::serialize payload: real accounts, real config
+    // values, phase derived from stored credential + trading state.
+    //
+    // STILL MOCK / flagged for the next pass:
+    //  - $ips: the Kraite egress IP allowlist has no real source yet.
+    //  - quote dropdowns show the stored value only (live asset list comes
+    //    from GET accounts.quotes against the exchange).
+    //  - per-IP connectivity results are approximated from phase (no stored
+    //    per-server result); the live test endpoint isn't wired here.
+    //  - the option ranges below are design defaults UNIONed with each
+    //    account's real value so the stored value always shows.
 
-    $regimes = [
-        'CALM'        => ['color' => 'var(--bsi-calm)'],
-        'WATCH'       => ['color' => 'var(--bsi-watch)'],
-        'ELEVATED'    => ['color' => 'var(--bsi-cascade)'],
-        'CASCADE'     => ['color' => 'var(--bsi-cascade)'],
-        'BLACK SWAN'  => ['color' => 'var(--bsi-blackswan)'],
-    ];
-    $r = $regimes[$regime] ?? $regimes['CALM'];
-
-    $downAccount = ['ex' => 'OKX', 'tag' => 'arb', 'note' => 'last seen 4m ago'];
-
-    // Kraite egress IPs the user must allowlist (paired to the server fleet).
+    // Kraite egress IPs the user must allowlist — PLACEHOLDER list.
     $ips = [
         ['id' => 'kr-fra-01', 'region' => 'Frankfurt', 'ip' => '51.158.10.21'],
         ['id' => 'kr-fra-02', 'region' => 'Frankfurt', 'ip' => '51.158.10.22'],
@@ -26,55 +21,66 @@
         ['id' => 'kr-sgp-01', 'region' => 'Singapore', 'ip' => '128.199.80.5'],
         ['id' => 'kr-sgp-02', 'region' => 'Singapore', 'ip' => '128.199.80.6'],
     ];
+    $failIds = [];
 
-    // constrained config option lists (verbatim, backend-validated)
+    // Transform the serialized accounts into the accordion card shape.
+    $phaseOf = function (array $a): string {
+        if (! ($a['has_credentials'] ?? false)) {
+            return 'empty';                       // first-run: config locked
+        }
+
+        return ($a['can_trade'] ?? false) ? 'ok' : 'fail';   // fail = creds saved, trading off
+    };
+
+    $cards = collect($accounts)->map(function (array $a) use ($phaseOf) {
+        $pq = $a['portfolio_quote'] ?: 'USDT';
+        $tq = $a['trading_quote'] ?: 'USDT';
+
+        return [
+            'key' => 'acct-' . $a['id'],
+            'id' => $a['id'],
+            'ex' => $a['exchange'],
+            'tag' => $a['name'],
+            'mono' => mb_strtoupper(mb_substr($a['exchange'] ?: '?', 0, 1)),
+            'owner' => $a['owner'],
+            'note' => $a['disabled_reason'] ?: ($a['is_active'] ? 'Active' : 'Inactive'),
+            'equity' => '—',
+            'needsPass' => (bool) ($a['requires_passphrase'] ?? false),
+            'quotes' => array_values(array_unique(array_filter([$pq, $tq]))),
+            'phase' => $phaseOf($a),
+            'cfg' => [
+                'cfgName' => $a['name'],
+                'canTrade' => (bool) ($a['can_trade'] ?? false),
+                'pq' => $pq,
+                'tq' => $tq,
+                'pt' => number_format((float) ($a['profit_percentage'] ?? 0), 3, '.', ''),
+                'sl' => number_format((float) ($a['stop_market_initial_percentage'] ?? 0), 2, '.', ''),
+                'sL' => (string) (int) ($a['total_positions_long'] ?? 1),
+                'sS' => (string) (int) ($a['total_positions_short'] ?? 1),
+                'lL' => (string) (int) ($a['position_leverage_long'] ?? 0),
+                'lS' => (string) (int) ($a['position_leverage_short'] ?? 0),
+                'mL' => number_format((float) ($a['margin_percentage_long'] ?? 0), 2, '.', ''),
+                'mS' => number_format((float) ($a['margin_percentage_short'] ?? 0), 2, '.', ''),
+            ],
+        ];
+    })->values()->all();
+
+    // Option lists = design defaults ∪ every real value in use, so a stored
+    // value is always selectable even if outside the default range.
+    $union = function (array $defaults, array $values) {
+        return collect($defaults)->merge($values)->unique()
+            ->sortBy(fn ($v) => (float) $v)->values()->all();
+    };
     $opts = [
-        'pt'     => ['0.360', '0.380', '0.400'],
-        'sl'     => ['2.50', '5.00', '7.50'],
-        'slots'  => ['4', '5', '6'],
-        'lev'    => ['10', '15', '20'],
-        'margin' => ['4.00', '5.00', '6.00'],
+        'pt'     => $union(['0.360', '0.380', '0.400'], collect($cards)->pluck('cfg.pt')->all()),
+        'sl'     => $union(['2.50', '5.00', '7.50'], collect($cards)->pluck('cfg.sl')->all()),
+        'slots'  => $union(['1', '4', '5', '6'], collect($cards)->flatMap(fn ($c) => [$c['cfg']['sL'], $c['cfg']['sS']])->all()),
+        'lev'    => $union(['10', '15', '20'], collect($cards)->flatMap(fn ($c) => [$c['cfg']['lL'], $c['cfg']['lS']])->all()),
+        'margin' => $union(['4.00', '5.00', '6.00'], collect($cards)->flatMap(fn ($c) => [$c['cfg']['mL'], $c['cfg']['mS']])->all()),
     ];
-
-    // exchange accounts — identity, connection phase, config defaults.
-    // OKX ships in the trading-disabled flavor (SGP IPs blocked) so the
-    // failure surface is visible in the mock.
-    $accounts = [
-        [
-            'key' => 'binance-main', 'ex' => 'Binance', 'tag' => 'main', 'mono' => 'B',
-            'owner' => 'Frankfurt desk', 'note' => 'Futures · cross', 'equity' => '$184,210.08',
-            'needsPass' => false, 'quotes' => ['USDT', 'USDC', 'BNB'],
-            'phase' => 'ok',
-            'cfg' => ['cfgName' => 'Primary book', 'canTrade' => true, 'pq' => 'USDT', 'tq' => 'USDT', 'pt' => '0.380', 'sl' => '5.00', 'sL' => '5', 'sS' => '5', 'lL' => '15', 'lS' => '15', 'mL' => '5.00', 'mS' => '5.00'],
-        ],
-        [
-            'key' => 'bybit-hedge', 'ex' => 'Bybit', 'tag' => 'hedge', 'mono' => 'BY',
-            'owner' => 'Frankfurt desk', 'note' => 'Perp · isolated', 'equity' => '$62,840.12',
-            'needsPass' => false, 'quotes' => ['USDT', 'USDC'],
-            'phase' => 'ok',
-            'cfg' => ['cfgName' => 'Hedge sleeve', 'canTrade' => true, 'pq' => 'USDT', 'tq' => 'USDC', 'pt' => '0.360', 'sl' => '5.00', 'sL' => '4', 'sS' => '6', 'lL' => '10', 'lS' => '15', 'mL' => '4.00', 'mS' => '5.00'],
-        ],
-        [
-            'key' => 'okx-arb', 'ex' => 'OKX', 'tag' => 'arb', 'mono' => 'O',
-            'owner' => 'Singapore desk', 'note' => 'Last seen 4m ago', 'equity' => '$24,980.55',
-            'needsPass' => true, 'quotes' => ['USDT'],
-            'phase' => 'fail',
-            'cfg' => ['cfgName' => 'Arb engine', 'canTrade' => false, 'pq' => 'USDT', 'tq' => 'USDT', 'pt' => '0.400', 'sl' => '7.50', 'sL' => '6', 'sS' => '6', 'lL' => '20', 'lS' => '20', 'mL' => '6.00', 'mS' => '6.00'],
-        ],
-        [
-            'key' => 'deribit-options', 'ex' => 'Deribit', 'tag' => 'options', 'mono' => 'D',
-            'owner' => 'Frankfurt desk', 'note' => 'Options · portfolio', 'equity' => '$12,879.67',
-            'needsPass' => false, 'quotes' => ['BTC', 'ETH', 'USDC'],
-            'phase' => 'ok',
-            'cfg' => ['cfgName' => 'Options book', 'canTrade' => true, 'pq' => 'BTC', 'tq' => 'USDC', 'pt' => '0.380', 'sl' => '2.50', 'sL' => '5', 'sS' => '4', 'lL' => '15', 'lS' => '10', 'mL' => '5.00', 'mS' => '4.00'],
-        ],
-    ];
-
-    // IPs that fail the connectivity test on the trading-disabled account
-    $failIds = ['kr-sgp-01', 'kr-sgp-02'];
 @endphp
 
-<x-app-layout active="accounts" :title="'Kraite — Accounts'" :showBanner="true" :downAccount="$downAccount">
+<x-app-layout active="accounts" :title="'Kraite — Accounts'">
 
     <script>
         // Per-account card controller — credential phase machine + the live
@@ -164,26 +170,30 @@
             <div class="text-[13px] text-fg-3 mt-1.5">Connect and configure the exchange accounts the bot trades on.</div>
         </div>
         <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
-            <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
-                  style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
-                <span class="w-2 h-2 rounded-chip {{ in_array($regime, ['CASCADE', 'BLACK SWAN'], true) ? 'animate-pulse-soft' : '' }}" style="background: {{ $r['color'] }};"></span>
-                {{ $regime }}<span class="opacity-70 ml-0.5">{{ number_format($score, 2) }}</span>
-            </span>
-            <div class="w-px h-[22px] bg-line"></div>
-            <button type="button" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
-                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
-            </button>
+            <a href="{{ route('accounts.edit') }}" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover no-underline">
+                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Refresh
+            </a>
         </div>
     </div>
 
     <div x-data="{ openIdx: 0 }">
         <div class="flex items-center justify-between gap-3 mb-4">
-            <span class="font-mono text-[10.5px] font-semibold tracking-[0.12em] uppercase text-fg-mute">Your exchange accounts · {{ count($accounts) }}</span>
+            <span class="font-mono text-[10.5px] font-semibold tracking-[0.12em] uppercase text-fg-mute">Your exchange accounts · {{ count($cards) }}</span>
             <span class="font-mono text-[10.5px] text-fg-faint tracking-[0.04em] max-[640px]:hidden">Expand an account to configure it</span>
         </div>
 
+        @if(count($cards) === 0)
+            <div class="card">
+                <div class="flex flex-col items-center justify-center text-center py-[64px] px-5">
+                    <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-link class="w-6 h-6" stroke-width="1.75"/></div>
+                    <h4 class="font-sans font-semibold text-[17px] text-fg-1 mb-1.5">No exchange accounts yet</h4>
+                    <p class="text-[13px] text-fg-3 max-w-[420px]">Connect an exchange account to let the engine trade on it.</p>
+                </div>
+            </div>
+        @endif
+
         <div class="flex flex-col gap-3">
-            @foreach($accounts as $i => $a)
+            @foreach($cards as $i => $a)
                 @php
                     $key = $a['key'];
                     $cardInit = [

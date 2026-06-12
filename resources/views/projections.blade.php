@@ -1,13 +1,7 @@
 @php
-    // ============================================================
-    // MOCK DATA — design-fidelity port. The whole calendar model runs
-    // client-side (deterministic seeded rng), exactly like the design:
-    // realized history, scenario rates, and forward compounding all
-    // derive from the mock account list below. Wire to
-    // ProjectionsController::data later.
-    // ============================================================
-    $regime = 'ELEVATED';
-    $score = 0.63;
+    // Projections — REAL DATA. The calendar consumes ProjectionsController::data:
+    // realized daily revenue (actuals), the live wallet, and observed daily-rate
+    // scenarios. Forward months compound the live wallet at the scenario rate.
 
     // REAL first-run gate: projections are built from realized revenue —
     // an account that has never traded has nothing to project.
@@ -18,16 +12,7 @@
         ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
         ->exists();
 
-    $regimes = [
-        'CALM'        => ['color' => 'var(--bsi-calm)'],
-        'WATCH'       => ['color' => 'var(--bsi-watch)'],
-        'ELEVATED'    => ['color' => 'var(--bsi-cascade)'],
-        'CASCADE'     => ['color' => 'var(--bsi-cascade)'],
-        'BLACK SWAN'  => ['color' => 'var(--bsi-blackswan)'],
-    ];
-    $r = $regimes[$regime] ?? $regimes['CALM'];
-
-    $downAccount = ['ex' => 'OKX', 'tag' => 'arb', 'note' => 'last seen 4m ago'];
+    $initialAccountId = $accounts->first()['id'] ?? null;
 
     // shared control class strings
     $pjArrow = 'appearance-none cursor-pointer w-[34px] h-[34px] inline-flex items-center justify-center rounded-control border border-line bg-surface text-fg-2 transition-colors duration-fast ease-out hover:border-line-strong hover:text-fg-1 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:border-line disabled:hover:text-fg-2';
@@ -35,23 +20,17 @@
     $cardTitle = 'font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap';
 @endphp
 
-<x-app-layout active="projections" :title="'Kraite — Projections'" :showBanner="true" :downAccount="$downAccount">
+<x-app-layout active="projections" :title="'Kraite — Projections'">
 
     <script>
         // Projections page model — straight port of the design's client-side
         // calendar. Past days replay a seeded rng reconciled to the account
         // wallet; future days compound the wallet at an observed daily rate.
-        window.projectionsPage = () => {
+        window.projectionsPage = (accounts, initialAccountId, dataUrl) => {
             // ---- constants ----
-            const TODAY = new Date(Date.UTC(2026, 5, 5));           // frozen: Jun 5 2026 (deterministic mock)
-            const CUR_Y = 2026, CUR_M = 5;                           // June (0-indexed)
             const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-            const HISTORY_MONTHS = 14;                               // realized history extends this far back
+            const HISTORY_MONTHS = 14;                               // calendar can page this far back
             const FUTURE_MONTHS = 72;                                // ~6 years forward
-            const NEUTRAL_M = 0.16;                                  // assumed monthly growth to back-date past start balances
-            const ABS_CUR = CUR_Y * 12 + CUR_M;
-            const ABS_MIN = ABS_CUR - HISTORY_MONTHS;
-            const ABS_MAX = ABS_CUR + FUTURE_MONTHS;
 
             // scenario tone — chrome only (active segment, projected totals, light cell tint)
             const TONE = {
@@ -59,19 +38,6 @@
                 neutral: { label: 'Neutral',     css: 'var(--info)',        activeText: '#fff' },
                 opt:     { label: 'Optimistic',  css: 'var(--pnl-up-fg)',   activeText: '#04140d' },
             };
-
-            // ---- deterministic rng ----
-            const seedOf = (s) => { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
-            const rngOf = (a) => { a = a >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
-
-            // ---- mock exchange accounts ----
-            const num = (s) => parseFloat(String(s).replace(/[^0-9.]/g, '')) || 0;
-            const ACCTS = [
-                { ex: 'Binance', mono: 'B',  tag: 'main',    state: 'ok',   equityStr: '$184,210.08', note: 'Futures · cross' },
-                { ex: 'Bybit',   mono: 'BY', tag: 'hedge',   state: 'ok',   equityStr: '$62,840.12',  note: 'Perp · isolated' },
-                { ex: 'OKX',     mono: 'O',  tag: 'arb',     state: 'down', equityStr: '$24,980.55',  note: 'Last seen 4m ago' },
-                { ex: 'Deribit', mono: 'D',  tag: 'options', state: 'ok',   equityStr: '$12,879.67',  note: 'Options · portfolio' },
-            ].map(a => ({ ...a, wallet: num(a.equityStr), seed: seedOf(a.ex + '|' + a.tag) }));
 
             // ---- formatters ----
             const fmtAbs = (a) => {
@@ -92,101 +58,19 @@
             const fmtSignedFull = (n) => (n >= 0 ? '+' : '−') + fmtAbsFull(Math.abs(n));
             const fmtFull       = (n) => (n < 0 ? '−' : '') + fmtAbsFull(Math.abs(n));
             const fmtPct        = (n, d = 2) => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(d) + '%';
-
-            // ---- model ----
             const dimOf = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
-            const idxOf = (y, m, d) => Math.round((Date.UTC(y, m, d) - TODAY.getTime()) / 86400000); // 0 = today
-            const monthType = (y, m) => (y === CUR_Y && m === CUR_M) ? 'current'
-                : (y > CUR_Y || (y === CUR_Y && m > CUR_M)) ? 'future' : 'past';
 
-            // realized daily revenue for a month (reconciled so the current
-            // month's today-balance equals the account wallet exactly).
-            const realizedOf = (acct, year, month) => {
-                const dim = dimOf(year, month);
-                const isCur = (year === CUR_Y && month === CUR_M);
-                const upto = isCur ? TODAY.getUTCDate() : dim;
-                const rng = rngOf(acct.seed ^ Math.imul(((year * 16 + month) >>> 0), 2654435761));
-                const raw = [];
-                for (let d = 1; d <= upto; d++) {
-                    if (rng() < 0.17) { raw.push({ has: false, r: 0 }); continue; }   // no closes that day
-                    let r = 0.0055 + (rng() * 2 - 1) * 0.016;                          // ~ −1.0% … +2.1%
-                    if (rng() < 0.10) r = -(0.018 + rng() * 0.020);                    // bad day  −1.8% … −3.8%
-                    else if (rng() < 0.12) r = 0.026 + rng() * 0.012;                  // big day  +2.6% … +3.8%
-                    raw.push({ has: true, r });
-                }
-                let target;
-                if (isCur) target = acct.wallet;
-                else target = acct.wallet / Math.pow(1 + NEUTRAL_M, (CUR_Y - year) * 12 + (CUR_M - month));
-                const cumF = raw.reduce((f, x) => f * (1 + (x.has ? x.r : 0)), 1);
-                const startedAt = target / cumF;
-                let bal = startedAt;
-                const days = raw.map(x => {
-                    const before = bal; bal = bal * (1 + (x.has ? x.r : 0));
-                    return { has: x.has, revenue: x.has ? bal - before : null };
-                });
-                return { startedAt, days, endBal: bal, upto, dim };
-            };
-
-            // scenario daily rates from the CURRENT month's observed days
-            const scenarioRates = (acct) => {
-                const cur = realizedOf(acct, CUR_Y, CUR_M);
-                const rates = [];
-                let bal = cur.startedAt;
-                cur.days.forEach(x => { const before = bal; bal = before + (x.revenue || 0); if (x.has) rates.push((x.revenue) / before); });
-                rates.sort((a, b) => a - b);
-                const n = rates.length;
-                const worst = n ? rates[0] : -0.012;
-                const best = n ? rates[n - 1] : 0.018;
-                return {
-                    pess: worst,
-                    neutral: (worst + best) / 2,          // midpoint of the observed range
-                    opt: best,
-                    n, wallet: acct.wallet, startedAt: cur.startedAt,
-                };
-            };
-
-            const buildMonth = (acct, year, month, scenario) => {
-                const type = monthType(year, month);
-                const dim = dimOf(year, month);
-                const rates = scenarioRates(acct);
-                const rate = rates[scenario];
-                const S0 = rates.wallet;
-                const cells = [];
-                let startedAt, realized = null, projected = null, endBal;
-
-                if (type === 'past') {
-                    const ser = realizedOf(acct, year, month);
-                    for (let d = 1; d <= dim; d++) {
-                        const x = ser.days[d - 1];
-                        cells.push({ day: d, kind: x.has ? 'realized' : 'empty', amount: x.has ? x.revenue : null });
-                    }
-                    startedAt = ser.startedAt; realized = ser.endBal - ser.startedAt; endBal = ser.endBal;
-                } else if (type === 'current') {
-                    const ser = realizedOf(acct, year, month);
-                    const todayD = TODAY.getUTCDate();
-                    for (let d = 1; d <= dim; d++) {
-                        if (d < todayD) { const x = ser.days[d - 1]; cells.push({ day: d, kind: x.has ? 'realized' : 'empty', amount: x.has ? x.revenue : null }); }
-                        else if (d === todayD) { const x = ser.days[d - 1]; cells.push({ day: d, kind: 'today', amount: x.has ? x.revenue : 0, todayHas: x.has }); }
-                        else { const k = d - todayD; cells.push({ day: d, kind: 'projected', amount: S0 * Math.pow(1 + rate, k) - S0 * Math.pow(1 + rate, k - 1) }); }
-                    }
-                    startedAt = ser.startedAt; realized = S0 - ser.startedAt;
-                    endBal = S0 * Math.pow(1 + rate, dim - todayD); projected = endBal - S0;
-                } else {
-                    for (let d = 1; d <= dim; d++) {
-                        const k = idxOf(year, month, d);
-                        cells.push({ day: d, kind: 'projected', amount: S0 * Math.pow(1 + rate, k) - S0 * Math.pow(1 + rate, k - 1) });
-                    }
-                    startedAt = S0 * Math.pow(1 + rate, idxOf(year, month, 1) - 1);
-                    endBal = S0 * Math.pow(1 + rate, idxOf(year, month, dim));
-                    projected = endBal - startedAt;
-                }
-                return {
-                    type, dim, cells, startedAt, realized, projected, endBal,
-                    monthlyPct: (endBal / startedAt - 1) * 100,
-                    cumFromToday: endBal - S0, rate, rates, S0,
-                    firstWeekday: (new Date(Date.UTC(year, month, 1)).getUTCDay() + 6) % 7,   // Mon=0
-                };
-            };
+            // Enrich the real account list for the picker chrome (initials,
+            // a per-account equity slot we fill from the live wallet on fetch).
+            const ACCTS = (accounts || []).map(a => ({
+                id: a.id,
+                ex: a.exchange,
+                tag: a.name,
+                note: a.owner || '',
+                mono: (a.exchange || '?').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?',
+                state: 'ok',
+                equityStr: '—',
+            }));
 
             return {
                 // ---- exposed statics ----
@@ -196,32 +80,47 @@
                 weekdays: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
                 scens: [['pess', 'Pessimistic'], ['neutral', 'Neutral'], ['opt', 'Optimistic']],
                 futureYears: Math.floor(FUTURE_MONTHS / 12),
+                dataUrl,
 
                 // ---- state ----
-                acctIdx: 0,
+                acctIdx: Math.max(0, ACCTS.findIndex(a => a.id === initialAccountId)),
+                accountId: initialAccountId,
                 scenario: 'neutral',
-                ym: { year: CUR_Y, month: CUR_M },
+                ym: { year: null, month: null },
+                // server-anchored "today" — set from the first data response so
+                // past/current/future never depends on the browser clock.
+                curY: null, curM: null, curD: null,
                 loading: false,
                 acctOpen: false,
                 monOpen: false,
-                pYear: CUR_Y,
-                m: null,
+                pYear: null,
+                // Safe stub so the always-rendered control row never reads a
+                // null `m` during the first async fetch; replaced on response.
+                m: { type: 'current', dim: 30, cells: [], startedAt: null, realized: 0, projected: 0, endBal: 0, monthlyPct: 0, cumFromToday: 0, rate: 0, rates: { pess: 0, neutral: 0, opt: 0, n: 0 }, S0: 0, firstWeekday: 0 },
+                fetched: null,
                 totalsCells: [],
-                _shimmer: null,
 
-                init() { this.recompute(false); },
+                init() {
+                    const now = new Date();
+                    this.ym = { year: now.getUTCFullYear(), month: now.getUTCMonth() };
+                    this.pYear = this.ym.year;
+                    this.recompute(true);
+                },
 
                 // ---- derived helpers ----
                 tone() { return TONE[this.scenario] || TONE.neutral; },
-                acct() { return ACCTS[this.acctIdx]; },
+                acct() { return ACCTS[this.acctIdx] || { mono: '?', ex: '—', tag: '', equityStr: '—', state: 'ok', note: '' }; },
                 absYm() { return this.ym.year * 12 + this.ym.month; },
-                isCurrentMonth() { return this.absYm() === ABS_CUR; },
-                atMin() { return this.absYm() <= ABS_MIN; },
-                atMax() { return this.absYm() >= ABS_MAX; },
-                minYear: Math.floor(ABS_MIN / 12),
-                maxYear: Math.floor(ABS_MAX / 12),
-                inRange(y, m) { const abs = y * 12 + m; return abs >= ABS_MIN && abs <= ABS_MAX; },
-                isCurYm(y, m) { return y === CUR_Y && m === CUR_M; },
+                absCur() { return this.curY === null ? this.absYm() : this.curY * 12 + this.curM; },
+                absMin() { return this.absCur() - HISTORY_MONTHS; },
+                absMax() { return this.absCur() + FUTURE_MONTHS; },
+                minYear() { return Math.floor(this.absMin() / 12); },
+                maxYear() { return Math.floor(this.absMax() / 12); },
+                isCurrentMonth() { return this.absYm() === this.absCur(); },
+                atMin() { return this.absYm() <= this.absMin(); },
+                atMax() { return this.absYm() >= this.absMax(); },
+                inRange(y, m) { const abs = y * 12 + m; return abs >= this.absMin() && abs <= this.absMax(); },
+                isCurYm(y, m) { return this.curY !== null && y === this.curY && m === this.curM; },
                 monthLabel() { return MON[this.ym.month] + ' ' + this.ym.year; },
                 typeBadge() { return this.m.type === 'past' ? 'Realized' : this.m.type === 'future' ? 'Projected' : 'Hybrid'; },
                 leadCells() { return Array.from({ length: this.m.firstWeekday }); },
@@ -236,29 +135,106 @@
                 fPct: fmtPct,
 
                 // ---- actions ----
-                setAcct(i) { this.acctIdx = i; this.acctOpen = false; this.recompute(true); },
-                setScenario(k) { if (this.m.type === 'past') return; this.scenario = k; this.recompute(false); },
+                setAcct(i) { this.acctIdx = i; this.accountId = ACCTS[i].id; this.acctOpen = false; this.recompute(true); },
+                setScenario(k) { if (this.m && this.m.type === 'past') return; this.scenario = k; if (this.fetched) { this.m = this.buildMonth(); this.totalsCells = this.buildTotals(); } },
                 pickYm(y, m) { this.ym = { year: y, month: m }; this.monOpen = false; this.recompute(true); },
                 shift(n) {
-                    const abs = Math.min(ABS_MAX, Math.max(ABS_MIN, this.absYm() + n));
+                    const abs = Math.min(this.absMax(), Math.max(this.absMin(), this.absYm() + n));
                     this.ym = { year: Math.floor(abs / 12), month: abs % 12 };
                     this.recompute(true);
                 },
-                goToday() { this.pickYm(CUR_Y, CUR_M); },
+                goToday() { if (this.curY !== null) this.pickYm(this.curY, this.curM); },
 
-                recompute(shimmer) {
-                    this.m = buildMonth(this.acct(), this.ym.year, this.ym.month, this.scenario);
-                    this.totalsCells = this.buildTotals();
-                    if (shimmer) {
-                        if (this._shimmer) clearTimeout(this._shimmer);
-                        this.loading = true;
-                        this._shimmer = setTimeout(() => { this.loading = false; this._shimmer = null; }, 340);
+                async recompute(shimmer) {
+                    if (!this.accountId) return;
+                    if (shimmer) this.loading = true;
+                    try {
+                        const url = `${this.dataUrl}?account_id=${this.accountId}&year=${this.ym.year}&month=${this.ym.month + 1}`;
+                        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+                        if (res.ok) {
+                            this.fetched = await res.json();
+                            const [ty, tm, td] = this.fetched.today.split('-').map(Number);
+                            this.curY = ty; this.curM = tm - 1; this.curD = td;
+                            if (ACCTS[this.acctIdx]) {
+                                ACCTS[this.acctIdx].equityStr = this.fetched.current_wallet != null
+                                    ? fmtAbsFull(parseFloat(this.fetched.current_wallet)) : '—';
+                            }
+                            this.m = this.buildMonth();
+                            this.totalsCells = this.buildTotals();
+                        }
+                    } finally {
+                        this.loading = false;
                     }
                 },
 
-                // ---- totals strip (port of PJTotals) ----
+                // ---- model (server-fed) ----
+                monthType(y, m) {
+                    const abs = y * 12 + m, cur = this.absCur();
+                    return abs === cur ? 'current' : abs > cur ? 'future' : 'past';
+                },
+                idxOf(y, m, d) { return Math.round((Date.UTC(y, m, d) - Date.UTC(this.curY, this.curM, this.curD)) / 86400000); },
+                rates() {
+                    const sc = (this.fetched && this.fetched.scenarios) || {};
+                    const num = (v) => v == null ? 0 : parseFloat(v);
+                    return { pess: num(sc.pessimistic_pct), neutral: num(sc.neutral_pct), opt: num(sc.optimistic_pct), n: sc.days_observed || 0 };
+                },
+
+                buildMonth() {
+                    const f = this.fetched;
+                    const y = this.ym.year, m = this.ym.month;
+                    const type = this.monthType(y, m);
+                    const dim = dimOf(y, m);
+                    const rates = this.rates();
+                    const rate = rates[this.scenario] || 0;
+                    const S0 = (f.current_wallet != null) ? parseFloat(f.current_wallet) : 0;
+                    const monthStart = (f.month_start_wallet != null) ? parseFloat(f.month_start_wallet) : null;
+                    const actuals = f.actuals || {};
+                    const key = (d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                    const has = (d) => Object.prototype.hasOwnProperty.call(actuals, key(d));
+                    const amt = (d) => parseFloat(actuals[key(d)]);
+                    const realizedSum = () => Object.values(actuals).reduce((s, v) => s + parseFloat(v), 0);
+
+                    const cells = [];
+                    let startedAt, realized = null, projected = null, endBal;
+
+                    if (type === 'past') {
+                        for (let d = 1; d <= dim; d++) cells.push({ day: d, kind: has(d) ? 'realized' : 'empty', amount: has(d) ? amt(d) : null });
+                        realized = realizedSum();
+                        startedAt = monthStart;
+                        endBal = (monthStart != null) ? monthStart + realized : null;
+                    } else if (type === 'current') {
+                        for (let d = 1; d <= dim; d++) {
+                            if (d < this.curD) cells.push({ day: d, kind: has(d) ? 'realized' : 'empty', amount: has(d) ? amt(d) : null });
+                            else if (d === this.curD) cells.push({ day: d, kind: 'today', amount: has(d) ? amt(d) : 0, todayHas: has(d) });
+                            else { const k = d - this.curD; cells.push({ day: d, kind: 'projected', amount: S0 * Math.pow(1 + rate, k) - S0 * Math.pow(1 + rate, k - 1) }); }
+                        }
+                        startedAt = monthStart;
+                        realized = realizedSum();
+                        endBal = S0 * Math.pow(1 + rate, dim - this.curD);
+                        projected = endBal - S0;
+                    } else {
+                        for (let d = 1; d <= dim; d++) {
+                            const k = this.idxOf(y, m, d);
+                            cells.push({ day: d, kind: 'projected', amount: S0 * Math.pow(1 + rate, k) - S0 * Math.pow(1 + rate, k - 1) });
+                        }
+                        startedAt = S0 * Math.pow(1 + rate, this.idxOf(y, m, 1) - 1);
+                        endBal = S0 * Math.pow(1 + rate, this.idxOf(y, m, dim));
+                        projected = endBal - startedAt;
+                    }
+
+                    return {
+                        type, dim, cells, startedAt, realized, projected, endBal,
+                        monthlyPct: (endBal != null && startedAt) ? (endBal / startedAt - 1) * 100 : 0,
+                        cumFromToday: (endBal != null) ? endBal - S0 : 0,
+                        rate, rates, S0,
+                        firstWeekday: (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7,   // Mon=0
+                    };
+                },
+
+                // ---- totals strip ----
                 buildTotals() {
                     const m = this.m, t = m.type, tone = this.tone();
+                    const dash = (v) => (v == null || !isFinite(v));
                     const labels = t === 'past'
                         ? ['Started month at', 'Realized this month', 'Projected', 'Ended at', 'Monthly return']
                         : t === 'future'
@@ -266,22 +242,21 @@
                             : ['Started month at', 'Made so far', 'Projected · rest of month', 'Expected end balance', 'Monthly return'];
                     const realizedCell = t === 'future'
                         ? { value: '—', cls: 'text-fg-faint', sub: '' }
-                        : { value: fmtSignedFull(m.realized), cls: m.realized >= 0 ? 'text-pnlup' : 'text-pnldown', sub: 'REALIZED' };
+                        : { value: fmtSignedFull(m.realized || 0), cls: (m.realized || 0) >= 0 ? 'text-pnlup' : 'text-pnldown', sub: 'REALIZED' };
                     const projectedCell = t === 'past'
                         ? { value: '—', cls: 'text-fg-faint', sub: '' }
-                        : { value: fmtSignedFull(m.projected), css: tone.css, sub: tone.label.toUpperCase() + ' · PROJ' };
+                        : { value: fmtSignedFull(m.projected || 0), css: tone.css, sub: tone.label.toUpperCase() + ' · PROJ' };
                     const monthlyCss = t === 'past' ? (m.monthlyPct >= 0 ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)') : tone.css;
-                    // current month blends realized + projected — surface the split
-                    const realPct = (m.S0 / m.startedAt - 1) * 100;
-                    const projPct = (m.endBal / m.S0 - 1) * 100;
+                    const realPct = (m.startedAt && m.S0) ? (m.S0 / m.startedAt - 1) * 100 : 0;
+                    const projPct = m.S0 ? (m.endBal / m.S0 - 1) * 100 : 0;
                     const monthlySub = t === 'past' ? 'REALIZED'
                         : t === 'current' ? `${fmtPct(realPct, 1)} REAL · ${fmtPct(projPct, 1)} PROJ`
                         : tone.label.toUpperCase() + ' · PROJ';
                     return [
-                        { label: labels[0], value: fmtFull(m.startedAt), css: 'var(--fg-1)', cls: '', sub: 'OPENING BALANCE' },
+                        { label: labels[0], value: dash(m.startedAt) ? '—' : fmtFull(m.startedAt), css: 'var(--fg-1)', cls: '', sub: 'OPENING BALANCE' },
                         { label: labels[1], value: realizedCell.value, cls: realizedCell.cls || '', css: null, sub: realizedCell.sub },
                         { label: labels[2], value: projectedCell.value, cls: projectedCell.cls || '', css: projectedCell.css || null, sub: projectedCell.sub },
-                        { label: labels[3], value: fmtFull(m.endBal), css: 'var(--fg-1)', cls: '', sub: t === 'past' ? 'REALIZED' : 'EXPECTED' },
+                        { label: labels[3], value: dash(m.endBal) ? '—' : fmtFull(m.endBal), css: 'var(--fg-1)', cls: '', sub: t === 'past' ? 'REALIZED' : 'EXPECTED' },
                         { label: labels[4], value: fmtPct(m.monthlyPct), css: monthlyCss, cls: '', sub: monthlySub },
                     ];
                 },
@@ -295,7 +270,7 @@
         };
     </script>
 
-    <div x-data="projectionsPage()">
+    <div x-data="projectionsPage(@js($accounts), {{ $initialAccountId ?? 'null' }}, '{{ route('projections.data') }}')">
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -307,14 +282,9 @@
                 <div class="text-[13px] text-fg-3 mt-1.5">Realized revenue and forward projection — where the book is heading from how the engine has actually performed.</div>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0 max-[820px]:flex-wrap max-[820px]:gap-y-2.5">
-                <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
-                      style="background: color-mix(in srgb, {{ $r['color'] }} 12%, transparent); border-color: color-mix(in srgb, {{ $r['color'] }} 38%, transparent); color: {{ $r['color'] }};">
-                    <span class="w-2 h-2 rounded-chip {{ in_array($regime, ['CASCADE', 'BLACK SWAN'], true) ? 'animate-pulse-soft' : '' }}" style="background: {{ $r['color'] }};"></span>
-                    {{ $regime }}<span class="opacity-70 ml-0.5">{{ number_format($score, 2) }}</span>
-                </span>
-                <div class="w-px h-[22px] bg-line"></div>
-                <button type="button" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
-                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
+                <button type="button" @click="recompute(true)" :disabled="loading"
+                        class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover disabled:opacity-50">
+                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="loading ? 'animate-spin' : ''"/>Sync
                 </button>
             </div>
         </div>
@@ -391,11 +361,11 @@
                         <div x-show="monOpen" x-cloak
                              class="absolute top-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-[60] w-[280px] bg-surface border border-line rounded-control shadow-2 p-3 animate-dd-in">
                             <div class="flex items-center justify-between mb-3">
-                                <button type="button" class="{{ $pjArrow }} !w-[28px] !h-[28px]" :disabled="pYear <= minYear" @click="pYear--" aria-label="Previous year">
+                                <button type="button" class="{{ $pjArrow }} !w-[28px] !h-[28px]" :disabled="pYear <= minYear()" @click="pYear--" aria-label="Previous year">
                                     <x-feathericon-chevron-left class="w-3.5 h-3.5" stroke-width="1.75"/>
                                 </button>
                                 <span class="font-mono text-[14px] font-semibold text-fg-1 tabular-nums" x-text="pYear"></span>
-                                <button type="button" class="{{ $pjArrow }} !w-[28px] !h-[28px]" :disabled="pYear >= maxYear" @click="pYear++" aria-label="Next year">
+                                <button type="button" class="{{ $pjArrow }} !w-[28px] !h-[28px]" :disabled="pYear >= maxYear()" @click="pYear++" aria-label="Next year">
                                     <x-feathericon-chevron-right class="w-3.5 h-3.5" stroke-width="1.75"/>
                                 </button>
                             </div>
