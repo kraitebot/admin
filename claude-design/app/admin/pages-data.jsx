@@ -82,6 +82,17 @@ const VENUE_SYMBOLS = {
   Coinbase: [{ s: 'BTC-PERP', lev: '10×', mark: '—' }, { s: 'ETH-PERP', lev: '10×', mark: '—' }],
 };
 
+// per-venue universe: every symbol the venue lists, how many Kraite has wired
+// as tradable, and of those how many are long- / short-eligible (shorts are
+// fewer — borrow / locate restrictions). Green=long, red=short (never invert).
+// slug + brand hex drive the exchange logo (simple-icons CDN).
+const VENUE_TRADE_STATS = [
+  { ex: 'Binance', slug: 'binance', color: '#F0B90B', total: 412, tradable: 168, longs: 168, shorts: 151 },
+  { ex: 'Bybit',   slug: 'bybit',   color: '#F7A600', total: 386, tradable: 142, longs: 142, shorts: 128 },
+  { ex: 'Bitget',  slug: 'bitget',  color: '#00CED1', total: 340, tradable: 120, longs: 120, shorts: 104 },
+  { ex: 'KuCoin',  slug: 'kucoin',  color: '#24D08A', total: 312, tradable: 108, longs: 108, shorts: 92  },
+];
+
 // =================== REVENUE ===================
 const REV_KPIS = [
   { icon: 'trendingUp', label: 'MRR',               value: '$412.8k', delta: 4.2,  sub: 'RECURRING · NET' },
@@ -120,6 +131,6 @@ const REGIME_THRESHOLDS = [
 
 Object.assign(window, {
   A_CLIENTS, BSCS_SIGNALS, ENGINE_INDICATORS, SYMBOL_CFG,
-  DISPATCH_QUEUES, STEP_STREAM, DATA_STREAMS, VENUE_SYMBOLS,
+  DISPATCH_QUEUES, STEP_STREAM, DATA_STREAMS, VENUE_SYMBOLS, VENUE_TRADE_STATS,
   REV_KPIS, SUB_STATES, PLAN_MIX, PAYMENTS, REGIME_THRESHOLDS,
 });

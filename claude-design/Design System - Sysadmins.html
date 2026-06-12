@@ -74,6 +74,7 @@
     <a href="#table" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Data tables</a>
     <a href="#sql" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">SQL console</a>
     <a href="#forms" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Forms (reused)</a>
+    <a href="#backtesting" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Backtesting workspace</a>
     <div class="font-mono text-[10px] tracking-[0.12em] uppercase text-fg-mute mt-[22px] mb-2">Handoff</div>
     <a href="#catalog" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Section catalog</a>
     <a href="#arch" class="block text-fg-3 no-underline py-[5px] px-2.5 rounded-control mb-px hover:bg-hover hover:text-fg-1">Architecture &amp; files</a>
@@ -182,6 +183,8 @@
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>Positions</button>
               <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><rect x="4" y="8" width="16" height="12" rx="1"/><path d="M12 4v4M9 13h.01M15 13h.01M9 17h6"/></svg>Engine</button>
+              <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 3v18h18"/><path d="M7 14l4-5 3 3 5-7"/></svg>Backtest</button>
               <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75"><path d="M3 19h4v-4h4v-4h4V7h6"/></svg>Dispatch</button>
               <button class="bg-transparent border-0 flex flex-col items-center gap-[4px] pt-1.5 pb-1 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] text-ink-7">
@@ -419,15 +422,64 @@
       </div>
     </section>
 
+    <!-- ============ BACKTESTING ============ -->
+    <section class="pt-14 scroll-mt-[76px]" id="backtesting">
+      <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Section kit</div>
+      <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Backtesting workspace</h2>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">A single-token ladder backtester: a sticky left rail (token → config → Fetch / Verify / Run → Approve) drives a results column (coverage → fetch report → scorecards → regime band → rows → AI). Two columns ≥1080px, stacked below. Its primitives live in <code class="text-[12px]">backtesting-kit.jsx</code> / <code class="text-[12px]">backtesting-panels.jsx</code> and reuse the card model and violet accent unchanged.</p>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3 pb-2 border-b border-line-soft">Grade hero &amp; scorecards · the headline result</div>
+      <div class="content ds-staff rounded-surface p-6 flex flex-col gap-3" data-theme="dark">
+        <div class="card card--flat overflow-hidden flex items-stretch" style="border-color:color-mix(in srgb,#15b8a6 30%,var(--border))">
+          <div class="flex items-center justify-center px-6 py-4" style="background:color-mix(in srgb,#15b8a6 12%,transparent);border-right:1px solid color-mix(in srgb,#15b8a6 22%,var(--border))"><span class="font-mono font-bold leading-none tabular-nums" style="font-size:52px;color:#15b8a6">B</span></div>
+          <div class="flex flex-col justify-center gap-1.5 px-5 py-4">
+            <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute">Grade · verdict</span>
+            <span class="font-sans font-bold text-[17px] text-fg-1 leading-tight">Good — minor concerns</span>
+            <div class="flex items-center gap-4 mt-0.5"><span class="font-mono text-[11.5px] text-fg-2">Overall <span class="font-bold tabular-nums text-fg-1">78.4</span><span class="text-fg-faint">/100</span></span><span class="font-mono text-[11.5px] text-fg-2">Risk <span class="font-bold tabular-nums text-fg-1">31.2</span></span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div class="card card--flat px-3.5 py-3 flex flex-col gap-1.5"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Pass rate</span><span class="font-mono text-[20px] font-bold tabular-nums leading-none" style="color:#00d17a">84.6%</span><span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-faint">resolved sims</span></div>
+          <div class="card card--flat px-3.5 py-3 flex flex-col gap-1.5"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Max MAE %</span><span class="font-mono text-[20px] font-bold tabular-nums leading-none" style="color:#ff4d4d">14.8</span><span class="font-mono text-[9px] tracking-[0.05em] uppercase" style="color:#ffb000">liq-risk proxy</span></div>
+          <div class="card card--flat px-3.5 py-3 flex flex-col gap-1.5"><span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">Avg rung depth</span><span class="font-mono text-[20px] font-bold tabular-nums leading-none text-fg-1">2.3</span><span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-faint">of 4 rungs</span></div>
+        </div>
+      </div>
+
+      <div class="font-mono text-[10.5px] tracking-[0.1em] uppercase text-fg-mute mb-3 mt-7 pb-2 border-b border-line-soft">Verdict breakdown · outcome classes</div>
+      <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mb-3">Four outcome classes, each with a fixed color: <b style="color:#00d17a">TP off market leg</b> (green), <b style="color:#15b8a6">reboundable</b> via WAP (teal — a neutral “recovered”, never a P&amp;L green), <b style="color:#ff4d4d">stopped out</b> (red), and <b style="color:#828b95">inconclusive</b> (striped grey — not actionable). The same palette drives the rows-table status badges and the rung chart.</p>
+      <div class="content ds-staff rounded-surface p-6" data-theme="dark">
+        <div class="card card--flat overflow-hidden">
+          <div class="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft"><h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] leading-none"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" style="color:#7b6cff"><path d="M3 12l9-5 9 5-9 5z M3 17l9 5 9-5"/></svg>Verdict breakdown</h4><span class="font-mono text-[10.5px] text-fg-mute">412 sims</span></div>
+          <div class="p-4">
+            <div class="flex h-[26px] rounded-control overflow-hidden border border-line">
+              <div style="width:48%;background:#00d17a"></div>
+              <div style="width:29.4%;background:#15b8a6"></div>
+              <div style="width:14.1%;background:#ff4d4d"></div>
+              <div style="width:8.5%;background:repeating-linear-gradient(45deg,color-mix(in srgb,#828b95 40%,transparent),color-mix(in srgb,#828b95 40%,transparent) 5px,transparent 5px,transparent 10px)"></div>
+            </div>
+            <div class="grid grid-cols-2 gap-x-5 gap-y-2 mt-3.5">
+              <div class="flex items-center gap-2"><span class="w-[10px] h-[10px] rounded-[2px]" style="background:#00d17a"></span><span class="font-mono text-[11px] text-fg-2">TP off market leg</span><span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" style="color:#00d17a">198</span></div>
+              <div class="flex items-center gap-2"><span class="w-[10px] h-[10px] rounded-[2px]" style="background:#15b8a6"></span><span class="font-mono text-[11px] text-fg-2">Reboundable (WAP)</span><span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" style="color:#15b8a6">121</span></div>
+              <div class="flex items-center gap-2"><span class="w-[10px] h-[10px] rounded-[2px]" style="background:#ff4d4d"></span><span class="font-mono text-[11px] text-fg-2">Stopped out</span><span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" style="color:#ff4d4d">58</span></div>
+              <div class="flex items-center gap-2"><span class="w-[10px] h-[10px] rounded-[2px]" style="background:#828b95;opacity:.6"></span><span class="font-mono text-[11px] text-fg-2">Inconclusive</span><span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" style="color:#828b95">35</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mt-6">Other primitives here: the searchable <b class="text-fg-1">token selector</b> (grouped by quote, CMC-rank chips, review-status dots), the <b class="text-fg-1">coverage strip</b> + collapsible <b class="text-fg-1">fetch report</b>, the <b class="text-fg-1">regime-stability band</b> (worst bucket ringed), the <b class="text-fg-1">rows table</b> with status/side filter chips, and an <b class="text-fg-1">AI insights</b> panel that renders the model’s markdown (<code class="text-[12px]">##</code> headings, numbered suggestions, inline <code class="text-[12px]">code</code>) under a <code class="text-[12px]">via {model}</code> caption. Approve / Reject is confirm-gated and pushes the tested config live — the same attribution pattern as the kill switch.</p>
+    </section>
+
     <!-- ============ CATALOG ============ -->
     <section class="pt-14 scroll-mt-[76px]" id="catalog">
       <div class="font-mono text-[11px] tracking-[0.12em] uppercase mb-2.5" style="color:#7b6cff">Handoff</div>
       <h2 class="font-sans text-[24px] font-bold tracking-[-0.02em] mb-2 text-fg-1">Section catalog</h2>
-      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Nine sections. Overview and the seven below it are built; each is one file under <code class="text-[12px]">app/admin/</code>.</p>
+      <p class="text-[14px] leading-[1.55] text-fg-3 max-w-[680px] mb-[22px]">Ten sections — all built. Each is one file under <code class="text-[12px]">app/admin/</code> (Backtesting spans a few).</p>
       <div class="grid grid-cols-2 gap-3 max-[760px]:grid-cols-1">
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Overview <code class="text-[11px] text-fg-mute">overview.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Fleet command center — platform KPIs, worker-node table, regime, deploy, revenue, exchange connectivity, incident feed.</p></div>
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Positions <code class="text-[11px] text-fg-mute">positions.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Fleet-wide book across all clients — open/closed, lifecycle, leverage, ladder fill, live P&amp;L, sync (drift) flag.</p></div>
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Engine <code class="text-[11px] text-fg-mute">engine.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">BSCS regime gate (5 sub-signals + posture), entry indicators, per-symbol trade config.</p></div>
+        <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Backtesting <code class="text-[11px] text-fg-mute">backtesting.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Single-token ladder backtester — Fetch → Verify → Run → Approve, with grade, regime stability, per-sim rows, and AI insights.</p></div>
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Dispatch <code class="text-[11px] text-fg-mute">dispatch.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Step-dispatcher — throughput KPIs, per-queue depth/lag/rate, saturation, live step stream.</p></div>
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Infra <code class="text-[11px] text-fg-mute">infra.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Nodes, egress-IP allowlist, market-data stream / listen-key health, node reachability.</p></div>
         <div class="border border-line rounded-surface p-4 bg-surface"><div class="text-[14px] font-semibold text-fg-1 mb-1">Exchanges <code class="text-[11px] text-fg-mute">exchanges.jsx</code></div><p class="text-[12.5px] leading-[1.5] text-fg-3">Venue catalog (accordion) — symbols, leverage brackets, live marks, connectivity.</p></div>
@@ -457,6 +509,10 @@ app/admin/admin-kit.jsx       <span class="tok-purple">A_*</span> consts · <spa
 app/admin/pages-data.jsx      <span class="tok-mute">BSCS_SIGNALS · DISPATCH_QUEUES · DATA_STREAMS · VENUE_SYMBOLS · …</span>
 app/admin/admin-shell.jsx     <span class="tok-purple">AdminRail · AdminTopBar · KillSwitch · HaltBanner · AdminFooter</span>
 app/admin/overview.jsx        <span class="tok-mute">flagship</span>
+app/admin/backtesting-data.jsx   <span class="tok-mute">canned Fetch / Verify / Run / AI payloads</span>
+app/admin/backtesting-kit.jsx    <span class="tok-purple">TokenSelector · BtField · BtActionBtn · BtPill</span>
+app/admin/backtesting-panels.jsx <span class="tok-purple">CoverageStrip · FetchReport · GradeHero · VerdictBar · RungChart · RegimeBand</span>
+app/admin/backtesting.jsx        <span class="tok-purple">RowsTable · Markdown · AIPanel · AdminBacktesting</span>
 app/admin/{positions,engine,dispatch,infra,exchanges,sql,revenue,settings}.jsx
 app/admin/admin-stubs.jsx     <span class="tok-mute">AdminStub — fallback for any unbuilt route</span></code></pre>
       <p class="text-[13px] leading-[1.55] text-fg-3 max-w-[680px] mt-4">Routing is a single switch in the entry file (<code class="text-[12px]">displayed === 'engine' ? &lt;AdminEngine/&gt; : …</code>) with a 180ms cross-fade. Active route lives in React state. <code class="text-[12px]">regime</code> / <code class="text-[12px]">score</code> / <code class="text-[12px]">halted</code> are Tweak-backed and threaded to the pages that need them.</p>

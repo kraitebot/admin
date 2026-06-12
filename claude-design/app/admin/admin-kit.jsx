@@ -87,6 +87,7 @@ const A_NAV = [
   { id: 'overview',  label: 'Overview',  icon: 'activity' },
   { id: 'positions', label: 'Positions', icon: 'layers' },
   { id: 'engine',    label: 'Engine',    icon: 'bot' },
+  { id: 'backtesting', label: 'Backtest', icon: 'projections' },
   { id: 'dispatcher', label: 'Dispatch', icon: 'steps' },
   { id: 'infra',     label: 'Infra',     icon: 'server' },
   { id: 'venues',    label: 'Exchanges', icon: 'exchange' },

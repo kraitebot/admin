@@ -69,28 +69,56 @@ const OvwRegime = ({ regime, score }) => {
   );
 };
 
-const OvwDeploy = () => (
-  <div className="card card--flat overflow-hidden">
-    <ACardHead icon="zap" title="Deploy" accent hint="rollout"/>
-    <div className="p-5 flex flex-col gap-3.5">
-      <div className="flex items-center justify-between gap-3">
-        <span className="font-mono text-[12.5px] font-semibold text-fg-1">v4.2.1</span>
-        <span className="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" style={{ color: 'var(--pnl-up-fg)' }}><span className="w-[6px] h-[6px] rounded-chip bg-pnlup"/>Canary healthy</span>
+const OvwSymbols = () => {
+  const rows = VENUE_TRADE_STATS;
+  const tot = rows.reduce((a, v) => ({
+    total: a.total + v.total, tradable: a.tradable + v.tradable,
+    longs: a.longs + v.longs, shorts: a.shorts + v.shorts,
+  }), { total: 0, tradable: 0, longs: 0, shorts: 0 });
+  const COLS = "grid-cols-[1fr_repeat(4,42px)] gap-x-2.5";
+  const agg = [
+    { k: 'Symbols',  v: tot.total,    c: 'var(--fg-1)' },
+    { k: 'Tradable', v: tot.tradable, c: 'var(--accent)' },
+    { k: 'Long',     v: tot.longs,    c: 'var(--pnl-up-fg)' },
+    { k: 'Short',    v: tot.shorts,   c: 'var(--pnl-down-fg)' },
+  ];
+  return (
+    <div className="card card--flat overflow-hidden">
+      <ACardHead icon="exchange" title="Tradable symbols" accent hint={rows.length + ' venues'}/>
+      {/* aggregate strip */}
+      <div className="grid grid-cols-4 border-b border-line-soft">
+        {agg.map((s, i) => (
+          <div key={s.k} className={"flex flex-col gap-1.5 py-3.5 px-3.5 " + (i < 3 ? "border-r border-line-soft" : "")}>
+            <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute whitespace-nowrap">{s.k}</span>
+            <span className="font-mono text-[21px] font-bold tabular-nums leading-none" style={{ color: s.c }}>{s.v.toLocaleString()}</span>
+          </div>
+        ))}
       </div>
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[10px] tracking-[0.06em] uppercase text-fg-mute">Rolled out</span>
-          <span className="font-mono text-[11px] font-semibold tabular-nums text-fg-1">6 / 8 nodes</span>
+      {/* per-venue table */}
+      <div className={"hidden md:grid " + COLS + " py-2 px-5 border-b border-line-soft bg-surface-2/40 font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint"}>
+        <span>Venue</span>
+        <span className="text-right">Sym</span>
+        <span className="text-right">Trd</span>
+        <span className="text-right">Lng</span>
+        <span className="text-right">Sht</span>
+      </div>
+      {rows.map(v => (
+        <div key={v.ex} className={"grid " + COLS + " items-center py-2.5 px-5 border-b border-line-soft last:border-b-0"}>
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="w-[24px] h-[24px] rounded-full bg-[#15181f] ring-1 ring-white/5 flex items-center justify-center flex-shrink-0 overflow-hidden">
+              <img src={"assets/exch/" + v.slug + ".svg"} alt={v.ex} width="16" height="16" style={{ width: 16, height: 16 }}/>
+            </span>
+            <span className="font-sans text-[12.5px] font-semibold text-fg-1 whitespace-nowrap">{v.ex}</span>
+          </div>
+          <span className="font-mono text-[12px] tabular-nums text-right text-fg-3">{v.total}</span>
+          <span className="font-mono text-[12px] font-semibold tabular-nums text-right" style={{ color: 'var(--accent)' }}>{v.tradable}</span>
+          <span className="font-mono text-[12px] font-semibold tabular-nums text-right" style={{ color: 'var(--pnl-up-fg)' }}>{v.longs}</span>
+          <span className="font-mono text-[12px] font-semibold tabular-nums text-right" style={{ color: 'var(--pnl-down-fg)' }}>{v.shorts}</span>
         </div>
-        <div className="h-[6px] rounded-chip bg-surface-3 overflow-hidden"><div className="h-full rounded-chip bg-accent" style={{ width: '75%' }}/></div>
-      </div>
-      <div className="flex items-center justify-between">
-        <span className="font-mono text-[10px] text-fg-mute tracking-[0.02em]">NYC-01 · NYC-02 on v4.2.0</span>
-        <button className={A_BTN_GHOST + " h-[28px] px-2 text-[11.5px]"}>Continue<UIcon name="arrowRight" size={13}/></button>
-      </div>
+      ))}
     </div>
-  </div>
-);
+  );
+};
 
 const OvwRevenue = () => {
   const rows = [
@@ -207,7 +235,7 @@ const AdminOverview = ({ regime, score, halted }) => (
       <OvwFleet/>
       <div className="flex flex-col gap-5">
         <OvwRegime regime={regime} score={score}/>
-        <OvwDeploy/>
+        <OvwSymbols/>
         <OvwRevenue/>
       </div>
     </div>

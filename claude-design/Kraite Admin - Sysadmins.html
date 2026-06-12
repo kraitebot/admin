@@ -39,10 +39,14 @@
 <script type="text/babel" src="app/accounts-kit.jsx"></script>
 <script type="text/babel" src="app/admin/admin-kit.jsx"></script>
 <script type="text/babel" src="app/admin/pages-data.jsx"></script>
+<script type="text/babel" src="app/admin/backtesting-data.jsx"></script>
 <script type="text/babel" src="app/admin/admin-shell.jsx"></script>
 <script type="text/babel" src="app/admin/overview.jsx"></script>
 <script type="text/babel" src="app/admin/positions.jsx"></script>
 <script type="text/babel" src="app/admin/engine.jsx"></script>
+<script type="text/babel" src="app/admin/backtesting-kit.jsx"></script>
+<script type="text/babel" src="app/admin/backtesting-panels.jsx"></script>
+<script type="text/babel" src="app/admin/backtesting.jsx"></script>
 <script type="text/babel" src="app/admin/dispatch.jsx"></script>
 <script type="text/babel" src="app/admin/infra.jsx"></script>
 <script type="text/babel" src="app/admin/exchanges.jsx"></script>
@@ -119,6 +123,8 @@ function App() {
               ? <AdminPositions regime={regime} score={score}/>
               : displayed === 'engine'
               ? <AdminEngine regime={regime} score={score} halted={halted}/>
+              : displayed === 'backtesting'
+              ? <AdminBacktesting/>
               : displayed === 'dispatcher'
               ? <AdminDispatch/>
               : displayed === 'infra'
