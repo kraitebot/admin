@@ -245,16 +245,24 @@
                         </template>
                         <span x-show="!node.disk || node.disk.percent === null" class="font-mono text-[11px] text-fg-mute">—</span>
                     </div>
-                    {{-- uptime + last sync --}}
+                    {{-- uptime --}}
                     <div class="flex flex-col items-end leading-tight max-[1024px]:hidden">
                         <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1" x-text="uptimeHuman(node.uptime_seconds)"></span>
-                        <span class="font-mono text-[9px] tracking-[0.06em] uppercase text-fg-mute" x-text="node.status === 'missing' ? 'no data' : ('sync ' + ageHuman(node.age_seconds))"></span>
                     </div>
-                    {{-- supervisor services --}}
-                    <div class="flex items-center gap-[5px] flex-wrap max-[1024px]:hidden">
+                    {{-- supervisor services — hover a dot for the service name + state --}}
+                    <div class="flex items-center gap-[6px] flex-wrap max-[1024px]:hidden">
                         <span x-show="unitList(node.units).length === 0" class="font-mono text-[10px] text-fg-mute">—</span>
                         <template x-for="u in unitList(node.units)" :key="u.name">
-                            <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" :title="`${u.name}: ${u.state}`"></span>
+                            <span class="relative group inline-flex items-center justify-center w-[13px] h-[13px] cursor-default">
+                                <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0 transition-transform duration-fast group-hover:scale-150" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
+                                <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
+                                    <div class="font-mono text-[10px] font-bold text-fg-1 flex items-center gap-1.5">
+                                        <span class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
+                                        <span x-text="u.name"></span>
+                                    </div>
+                                    <div class="font-mono text-[9px] tracking-[0.06em] uppercase mt-0.5" :style="`color: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" x-text="u.state"></div>
+                                </div>
+                            </span>
                         </template>
                     </div>
                 </div>

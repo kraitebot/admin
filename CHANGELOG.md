@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.1] — 2026-06-12
+
+### Improvements
+- **Fleet service dots → hover detail** — the supervisor-service status dots on the sysadmin dashboard Worker-fleet card and the Infrastructure page now reveal the service name + state in a hover tooltip (replacing the native `title` hint) and grow on hover for an easier target. The dashboard card also drops the redundant per-node "sync …" line — uptime stays.
+
+### Tests
+- **Fleet Redis connection regression guard** — pins that the unprefixed `fleet` Redis connection is registered (database 2, empty prefix) and still resolves after the Redis manager has already been resolved, locking in the `boot()`→`register()` fix behind the 2026-06-12 heartbeat incident.
+
 ## [0.8.0] — 2026-06-12
 
 ### Features
