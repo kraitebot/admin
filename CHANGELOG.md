@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.0] — 2026-06-12
+
+### Features
+- **Live fleet health** — the sysadmin Worker-fleet card + the new Infrastructure page are wired to real data: node reachability + vitals (CPU / RAM / disk / uptime / services) from the live fleet-metrics heartbeat (`servers` table ⋈ Redis), the egress-IP allowlist from the real apiable hosts, and a Control-plane panel (host vitals + step-dispatcher pulse + slow-query count). Every fleet box now reports — the 7 PHP boxes via a self-rescheduling Horizon job, hyperion via a standalone systemd agent.
+
+### Fixes
+- **Dashboard data feed hardening** — a missing `bscs_override_reason` column no longer 500s the entire `system.dashboard.data` feed (and the live fleet card with it); the override-reason read is now gated on column existence. `serverMetrics()` is null-safe + cross-platform and stamps the reporting host.
+
 ## [0.7.3] — 2026-06-08
 
 ### Features
