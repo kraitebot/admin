@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.2] — 2026-06-12
+
+### Fixes
+- **Top-up double-credit guard** — a NOWPayments IPN retry can no longer credit the same payment twice. The wallet credit now runs under a row lock with the idempotency check re-evaluated inside the transaction, closing the race where two concurrent "finished" webhooks both slipped past the `credited_at` guard before either stamped it.
+- **Active-account ownership check** — switching plans can no longer point your active account at another user's account. `active_account_id` is now validated against the accounts you actually own; a foreign id is rejected instead of silently assigned.
+
+### Tests
+- Feature coverage for the active-account ownership rule — rejects an account belonging to another user, accepts one the caller owns.
+
 ## [0.8.1] — 2026-06-12
 
 ### Improvements

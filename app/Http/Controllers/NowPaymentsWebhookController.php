@@ -89,20 +89,33 @@ final class NowPaymentsWebhookController extends Controller
 
     private function creditPayment(Payment $payment): void
     {
-        $amount = (float) ($payment->outcome_amount ?? $payment->price_amount);
-
-        if ($amount <= 0) {
-            Log::warning('[NOWPayments] zero/negative outcome_amount, skipping credit', [
-                'payment_id' => $payment->id,
-            ]);
-
-            return;
-        }
-
         $renewalRan = false;
+        $credited = false;
+        $amount = 0.0;
 
-        DB::transaction(function () use ($payment, $amount, &$renewalRan) {
-            $user = $payment->user;
+        DB::transaction(function () use ($payment, &$renewalRan, &$credited, &$amount) {
+            // Re-read the row under a write lock and re-check the idempotency
+            // guard inside the transaction. NOWPayments retries IPNs, and two
+            // concurrent "finished" hits both pass the outer isCredited() check
+            // before either stamps credited_at — without this lock the wallet
+            // gets credited twice for one payment.
+            $locked = Payment::whereKey($payment->getKey())->lockForUpdate()->first();
+
+            if ($locked === null || ! $locked->isCreditable() || $locked->isCredited()) {
+                return;
+            }
+
+            $amount = (float) ($locked->outcome_amount ?? $locked->price_amount);
+
+            if ($amount <= 0) {
+                Log::warning('[NOWPayments] zero/negative outcome_amount, skipping credit', [
+                    'payment_id' => $locked->id,
+                ]);
+
+                return;
+            }
+
+            $user = $locked->user;
 
             $this->wallet->credit(
                 user: $user,
@@ -110,19 +123,21 @@ final class NowPaymentsWebhookController extends Controller
                 type: WalletTransaction::TYPE_CREDIT_TOPUP,
                 description: sprintf(
                     'NOWPayments top-up #%s',
-                    $payment->nowpayments_payment_id ?? $payment->order_id,
+                    $locked->nowpayments_payment_id ?? $locked->order_id,
                 ),
                 meta: [
-                    'payment_id' => $payment->id,
-                    'nowpayments_payment_id' => $payment->nowpayments_payment_id,
-                    'pay_currency' => $payment->pay_currency,
-                    'pay_amount' => $payment->pay_amount,
-                    'status' => $payment->status,
+                    'payment_id' => $locked->id,
+                    'nowpayments_payment_id' => $locked->nowpayments_payment_id,
+                    'pay_currency' => $locked->pay_currency,
+                    'pay_amount' => $locked->pay_amount,
+                    'status' => $locked->status,
                 ],
             );
 
-            $payment->credited_at = now();
-            $payment->save();
+            $locked->credited_at = now();
+            $locked->save();
+
+            $credited = true;
 
             $user->refresh();
             $user->load('subscription');
@@ -138,12 +153,16 @@ final class NowPaymentsWebhookController extends Controller
                 } catch (Throwable $e) {
                     Log::error('[NOWPayments] auto-renewal retry failed after top-up', [
                         'user_id' => $user->id,
-                        'payment_id' => $payment->id,
+                        'payment_id' => $locked->id,
                         'error' => $e->getMessage(),
                     ]);
                 }
             }
         });
+
+        if (! $credited) {
+            return;
+        }
 
         $payment->refresh();
         $this->notifyTopupConfirmed($payment->user, $amount, $renewalRan);
@@ -155,7 +174,7 @@ final class NowPaymentsWebhookController extends Controller
             $user->refresh();
             $user->load('subscription');
 
-            $payment = \Kraite\Core\Models\Payment::where('user_id', $user->id)
+            $payment = Payment::where('user_id', $user->id)
                 ->whereNotNull('credited_at')
                 ->orderByDesc('credited_at')
                 ->first();

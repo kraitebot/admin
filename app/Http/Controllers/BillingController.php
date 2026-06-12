@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Payment;
@@ -90,12 +91,16 @@ final class BillingController extends Controller
 
     public function changeSubscription(Request $request): RedirectResponse
     {
+        $user = $this->kraiteUser($request);
+
         $data = $request->validate([
             'subscription_id' => 'required|exists:subscriptions,id',
-            'active_account_id' => 'nullable|integer',
+            'active_account_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('accounts', 'id')->where('user_id', $user->id),
+            ],
         ]);
-
-        $user = $this->kraiteUser($request);
 
         if ($user->isPaused()) {
             return redirect()
