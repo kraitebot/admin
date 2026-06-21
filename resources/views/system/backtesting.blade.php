@@ -62,6 +62,7 @@
             tf: config.timeframes.includes('1d') ? '1d' : (config.timeframes[0] || '1d'),
             cfg: {},
             selOpen: false,
+            cfgOpen: false,                      // Config card collapsed by default
             query: '',
             filters: { top100: false, approved: false, notConcluded: false },
 
@@ -608,53 +609,70 @@
                     </div>
                 </div>
 
-                {{-- [B] config --}}
+                {{-- [B] config — collapsible, starts collapsed --}}
                 <div class="card card--flat overflow-hidden transition-opacity" :class="selected ? '' : 'opacity-50 pointer-events-none'">
-                    <x-ui.card-head icon="sliders" title="Config" :accent="true" hint="ladder parameters"/>
-                    <div class="p-4 flex flex-col gap-4">
-                        {{-- window --}}
-                        <div class="flex flex-col gap-3">
-                            <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint">Window</span>
-                            <div class="grid grid-cols-2 gap-3">
-                                <label class="flex flex-col gap-[6px]">
-                                    <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">Since</span>
-                                    <input type="date" x-model="cfg.since" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
-                                </label>
-                                <label class="flex flex-col gap-[6px]">
-                                    <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">Candles back</span>
-                                    <input type="number" x-model="cfg.candles_back" placeholder="all" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
-                                </label>
-                            </div>
-                            <span class="font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug">Leave both empty to walk all history. Date drives the fetch depth; candle count windows the run.</span>
-                        </div>
-
-                        {{-- strategy --}}
-                        <div class="flex flex-col gap-3 pt-3 border-t border-line-soft">
-                            <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint">Strategy</span>
-                            <div class="grid grid-cols-2 gap-3">
-                                @php
-                                    $btInput = 'w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed';
-                                    $btLabel = 'font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute';
-                                @endphp
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Take-profit %</span><input type="number" step="0.01" x-model="cfg.tp" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Stop-loss %</span><input type="number" step="0.01" x-model="cfg.sl" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap long %</span><input type="number" step="0.01" x-model="cfg.gapL" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap short %</span><input type="number" step="0.01" x-model="cfg.gapS" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Limit hit ≥</span><input type="number" x-model="cfg.limit_hit" placeholder="any" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Max rows</span><input type="number" x-model="cfg.max_rows" :disabled="!selected" class="{{ $btInput }}"/></label>
-                            </div>
-                        </div>
-
-                        {{-- fixed envelope --}}
-                        <div class="flex flex-col gap-2 pt-3 border-t border-line-soft">
-                            <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint mb-0.5">Fixed envelope</span>
-                            @foreach(['Margin' => '5,000', 'Leverage' => '20×', 'Limit orders' => '4', 'Multipliers' => '[2,2,2,2]'] as $k => $v)
-                                <div class="flex items-center justify-between gap-3 py-[7px] border-b border-line-soft last:border-b-0">
-                                    <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">{{ $k }}</span>
-                                    <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-2">{{ $v }}</span>
+                    <x-ui.card-head icon="sliders" title="Config" :accent="true" collapsible
+                                    x-on:click="cfgOpen = !cfgOpen"
+                                    ::class="cfgOpen ? 'border-b border-line-soft' : 'rounded-b-surface'">
+                        <x-slot:right>
+                            <span class="flex items-center gap-2.5">
+                                <span x-show="!cfgOpen" class="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]" x-text="selected ? 'ladder parameters' : 'select a token'"></span>
+                                <span class="flex transition-transform duration-[280ms] ease-[cubic-bezier(.4,0,.2,1)]" :class="cfgOpen && 'rotate-180'">
+                                    <x-feathericon-chevron-down class="w-4 h-4 text-fg-3" stroke-width="1.75"/>
+                                </span>
+                            </span>
+                        </x-slot:right>
+                    </x-ui.card-head>
+                    {{-- animated collapse: grid 0fr↔1fr slides the body without a fixed height --}}
+                    <div class="grid transition-[grid-template-rows] duration-[280ms] ease-[cubic-bezier(.4,0,.2,1)]"
+                         :style="cfgOpen ? 'grid-template-rows: 1fr' : 'grid-template-rows: 0fr'">
+                        <div class="overflow-hidden min-h-0">
+                            <div class="p-4 flex flex-col gap-4">
+                                {{-- window --}}
+                                <div class="flex flex-col gap-3">
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Window</span>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        <label class="flex flex-col gap-[6px]">
+                                            <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3">Since</span>
+                                            <input type="date" x-model="cfg.since" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
+                                        </label>
+                                        <label class="flex flex-col gap-[6px]">
+                                            <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3">Candles back</span>
+                                            <input type="number" x-model="cfg.candles_back" placeholder="all" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
+                                        </label>
+                                    </div>
+                                    <span class="font-mono text-[10px] text-fg-3 tracking-[0.01em] leading-snug">Leave both empty to walk all history. Date drives the fetch depth; candle count windows the run.</span>
                                 </div>
-                            @endforeach
-                            <span class="font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug mt-1">Sizing is fixed — backtests measure price geometry (does WAP recover to TP?), not capital allocation.</span>
+
+                                {{-- strategy --}}
+                                <div class="flex flex-col gap-3 pt-3 border-t border-line-soft">
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Strategy</span>
+                                    <div class="grid grid-cols-2 gap-3">
+                                        @php
+                                            $btInput = 'w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed';
+                                            $btLabel = 'font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3';
+                                        @endphp
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Take-profit %</span><input type="number" step="0.01" x-model="cfg.tp" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Stop-loss %</span><input type="number" step="0.01" x-model="cfg.sl" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap long %</span><input type="number" step="0.01" x-model="cfg.gapL" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap short %</span><input type="number" step="0.01" x-model="cfg.gapS" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Limit hit ≥</span><input type="number" x-model="cfg.limit_hit" placeholder="any" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Max rows</span><input type="number" x-model="cfg.max_rows" :disabled="!selected" class="{{ $btInput }}"/></label>
+                                    </div>
+                                </div>
+
+                                {{-- fixed envelope --}}
+                                <div class="flex flex-col gap-2 pt-3 border-t border-line-soft">
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3 mb-0.5">Fixed envelope</span>
+                                    @foreach(['Margin' => '5,000', 'Leverage' => '20×', 'Limit orders' => '4', 'Multipliers' => '[2,2,2,2]'] as $k => $v)
+                                        <div class="flex items-center justify-between gap-3 py-[7px] border-b border-line-soft last:border-b-0">
+                                            <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">{{ $k }}</span>
+                                            <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-2">{{ $v }}</span>
+                                        </div>
+                                    @endforeach
+                                    <span class="font-mono text-[10px] text-fg-3 tracking-[0.01em] leading-snug mt-1">Sizing is fixed — backtests measure price geometry (does WAP recover to TP?), not capital allocation.</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

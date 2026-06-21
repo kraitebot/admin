@@ -2,6 +2,12 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.7] — 2026-06-21
+
+### Improvements
+- **Backtesting Config card is now collapsible** — it starts collapsed; clicking the header slides it open/closed (animated `grid-template-rows` 0fr↔1fr, 0.28s) with a 180° chevron. Collapsed, the header shows a "ladder parameters" / "select a token" hint. The shared `x-ui.card-head` gained an optional `collapsible` flag (renders as a button + forwards attributes); all other card heads are unchanged.
+- **Backtesting Config labels are readable again** — the section labels (Window / Strategy / Fixed envelope), field labels, and hint copy moved off the near-invisible `--fg-faint` to `--fg-3` for clear legibility on the dark surface. Scoped to the Config card.
+
 ## [0.8.6] — 2026-06-21
 
 ### Features
