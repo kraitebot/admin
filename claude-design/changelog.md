@@ -14,12 +14,13 @@ release date, and a fresh empty **[Unreleased]** is started on top.
 - Backtesting → Token card: three token-universe filter checkboxes below the selector — **Top 100** (rank ≤ 100), **Only approved** (approved configs), and **Not concluded** (neither approved nor rejected). Each shows a live count; the two status filters combine as a union, AND'd with Top 100, and narrow the token dropdown live. Added a reusable `BtCheck` checkbox component.
 
 ### Changed
+- Backtesting → **Config card is now collapsible** and starts collapsed. Clicking the header toggles it with a slide-down/slide-up animation (animated `grid-template-rows` 0fr↔1fr, 0.28s) and a 180° chevron rotation; the collapsed header shows a "ladder parameters" / "select a token" hint. `ACardHead` gained optional `onClick`/`collapsed` props (other usages unaffected).
 - Overview dashboard: replaced the "Worker nodes" KPI tile with **Step Dispatcher**, showing a circular ring gauge with the value centered in the dial (example 92%, sub "DISPATCH PERF · 4.2K STEPS/S"). Added a reusable `MiniGauge` ring-dial component with perf bands (≥80 green / 60–80 warn / <60 red, trading-safe).
 - Backtesting → Token card now uses `overflow: visible` so the token-selector dropdown renders above the Config panel instead of being clipped/stacked behind it. Card heads (`ACardHead`) gained `rounded-t-surface` so their corners stay flush when a card is unclipped.
 - Token-selector dropdown rows: removed the stray light-gray fill (was the browser's default `<button>` background showing through — rows now render transparent over the panel). Each row, the trigger, and the selected state now show a circular token avatar (initial monogram, one harmonized hue per token via golden-ratio hue spread).
 
 ### Fixed
-- _Nothing yet._
+- Backtesting → Config card: lightened the dim section labels (Window / Strategy / Fixed envelope), field labels, and the window hint copy up to `--fg-3` (`#aab1ba`) for clear legibility on the dark surface (was the near-invisible `--fg-faint` `#3a424b`). Scoped to the backtesting kit — table headers and filter chips unchanged.
 
 ### Removed
 - _Nothing yet._

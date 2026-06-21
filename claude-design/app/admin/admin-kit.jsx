@@ -14,14 +14,20 @@ const A_H1 = "font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leadi
 const A_SUB = "text-[13px] text-fg-3 mt-1.5";
 
 // ---------- section card head (mirrors AcctBandHead) ----------
-const ACardHead = ({ icon, title, hint, right, accent }) => (
-  <div className="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft rounded-t-surface max-[640px]:px-4">
-    <h4 className="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
-      {icon && <UIcon name={icon} size={16} style={{ color: accent ? 'var(--accent)' : 'var(--fg-3)' }}/>}{title}
-    </h4>
-    {right || (hint ? <span className="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">{hint}</span> : null)}
-  </div>
-);
+const ACardHead = ({ icon, title, hint, right, accent, onClick, collapsed }) => {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag onClick={onClick}
+      className={"w-full flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 rounded-t-surface max-[640px]:px-4 text-left "
+        + (collapsed ? "rounded-b-surface " : "border-b border-line-soft ")
+        + (onClick ? "appearance-none border-x-0 border-t-0 cursor-pointer transition-colors duration-fast hover:bg-hover" : "")}>
+      <h4 className="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
+        {icon && <UIcon name={icon} size={16} style={{ color: accent ? 'var(--accent)' : 'var(--fg-3)' }}/>}{title}
+      </h4>
+      {right || (hint ? <span className="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">{hint}</span> : null)}
+    </Tag>
+  );
+};
 
 // ---------- health dot + chip ----------
 const HEALTH = {

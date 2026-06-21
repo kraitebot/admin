@@ -6,8 +6,8 @@
 
 // ---------- shared style constants ----------
 const BT_INPUT = "w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-[color:var(--border-focus)] placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed";
-const BT_FLABEL = "font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute";
-const BT_HINT = "font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug";
+const BT_FLABEL = "font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3";
+const BT_HINT = "font-mono text-[10px] text-fg-3 tracking-[0.01em] leading-snug";
 
 const GRADE_COLOR = { A: 'var(--pnl-up-fg)', B: BT_TEAL, C: 'var(--warn)', D: '#ff8a3d', F: 'var(--danger)' };
 const STATUS_META = {

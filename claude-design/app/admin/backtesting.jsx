@@ -185,6 +185,7 @@ const AdminBacktesting = () => {
     return true;
   });
   const [tf, setTf] = React.useState('5m');
+  const [cfgOpen, setCfgOpen] = React.useState(false);   // Config card collapsed by default
   const [cfg, setCfg] = React.useState({});
   const [cov, setCov] = React.useState(null);
   const [report, setReport] = React.useState(null);
@@ -264,12 +265,20 @@ const AdminBacktesting = () => {
               </div>
             </div>
 
-            {/* [B] config */}
+            {/* [B] config — collapsible (slide down/up) */}
             <div className={"card card--flat overflow-hidden transition-opacity " + (selected ? '' : 'opacity-50 pointer-events-none')}>
-              <ACardHead icon="sliders" title="Config" accent hint={selected ? '' : 'select a token'}/>
-              <div className="p-4 flex flex-col gap-4">
+              <ACardHead icon="sliders" title="Config" accent collapsed={!cfgOpen}
+                onClick={() => setCfgOpen(o => !o)}
+                right={<span className="flex items-center gap-2.5">
+                  {!cfgOpen && <span className="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">{selected ? 'ladder parameters' : 'select a token'}</span>}
+                  <UIcon name="chevronDown" size={16} style={{ color: 'var(--fg-3)', transition: 'transform .28s cubic-bezier(.4,0,.2,1)', transform: cfgOpen ? 'rotate(180deg)' : 'none' }}/>
+                </span>}/>
+              <div className="grid transition-[grid-template-rows] duration-[280ms] ease-[cubic-bezier(.4,0,.2,1)]"
+                style={{ gridTemplateRows: cfgOpen ? '1fr' : '0fr' }}>
+                <div className="overflow-hidden min-h-0">
+                  <div className="p-4 flex flex-col gap-4">
                 <div className="flex flex-col gap-3">
-                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint">Window</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Window</span>
                   <div className="grid grid-cols-2 gap-3">
                     <BtField label="Since"><input type="date" className={BT_INPUT} value={cfg.since || ''} onChange={e => setF('since', e.target.value)} disabled={!selected}/></BtField>
                     <BtField label="Candles back"><input type="number" placeholder="all" className={BT_INPUT} value={cfg.candles_back || ''} onChange={e => setF('candles_back', e.target.value)} disabled={!selected}/></BtField>
@@ -278,7 +287,7 @@ const AdminBacktesting = () => {
                 </div>
 
                 <div className="flex flex-col gap-3 pt-3 border-t border-line-soft">
-                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint">Strategy</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Strategy</span>
                   <div className="grid grid-cols-2 gap-3">
                     <BtField label="Take-profit %"><input type="number" className={BT_INPUT} value={cfg.tp || ''} onChange={e => setF('tp', e.target.value)} disabled={!selected}/></BtField>
                     <BtField label="Stop-loss %"><input type="number" className={BT_INPUT} value={cfg.sl || ''} onChange={e => setF('sl', e.target.value)} disabled={!selected}/></BtField>
@@ -290,12 +299,14 @@ const AdminBacktesting = () => {
                 </div>
 
                 <div className="flex flex-col gap-2 pt-3 border-t border-line-soft">
-                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint mb-0.5">Fixed envelope</span>
+                  <span className="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3 mb-0.5">Fixed envelope</span>
                   <BtStatic label="Margin" value="5,000"/>
                   <BtStatic label="Leverage" value="20×"/>
                   <BtStatic label="Limit orders" value="4"/>
                   <BtStatic label="Multipliers" value="[2,2,2,2]"/>
                   <span className={BT_HINT + " mt-1"}>Sizing is fixed — backtests measure price geometry (does WAP recover to TP?), not capital allocation.</span>
+                </div>
+                  </div>
                 </div>
               </div>
             </div>
