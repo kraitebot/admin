@@ -58,7 +58,8 @@
 
             // ---- selection + form ----
             selId: null,
-            tf: config.timeframes[0] || '5m',
+            // Default to the daily timeframe; fall back to the first available.
+            tf: config.timeframes.includes('1d') ? '1d' : (config.timeframes[0] || '1d'),
             cfg: {},
             selOpen: false,
             query: '',
@@ -376,6 +377,25 @@
                 const r = this.resolvedSims;
                 return r > 0 ? ((t.tp_market_only || 0) + (t.reboundable || 0)) / r * 100 : 0;
             },
+            // System's own decision proposal, derived from the simulator grade:
+            // A/B → recommend approve, D/F → recommend reject, C → review (manual
+            // call). Drives the proposal banner + the suggested-button emphasis.
+            get proposal() {
+                if (! this.result) return null;
+                const g = this.totals.grade;
+                if (g === 'A' || g === 'B') return { action: 'approve', verb: 'Recommend approve', color: 'var(--pnl-up-fg)' };
+                if (g === 'D' || g === 'F') return { action: 'reject', verb: 'Recommend reject', color: 'var(--pnl-down-fg)' };
+                return { action: 'review', verb: 'Borderline — review manually', color: 'var(--warn)' };
+            },
+            get proposalReason() {
+                if (! this.result) return '';
+                const t = this.totals;
+                const parts = [];
+                if (t.grade) parts.push('Grade ' + t.grade);
+                if (t.overall_score != null) parts.push(this.fmtFixed(t.overall_score) + '/100');
+                parts.push(this.passRate.toFixed(1) + '% pass');
+                return parts.join(' · ');
+            },
             get verdictBars() {
                 const t = this.totals;
                 return [
@@ -678,13 +698,28 @@
                         </x-ui.card-head>
                         <div class="p-4 flex flex-col gap-2.5">
                             <span x-show="!result" class="font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug">Run a backtest before approving — the decision pushes the tested config live.</span>
+                            {{-- system proposal — recommended decision derived from the grade --}}
+                            <template x-if="result && proposal">
+                                <div class="flex items-center gap-2.5 py-2.5 px-3 rounded-control border"
+                                     :style="`border-color: color-mix(in srgb, ${proposal.color} 38%, transparent); background: color-mix(in srgb, ${proposal.color} 9%, transparent)`">
+                                    <span class="flex-shrink-0 flex" :style="`color: ${proposal.color}`">
+                                        <x-feathericon-target class="w-4 h-4" stroke-width="1.75"/>
+                                    </span>
+                                    <div class="flex flex-col gap-0.5 min-w-0">
+                                        <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase" :style="`color: ${proposal.color}`">Proposal · <span x-text="proposal.verb"></span></span>
+                                        <span class="font-mono text-[11px] text-fg-2 tabular-nums" x-text="proposalReason"></span>
+                                    </div>
+                                </div>
+                            </template>
                             <div class="flex gap-2">
                                 <button type="button" x-on:click="askConfirm('approve')" :disabled="!result || status === 'approved'"
-                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-up-fg)">
+                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-up-fg)"
+                                        :style="{ boxShadow: proposal && proposal.action === 'approve' ? '0 0 0 2px color-mix(in srgb, var(--pnl-up-fg) 50%, transparent)' : '' }">
                                     <x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/>Approve
                                 </button>
                                 <button type="button" x-on:click="askConfirm('reject')" :disabled="!result || status === 'rejected'"
-                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold border transition-colors duration-fast hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed" style="color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 40%, transparent)">
+                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold border transition-colors duration-fast hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed" style="color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 40%, transparent)"
+                                        :style="{ boxShadow: proposal && proposal.action === 'reject' ? '0 0 0 2px color-mix(in srgb, var(--pnl-down-fg) 45%, transparent)' : '' }">
                                     <x-feathericon-power class="w-[15px] h-[15px]" stroke-width="2"/>Reject
                                 </button>
                             </div>

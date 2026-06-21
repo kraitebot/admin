@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.6] — 2026-06-21
+
+### Features
+- **Backtesting decision proposal** — after a run, the Decision card now shows the system's own recommendation derived from the simulator grade: A/B → *Recommend approve*, D/F → *Recommend reject*, C → *Borderline — review manually*. The banner cites the reasoning (grade · score/100 · pass %) and the recommended Approve/Reject button gets a coloured ring. Advisory only — the operator still clicks.
+
+### Improvements
+- **Backtesting default timeframe is now 1d** — the timeframe selector defaults to the daily candle instead of the first option, matching how most token configs are reviewed. Button order is unchanged.
+
 ## [0.8.5] — 2026-06-21
 
 ### Features
