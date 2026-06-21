@@ -173,6 +173,17 @@ const Toast = ({ msg }) => {
 // ============================ MAIN ============================
 const AdminBacktesting = () => {
   const [selId, setSelId] = React.useState(null);
+  const [filters, setFilters] = React.useState({ top100: false, approved: false, notConcluded: false });
+  const setFilter = (k, v) => setFilters(f => ({ ...f, [k]: v }));
+  const visibleSymbols = BT_SYMBOLS.filter(s => {
+    if (filters.top100 && s.rank > 100) return false;
+    // status filters combine as a union: if either is on, the token must match one of them
+    if (filters.approved || filters.notConcluded) {
+      const ok = (filters.approved && s.status === 'approved') || (filters.notConcluded && s.status == null);
+      if (!ok) return false;
+    }
+    return true;
+  });
   const [tf, setTf] = React.useState('5m');
   const [cfg, setCfg] = React.useState({});
   const [cov, setCov] = React.useState(null);
@@ -231,7 +242,15 @@ const AdminBacktesting = () => {
             <div className="card card--flat !overflow-visible relative z-20">
               <ACardHead icon="coins" title="Token" accent/>
               <div className="p-4 flex flex-col gap-3">
-                <TokenSelector symbols={BT_SYMBOLS} selected={selected} onSelect={selectToken}/>
+                <TokenSelector symbols={visibleSymbols} selected={selected} onSelect={selectToken}/>
+                <div className="flex flex-col gap-2 -mt-0.5">
+                  <BtCheck label="Top 100" checked={filters.top100} onChange={v => setFilter('top100', v)}
+                    count={BT_SYMBOLS.filter(s => s.rank <= 100).length}/>
+                  <BtCheck label="Only approved" checked={filters.approved} onChange={v => setFilter('approved', v)}
+                    count={BT_SYMBOLS.filter(s => s.status === 'approved').length}/>
+                  <BtCheck label="Not concluded" checked={filters.notConcluded} onChange={v => setFilter('notConcluded', v)}
+                    count={BT_SYMBOLS.filter(s => s.status == null).length}/>
+                </div>
                 {selected && <TokenHeader s={selected} status={status}/>}
                 <BtField label="Timeframe">
                   <div className="flex gap-1.5">

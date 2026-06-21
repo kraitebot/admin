@@ -59,6 +59,21 @@ const TokenAvatar = ({ token, size = 24 }) => {
   );
 };
 
+// ---------- filter checkbox (token universe filters) ----------
+const BtCheck = ({ checked, onChange, label, count }) => (
+  <label className="flex items-center gap-2 cursor-pointer select-none group">
+    <span className="relative flex items-center justify-center w-[16px] h-[16px] rounded-[4px] border transition-colors duration-fast flex-shrink-0"
+      style={checked
+        ? { background: 'var(--accent)', borderColor: 'var(--accent)' }
+        : { background: 'var(--bg-elev-2)', borderColor: 'var(--border-strong)' }}>
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} className="sr-only"/>
+      {checked && <UIcon name="check" size={11} style={{ width: 11, height: 11, color: 'var(--accent-on)', strokeWidth: 3 }}/>}
+    </span>
+    <span className="text-[12px] font-medium text-fg-2 group-hover:text-fg-1 transition-colors whitespace-nowrap">{label}</span>
+    {count != null && <span className="font-mono text-[10px] tabular-nums text-fg-faint ml-auto">{count}</span>}
+  </label>
+);
+
 // ---------- [A] token selector ----------
 const QUOTE_ORDER = (q) => (q === 'USDT' ? 0 : q === 'USDC' ? 1 : 2);
 const TokenSelector = ({ symbols, selected, onSelect }) => {
