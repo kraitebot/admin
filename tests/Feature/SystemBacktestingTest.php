@@ -26,6 +26,7 @@ beforeEach(function (): void {
             $table->string('token')->nullable();
             $table->integer('cmc_ranking')->nullable();
             $table->string('cmc_category')->nullable();
+            $table->string('image_url')->nullable();
         });
     }
     if (! Schema::hasTable('exchange_symbols')) {
@@ -60,6 +61,7 @@ function seedBacktestableToken(): void
         'token' => 'BTC',
         'cmc_ranking' => 1,
         'cmc_category' => 'Layer 1',
+        'image_url' => 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png',
     ]);
     DB::table('exchange_symbols')->insert([
         'symbol_id' => $symbolId,
@@ -101,6 +103,9 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('btConsole(', false);
     // The seeded token reached the client config.
     $response->assertSee('BTC', false);
+    // The token's logo URL is wired into the selector config for the avatar.
+    // (@js escapes slashes, so assert the slash-free host segment.)
+    $response->assertSee('s2.coinmarketcap.com', false);
     // The endpoints the workspace drives are wired into the bootstrap.
     // (@js escapes slashes, so assert the unique hyphenated path segments.)
     $response->assertSee('fetch-candles', false);

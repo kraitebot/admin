@@ -15,6 +15,7 @@
             $btSymbols[] = [
                 'id' => $it['id'],
                 'token' => $it['token'],
+                'img' => $it['image_url'] ?? null,
                 'quote' => $it['quote'],
                 'exchange' => ucfirst((string) $it['exchange']),
                 'rank' => $it['cmc_ranking'],
@@ -73,6 +74,7 @@
             maxRowsCap: 500,
             reviews: {},                         // id -> status override
             ai: { loading: false, text: null, model: null },
+            coverageWarning: null,               // thin-history alert after auto-fetch
 
             // ---- rows table filters ----
             statusFilter: 'all',
@@ -133,6 +135,7 @@
                 };
                 this.cov = null; this.fetchReport = null; this.result = null;
                 this.ai = { loading: false, text: null, model: null };
+                this.coverageWarning = null;
                 this.statusFilter = 'all'; this.dirFilter = 'all';
             },
 
@@ -148,7 +151,7 @@
             },
 
             async doFetch() {
-                if (!this.selected || this.busy) return;
+                if (!this.selected || this.busy) return false;
                 this.busy = 'fetch';
                 const { ok, data } = await hubUiFetch(this.routes.fetch, { body: {
                     exchange_symbol_id: this.selected.id,
@@ -159,7 +162,7 @@
                     max_months: this.cfg.max_months ? Number(this.cfg.max_months) : undefined,
                 } });
                 this.busy = null;
-                if (!ok) { this.flashToast(data.error || 'Fetch failed', 'error'); return; }
+                if (!ok) { this.flashToast(data.error || 'Fetch failed', 'error'); return false; }
 
                 this.fetchReport = {
                     message: data.message,
@@ -178,6 +181,8 @@
                 this.fetchOpen = true;
                 if (data.coverage) this.cov = this.mapCov(data.coverage);
                 this.flashToast('History fetched', 'ok');
+
+                return true;
             },
 
             async doVerify() {
@@ -192,11 +197,80 @@
                 this.cov = this.mapCov(data.coverage);
             },
 
+            // How does stored coverage fall short of the requested run window?
+            // Returns a human message, or null when the window is fully covered.
+            // The run windows on candles_back (most-recent N); the Since field
+            // drives history depth. So "covered" means: candles exist, at least
+            // candles_back of them when a count is set, and history reaches back
+            // to Since when a date is set. Reads the mapped `cov` snapshot.
+            coverageShortfall() {
+                const c = this.cov;
+                const tf = this.tf;
+                const pair = this.selected ? `${this.selected.token}/${this.selected.quote}` : 'this symbol';
+                const present = c ? (c.candles || 0) : 0;
+
+                if (present === 0) {
+                    return `No ${tf} candles for ${pair} — the exchange returned no history, so there's nothing to simulate.`;
+                }
+
+                const candlesBack = this.cfg.candles_back ? Number(this.cfg.candles_back) : null;
+                if (candlesBack && present < candlesBack) {
+                    return `Thin history — only ${present.toLocaleString()} ${tf} candles for ${pair}, fewer than the ${candlesBack.toLocaleString()} requested. Ran on all available.`;
+                }
+
+                if (this.cfg.since && c && c.earliest && c.earliest !== '—'
+                    && new Date(c.earliest) > new Date(this.cfg.since + 'T23:59:59')) {
+                    return `Thin history — ${pair} ${tf} only goes back to ${c.earliest}, not the requested ${this.cfg.since}. Ran on what exists.`;
+                }
+
+                return null;
+            },
+
+            // Pre-run gate: audit coverage, and if the requested window isn't
+            // covered, fetch history first so Run never silently simulates on a
+            // gap. After the fetch, if history is STILL thin (the token just
+            // doesn't have that much real history), alert the admin — banner +
+            // toast — but proceed; the run uses whatever exists. Returns false
+            // only when a required fetch itself failed (its toast already shown).
+            async ensureCoverage() {
+                this.busy = 'verify';
+                const { ok, data } = await hubUiFetch(this.routes.verify, { body: {
+                    exchange_symbol_id: this.selected.id,
+                    timeframe: this.tf,
+                } });
+                this.busy = null;
+                if (!ok) { this.flashToast(data.error || 'Coverage check failed', 'error'); return false; }
+
+                this.cov = this.mapCov(data.coverage);
+                if (! this.coverageShortfall()) return true;
+
+                // Window short (or no data at all) → fetch fills it.
+                const fetched = await this.doFetch();
+                if (! fetched) return false;
+
+                // Re-assess against the freshly-fetched coverage. Still short →
+                // thin real history; warn loudly and keep going.
+                const shortfall = this.coverageShortfall();
+                if (shortfall) {
+                    this.coverageWarning = shortfall;
+                    this.flashToast('Thin history — ran on what exists', 'warn');
+                }
+
+                return true;
+            },
+
             async doRun() {
                 if (!this.selected || this.busy) return;
-                this.busy = 'run';
                 this.result = null;
                 this.ai = { loading: false, text: null, model: null };
+                this.coverageWarning = null;
+
+                // Auto-fetch: guarantee the candles this run's window needs are
+                // present before simulating. Audits coverage, fetches first if the
+                // stored window doesn't reach the requested Since / Candles-back.
+                if (! await this.ensureCoverage()) return;
+
+                this.busy = 'run';
                 const { ok, data } = await hubUiFetch(this.routes.run, { body: {
                     exchange_symbol_id: this.selected.id,
                     timeframe: this.tf,
@@ -392,9 +466,15 @@
                                     class="w-full flex items-center gap-2.5 h-[40px] px-3 bg-surface-2 border border-line rounded-control cursor-pointer hover:border-line-strong transition-colors duration-fast text-left">
                                 <template x-if="selected">
                                     <span class="flex items-center gap-2.5">
-                                        <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
-                                              :style="`width:22px;height:22px;font-size:9px;color:oklch(0.76 0.13 ${tokenHue(selected.token)});background:oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.32)`"
-                                              x-text="selected.token.slice(0, 1)"></span>
+                                        <template x-if="selected.img">
+                                            <img :src="selected.img" :alt="selected.token" x-on:error="selected.img = null" loading="lazy"
+                                                 class="w-[22px] h-[22px] rounded-chip flex-shrink-0 object-contain"/>
+                                        </template>
+                                        <template x-if="!selected.img">
+                                            <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
+                                                  :style="`width:22px;height:22px;font-size:9px;color:oklch(0.76 0.13 ${tokenHue(selected.token)});background:oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.32)`"
+                                                  x-text="selected.token.slice(0, 1)"></span>
+                                        </template>
                                         <span class="font-mono font-bold text-[14px] text-fg-1" x-text="selected.token"></span>
                                         <span class="font-mono text-[12px] text-fg-mute" x-text="'· ' + selected.quote"></span>
                                         <span x-show="selected.rank" class="font-mono text-[9.5px] font-bold tabular-nums py-[2px] px-[6px] rounded-chip" style="color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent)" x-text="'#' + selected.rank"></span>
@@ -418,9 +498,15 @@
                                                 <button type="button" x-on:click="selectToken(s)"
                                                         class="w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer border-b border-line-soft last:border-b-0 transition-colors duration-fast bg-transparent hover:bg-hover"
                                                         :class="selected && selected.id === s.id ? 'bg-hover' : ''">
-                                                    <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
-                                                          :style="`width:24px;height:24px;font-size:10px;color:oklch(0.76 0.13 ${tokenHue(s.token)});background:oklch(0.76 0.13 ${tokenHue(s.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(s.token)} / 0.32)`"
-                                                          x-text="s.token.slice(0, 1)"></span>
+                                                    <template x-if="s.img">
+                                                        <img :src="s.img" :alt="s.token" x-on:error="s.img = null" loading="lazy"
+                                                             class="w-6 h-6 rounded-chip flex-shrink-0 object-contain"/>
+                                                    </template>
+                                                    <template x-if="!s.img">
+                                                        <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
+                                                              :style="`width:24px;height:24px;font-size:10px;color:oklch(0.76 0.13 ${tokenHue(s.token)});background:oklch(0.76 0.13 ${tokenHue(s.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(s.token)} / 0.32)`"
+                                                              x-text="s.token.slice(0, 1)"></span>
+                                                    </template>
                                                     <span class="font-mono font-bold text-[13px] text-fg-1 w-[44px]" x-text="s.token"></span>
                                                     <span class="font-mono text-[11px] text-fg-mute" x-text="s.exchange"></span>
                                                     <span x-show="s.rank" class="font-mono text-[9.5px] tabular-nums text-fg-faint ml-auto" x-text="'#' + s.rank"></span>
@@ -572,6 +658,14 @@
 
             {{-- ===================== RIGHT PANEL ===================== --}}
             <div class="flex flex-col gap-4 min-w-0">
+                {{-- thin-history alert — auto-fetch couldn't fully cover the
+                     requested window; persists until the next run/selection --}}
+                <template x-if="coverageWarning">
+                    <div class="card card--flat flex items-start gap-2.5 py-3 px-4" style="border-color: color-mix(in srgb, var(--warn) 45%, var(--border)); background: color-mix(in srgb, var(--warn) 7%, transparent)">
+                        <x-feathericon-alert-triangle class="w-4 h-4 flex-shrink-0 mt-px" style="color: var(--warn)" stroke-width="1.75"/>
+                        <span class="text-[12px] text-fg-2 leading-snug" x-text="coverageWarning"></span>
+                    </div>
+                </template>
                 {{-- [D] coverage strip --}}
                 <div x-show="!cov" class="card card--flat flex items-center gap-2.5 py-3 px-4">
                     <x-feathericon-database class="w-[15px] h-[15px] text-fg-faint" stroke-width="1.75"/>
@@ -870,8 +964,9 @@
 
         {{-- ===================== TOAST ===================== --}}
         <template x-if="toast">
-            <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-2.5 py-2.5 px-4 rounded-control bg-surface border shadow-3 animate-dd-in" :style="`border-color: color-mix(in srgb, ${toast.kind === 'error' ? 'var(--danger)' : toast.kind === 'reject' ? 'var(--pnl-down-fg)' : 'var(--pnl-up-fg)'} 45%, var(--border))`">
+            <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] flex items-center gap-2.5 py-2.5 px-4 rounded-control bg-surface border shadow-3 animate-dd-in" :style="`border-color: color-mix(in srgb, ${toast.kind === 'error' ? 'var(--danger)' : toast.kind === 'reject' ? 'var(--pnl-down-fg)' : toast.kind === 'warn' ? 'var(--warn)' : 'var(--pnl-up-fg)'} 45%, var(--border))`">
                 <x-feathericon-alert-triangle x-show="toast.kind === 'error'" class="w-4 h-4" style="color: var(--danger)" stroke-width="1.75"/>
+                <x-feathericon-alert-triangle x-show="toast.kind === 'warn'" class="w-4 h-4" style="color: var(--warn)" stroke-width="1.75"/>
                 <x-feathericon-power x-show="toast.kind === 'reject'" class="w-4 h-4" style="color: var(--pnl-down-fg)" stroke-width="1.75"/>
                 <x-feathericon-check x-show="toast.kind === 'ok'" class="w-4 h-4" style="color: var(--pnl-up-fg)" stroke-width="2"/>
                 <span class="font-sans text-[12.5px] font-semibold text-fg-1" x-text="toast.text"></span>

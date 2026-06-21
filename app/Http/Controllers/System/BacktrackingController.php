@@ -11,8 +11,10 @@ use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
+use Kraite\Core\Models\Kraite;
 use Kraite\Core\Support\Backtest\BacktestSimulator;
 use Kraite\Core\Support\Backtest\BinanceRestCandleFetcher;
 use Kraite\Core\Support\Backtest\BinanceVisionCandleFetcher;
@@ -365,7 +367,7 @@ final class BacktrackingController extends Controller
                 'model' => config('ai-bridge.resolver.connections.backtest-insights'),
             ]);
         } catch (Throwable $e) {
-            \Illuminate\Support\Facades\Log::error('[AI Insights] '.$e->getMessage(), [
+            Log::error('[AI Insights] '.$e->getMessage(), [
                 'exception' => $e::class,
                 'trace' => mb_substr($e->getTraceAsString(), 0, 2000),
             ]);
@@ -668,6 +670,7 @@ SYS;
                 's.token',
                 's.cmc_ranking',
                 's.cmc_category',
+                's.image_url',
                 'es.quote',
                 'ap.canonical as exchange',
                 'es.percentage_gap_long',
@@ -691,6 +694,7 @@ SYS;
                 'token' => $row->token,
                 'cmc_ranking' => $row->cmc_ranking !== null ? (int) $row->cmc_ranking : null,
                 'cmc_category' => $row->cmc_category,
+                'image_url' => $row->image_url,
                 'quote' => $row->quote,
                 'exchange' => $row->exchange,
                 'percentage_gap_long' => $row->percentage_gap_long,
@@ -790,7 +794,7 @@ SYS;
      */
     private function availableTimeframes(): array
     {
-        $raw = collect(\Kraite\Core\Models\Kraite::timeframes())
+        $raw = collect(Kraite::timeframes())
             ->filter(fn ($tf) => isset(CandleCoverageVerifier::INTERVAL_SECONDS[$tf]))
             ->unique()
             ->sortBy(fn ($tf) => CandleCoverageVerifier::INTERVAL_SECONDS[$tf])

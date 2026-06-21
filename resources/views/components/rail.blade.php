@@ -59,8 +59,14 @@
                wire:current.ignore
                @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
                {{-- color transition matches the pill slide (420ms, same curve) so the
-                    arriving label darkens in sync with the green sliding beneath it --}}
-               :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
+                    arriving label darkens in sync with the green sliding beneath it.
+                    `hover:text-fg-on-accent` on the active item is load-bearing: the
+                    global `a:hover { color: var(--accent) }` (tokens.css) outranks a
+                    plain `text-fg-on-accent` on specificity, so without it the active
+                    link turns accent-on-accent (invisible) the moment the pointer
+                    rests on it after a click. The hover utility ties that selector and
+                    wins on source order (utilities layer is emitted last). --}}
+               :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
                class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline
                       max-[640px]:flex-1 max-[640px]:py-2 max-[640px]:px-0.5 max-[640px]:text-[9px]
                       max-[420px]:p-0">

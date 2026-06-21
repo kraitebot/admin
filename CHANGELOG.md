@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.4] — 2026-06-21
+
+### Features
+- **Backtesting console wired live** — the Fetch / Verify / Run / Approve / AI buttons now actually drive the five `BacktrackingController` endpoints. Implemented the missing `window.hubUiFetch` AJAX bridge (CSRF via the `XSRF-TOKEN` cookie so it survives `wire:navigate`, JSON encode/accept, non-throwing `{ ok, data, status }`); previously every button threw `ReferenceError: hubUiFetch is not defined` and silently did nothing.
+- **Run auto-fetches missing candles** — Run now audits coverage first and, when the stored window doesn't reach the requested Since / Candles-back, fetches history before simulating (Auditing → Fetching → Simulating). No more silent empty backtest on a fresh token.
+- **Real token logos in the selector** — the trigger and every dropdown row render the token's CoinMarketCap logo (`symbols.image_url`), with the monogram avatar kept as the fallback for tokens with no image or a broken URL.
+
+### Improvements
+- **Thin-history alert** — when auto-fetch still can't cover the requested window (the token genuinely lacks that much history), a persistent amber banner + toast tell the operator exactly what was short (no candles / fewer than requested / history doesn't reach Since); the run proceeds on what exists.
+
+### Fixes
+- **Sysadmin/trader rail active item no longer goes blank on hover** — the global `a:hover { color: var(--accent) }` content-link rule outranked the active rail link's `text-fg-on-accent`, turning its icon + label accent-on-accent (invisible) the moment the pointer rested on it after a click. Added `hover:text-fg-on-accent` so the active item keeps its on-accent colour through hover.
+
 ## [0.8.3] — 2026-06-21
 
 ### Improvements

@@ -119,4 +119,86 @@ document.addEventListener('livewire:navigated', () => {
     });
 });
 
+// ---------------------------------------------------------------------------
+// hubUiFetch — the admin AJAX bridge every server-driven surface calls. Wraps
+// fetch with CSRF (Laravel's XSRF-TOKEN cookie -> X-XSRF-TOKEN header, read
+// fresh each call so it survives wire:navigate swaps), JSON accept + encode,
+// same-origin cookies, and a NON-throwing { ok, data, status } return. The
+// backtesting console (Fetch / Verify / Run / Approve / AI) drives all five
+// BacktrackingController endpoints through this. Hand-rolled fetch() would
+// skip the CSRF header and 419 behind the web middleware group.
+// ---------------------------------------------------------------------------
+const readCookie = (name) => {
+    const match = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+
+    return match ? decodeURIComponent(match.pop()) : null;
+};
+
+window.hubUiFetch = async (url, options = {}) => {
+    const { body, method, headers = {}, toastOnError = false, ...rest } = options;
+    const hasBody = body !== undefined && body !== null;
+
+    const finalHeaders = {
+        Accept: 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+        ...headers,
+    };
+
+    // Laravel decrypts the X-XSRF-TOKEN header against the session; the cookie
+    // value is sent verbatim (still encrypted) and the framework unwraps it.
+    const xsrf = readCookie('XSRF-TOKEN');
+    if (xsrf) {
+        finalHeaders['X-XSRF-TOKEN'] = xsrf;
+    }
+
+    let payload;
+    if (hasBody) {
+        if (body instanceof FormData) {
+            payload = body;
+        } else {
+            payload = JSON.stringify(body);
+            finalHeaders['Content-Type'] = 'application/json';
+        }
+    }
+
+    try {
+        const res = await fetch(url, {
+            method: method || (hasBody ? 'POST' : 'GET'),
+            headers: finalHeaders,
+            credentials: 'same-origin',
+            body: payload,
+            ...rest,
+        });
+
+        // Read as text first so an empty body or an HTML error page doesn't
+        // explode JSON.parse — callers always get a plain object back.
+        let data = {};
+        const text = await res.text();
+        if (text) {
+            try {
+                data = JSON.parse(text);
+            } catch (_) {
+                data = { error: text };
+            }
+        }
+        // Surface the HTTP status to callers that branch on it (e.g. 429
+        // rate-limit messaging) without clobbering a real `status` field.
+        if (data.status === undefined) {
+            data.status = res.status;
+        }
+
+        if (!res.ok && toastOnError && typeof window.showToast === 'function') {
+            window.showToast(data.error || `Request failed (${res.status})`, 'error');
+        }
+
+        return { ok: res.ok, data, status: res.status };
+    } catch (e) {
+        if (toastOnError && typeof window.showToast === 'function') {
+            window.showToast('Network error', 'error');
+        }
+
+        return { ok: false, data: { error: e?.message || 'Network error', status: 0 }, status: 0 };
+    }
+};
+
 Livewire.start();
