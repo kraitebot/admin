@@ -154,8 +154,8 @@
     {{-- ===================== KPI ROW ===================== --}}
     <div class="grid grid-cols-5 gap-3 mb-6 max-[1100px]:grid-cols-3 max-[680px]:grid-cols-2">
         <x-ui.stat-tile icon="users" label="Active traders" value="1,284" :delta="1.4" sub="24H · +18 SIGNUPS"/>
-        <x-ui.stat-tile icon="cpu" label="Worker nodes" value="6 / 8" sub="HEALTHY · 1 DEGRADED">
-            <span class="flex items-center gap-1.5"><x-ui.health-dot state="degraded" :pulse="true"/><x-ui.health-dot state="draining"/></span>
+        <x-ui.stat-tile icon="git-branch" label="Step dispatcher" sub="DISPATCH PERF · 4.2K STEPS/S">
+            <x-slot:value><x-ui.mini-gauge :value="92"/></x-slot:value>
         </x-ui.stat-tile>
         <x-ui.stat-tile icon="database" label="Capital under mgmt" value="$84.2M" :delta="2.1" sub="AUM · ALL ACCOUNTS"/>
         <x-ui.stat-tile icon="activity" label="Engine throughput" value="3,420" sub="ORDERS / MIN" :spark="[2800,3010,2950,3180,3240,3120,3360,3420]"/>

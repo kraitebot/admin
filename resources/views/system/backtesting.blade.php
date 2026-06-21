@@ -107,6 +107,8 @@
             reviewMeta(status) { return this.REVIEW_META[status == null ? 'null' : status]; },
 
             quoteOrder(q) { return q === 'USDT' ? 0 : q === 'USDC' ? 1 : 2; },
+            // Stable per-token hue → each coin gets its own avatar without inventing brand palettes.
+            tokenHue(sym) { let h = 0; for (let i = 0; i < sym.length; i++) { h = (h * 31 + sym.charCodeAt(i)) >>> 0; } return Math.round(((h * 0.6180339887) % 1) * 360); },
             get filteredSymbols() {
                 const q = this.query.toLowerCase();
                 return this.symbols.filter((s) => (s.token + ' ' + s.quote).toLowerCase().includes(q));
@@ -380,8 +382,8 @@
         <div class="grid grid-cols-[380px_1fr] gap-5 items-start max-[1080px]:grid-cols-1">
             {{-- ===================== LEFT RAIL ===================== --}}
             <div class="flex flex-col gap-4 lg:sticky lg:top-2 max-[1080px]:static">
-                {{-- [A] selection --}}
-                <div class="card card--flat overflow-hidden">
+                {{-- [A] selection — overflow-visible so the token dropdown can escape the card clip --}}
+                <div class="card card--flat !overflow-visible relative z-20">
                     <x-ui.card-head icon="dollar-sign" title="Token" :accent="true"/>
                     <div class="p-4 flex flex-col gap-3">
                         {{-- token selector --}}
@@ -390,6 +392,9 @@
                                     class="w-full flex items-center gap-2.5 h-[40px] px-3 bg-surface-2 border border-line rounded-control cursor-pointer hover:border-line-strong transition-colors duration-fast text-left">
                                 <template x-if="selected">
                                     <span class="flex items-center gap-2.5">
+                                        <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
+                                              :style="`width:22px;height:22px;font-size:9px;color:oklch(0.76 0.13 ${tokenHue(selected.token)});background:oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(selected.token)} / 0.32)`"
+                                              x-text="selected.token.slice(0, 1)"></span>
                                         <span class="font-mono font-bold text-[14px] text-fg-1" x-text="selected.token"></span>
                                         <span class="font-mono text-[12px] text-fg-mute" x-text="'· ' + selected.quote"></span>
                                         <span x-show="selected.rank" class="font-mono text-[9.5px] font-bold tabular-nums py-[2px] px-[6px] rounded-chip" style="color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent)" x-text="'#' + selected.rank"></span>
@@ -411,9 +416,12 @@
                                             <div class="sticky top-0 px-3 py-1.5 bg-surface-2 border-b border-line-soft font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-faint" x-text="g.quote"></div>
                                             <template x-for="s in g.items" :key="s.id">
                                                 <button type="button" x-on:click="selectToken(s)"
-                                                        class="w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer border-b border-line-soft last:border-b-0 transition-colors duration-fast hover:bg-hover"
+                                                        class="w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer border-b border-line-soft last:border-b-0 transition-colors duration-fast bg-transparent hover:bg-hover"
                                                         :class="selected && selected.id === s.id ? 'bg-hover' : ''">
-                                                    <span class="font-mono font-bold text-[13px] text-fg-1 w-[52px]" x-text="s.token"></span>
+                                                    <span class="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
+                                                          :style="`width:24px;height:24px;font-size:10px;color:oklch(0.76 0.13 ${tokenHue(s.token)});background:oklch(0.76 0.13 ${tokenHue(s.token)} / 0.15);border:1px solid oklch(0.76 0.13 ${tokenHue(s.token)} / 0.32)`"
+                                                          x-text="s.token.slice(0, 1)"></span>
+                                                    <span class="font-mono font-bold text-[13px] text-fg-1 w-[44px]" x-text="s.token"></span>
                                                     <span class="font-mono text-[11px] text-fg-mute" x-text="s.exchange"></span>
                                                     <span x-show="s.rank" class="font-mono text-[9.5px] tabular-nums text-fg-faint ml-auto" x-text="'#' + s.rank"></span>
                                                     <span x-show="s.status" class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :class="!s.rank ? 'ml-auto' : ''" :style="`background: ${reviewMeta(s.status).color}`"></span>

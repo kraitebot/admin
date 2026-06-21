@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.3] — 2026-06-21
+
+### Improvements
+- **Step Dispatcher KPI gauge** — the sysadmin Fleet-overview KPI strip swaps the static "Worker nodes" mock tile for a **Step dispatcher** tile rendered as a circular ring-dial (value centered in the dial, `92%`, sub "DISPATCH PERF · 4.2K STEPS/S"). New reusable `x-ui.mini-gauge` ring component with trading-safe perf bands (≥80 green / 60–80 warn / <60 red). The live Worker-fleet card below — the real fleet-health surface — is untouched.
+- **Backtesting token card no longer clips its dropdown** — the Token card now renders `overflow-visible` so the token selector menu escapes the card bounds instead of being clipped behind the Config panel. Shared `x-ui.card-head` gained `rounded-t-surface` so card corners stay flush when a card is unclipped.
+- **Token avatars in the backtesting selector** — the selector trigger and every dropdown row now show a circular token avatar (initial monogram, one harmonized hue per token via a golden-ratio hue spread). Dropdown rows render transparent, dropping the stray light-gray fill from the native button background.
+
 ## [0.8.2] — 2026-06-12
 
 ### Fixes

@@ -6,7 +6,7 @@
 ])
 {{-- Section-card header: icon + title on the left, optional `right` slot or
      `hint` text on the right. Mirrors the design's ACardHead. --}}
-<div class="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft max-[640px]:px-4">
+<div class="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft rounded-t-surface max-[640px]:px-4">
     <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
         @if($icon)
             <x-dynamic-component :component="'feathericon-' . $icon" class="w-4 h-4 {{ $accent ? 'text-accent' : 'text-fg-3' }}" stroke-width="1.75"/>
