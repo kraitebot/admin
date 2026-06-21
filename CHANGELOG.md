@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.5] — 2026-06-21
+
+### Features
+- **Backtesting token-universe filters** — three checkboxes below the token selector narrow the dropdown live: **Top 100** (CMC rank ≤ 100), **Only approved** (approved configs), and **Not concluded** (neither approved nor rejected). Each shows a live total count. The two status filters combine as a union, AND'd with Top 100. Filtering is purely client-side over the already-loaded symbol set.
+
 ## [0.8.4] — 2026-06-21
 
 ### Features

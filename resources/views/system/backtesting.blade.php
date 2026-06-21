@@ -62,6 +62,7 @@
             cfg: {},
             selOpen: false,
             query: '',
+            filters: { top100: false, approved: false, notConcluded: false },
 
             // ---- async results ----
             cov: null,
@@ -113,8 +114,25 @@
             tokenHue(sym) { let h = 0; for (let i = 0; i < sym.length; i++) { h = (h * 31 + sym.charCodeAt(i)) >>> 0; } return Math.round(((h * 0.6180339887) % 1) * 360); },
             get filteredSymbols() {
                 const q = this.query.toLowerCase();
-                return this.symbols.filter((s) => (s.token + ' ' + s.quote).toLowerCase().includes(q));
+                return this.symbols.filter((s) => {
+                    // Token-universe filters (the checkboxes below the selector).
+                    if (this.filters.top100 && s.rank > 100) return false;
+                    // The two status filters combine as a union: when either is on,
+                    // the token must match one of them. AND'd with Top 100 above.
+                    if (this.filters.approved || this.filters.notConcluded) {
+                        const ok = (this.filters.approved && s.status === 'approved')
+                            || (this.filters.notConcluded && s.status == null);
+                        if (! ok) return false;
+                    }
+                    // Search query.
+                    return (s.token + ' ' + s.quote).toLowerCase().includes(q);
+                });
             },
+            // Live universe counts — always over the FULL symbol set, so each
+            // checkbox shows its total reach regardless of the others' state.
+            get countTop100() { return this.symbols.filter((s) => s.rank <= 100).length; },
+            get countApproved() { return this.symbols.filter((s) => s.status === 'approved').length; },
+            get countNotConcluded() { return this.symbols.filter((s) => s.status == null).length; },
             get quoteGroups() {
                 const quotes = [...new Set(this.filteredSymbols.map((s) => s.quote))]
                     .sort((a, b) => this.quoteOrder(a) - this.quoteOrder(b) || a.localeCompare(b));
@@ -518,6 +536,25 @@
                                     <div x-show="!filteredSymbols.length" class="px-3 py-4 text-center text-[12px] text-fg-mute">No tokens match “<span x-text="query"></span>”.</div>
                                 </div>
                             </div>
+                        </div>
+
+                        {{-- token-universe filters — narrow the dropdown live --}}
+                        <div class="flex flex-col gap-2 -mt-0.5">
+                            @foreach ([
+                                ['key' => 'top100', 'label' => 'Top 100', 'count' => 'countTop100'],
+                                ['key' => 'approved', 'label' => 'Only approved', 'count' => 'countApproved'],
+                                ['key' => 'notConcluded', 'label' => 'Not concluded', 'count' => 'countNotConcluded'],
+                            ] as $f)
+                                <label class="flex items-center gap-2 cursor-pointer select-none group">
+                                    <span class="relative flex items-center justify-center w-[16px] h-[16px] rounded-[4px] border transition-colors duration-fast flex-shrink-0"
+                                          :style="filters.{{ $f['key'] }} ? 'background: var(--accent); border-color: var(--accent)' : 'background: var(--bg-elev-2); border-color: var(--border-strong)'">
+                                        <input type="checkbox" x-model="filters.{{ $f['key'] }}" class="sr-only"/>
+                                        <x-feathericon-check x-show="filters.{{ $f['key'] }}" x-cloak class="w-[11px] h-[11px]" style="color: var(--on-accent)" stroke-width="3"/>
+                                    </span>
+                                    <span class="text-[12px] font-medium text-fg-2 group-hover:text-fg-1 transition-colors whitespace-nowrap">{{ $f['label'] }}</span>
+                                    <span class="font-mono text-[10px] tabular-nums text-fg-faint ml-auto" x-text="{{ $f['count'] }}"></span>
+                                </label>
+                            @endforeach
                         </div>
 
                         {{-- selected token header --}}
