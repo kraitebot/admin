@@ -15,7 +15,7 @@ const A_SUB = "text-[13px] text-fg-3 mt-1.5";
 
 // ---------- section card head (mirrors AcctBandHead) ----------
 const ACardHead = ({ icon, title, hint, right, accent }) => (
-  <div className="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft max-[640px]:px-4">
+  <div className="flex items-center justify-between gap-3 py-[13px] px-5 bg-surface-2 border-b border-line-soft rounded-t-surface max-[640px]:px-4">
     <h4 className="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
       {icon && <UIcon name={icon} size={16} style={{ color: accent ? 'var(--accent)' : 'var(--fg-3)' }}/>}{title}
     </h4>
@@ -59,6 +59,27 @@ const UsageBar = ({ pct, label }) => {
       <div className="h-[4px] rounded-chip bg-surface-3 overflow-hidden">
         <div className="h-full rounded-chip transition-[width] duration-base" style={{ width: pct + '%', background: c }}/>
       </div>
+    </div>
+  );
+};
+
+// ---------- mini ring gauge (circular perf dial with centered value) ----------
+const MiniGauge = ({ value, size = 60 }) => {
+  const pct = Math.max(0, Math.min(100, value)) / 100;
+  const sw = 6, r = (size - sw) / 2, c = size / 2, circ = 2 * Math.PI * r;
+  // perf bands: >=80 green (good), 60–80 warn, <60 red — trading-safe semantics
+  const col = value >= 80 ? 'var(--pnl-up-fg)' : value >= 60 ? 'var(--warn)' : 'var(--pnl-down-fg)';
+  return (
+    <div className="relative inline-flex items-center justify-center flex-shrink-0" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="-rotate-90">
+        <circle cx={c} cy={c} r={r} fill="none" stroke="var(--border)" strokeWidth={sw}/>
+        <circle cx={c} cy={c} r={r} fill="none" stroke={col} strokeWidth={sw} strokeLinecap="round"
+          strokeDasharray={circ} strokeDashoffset={circ * (1 - pct)}
+          style={{ transition: 'stroke-dashoffset .6s cubic-bezier(.22,1,.36,1)' }}/>
+      </svg>
+      <span className="absolute font-mono font-bold tabular-nums leading-none" style={{ fontSize: 15, color: col }}>
+        {Math.round(value)}<span style={{ fontSize: 9 }}>%</span>
+      </span>
     </div>
   );
 };

@@ -227,8 +227,8 @@ const AdminBacktesting = () => {
         {/* ===================== LEFT RAIL ===================== */}
         <div className="flex flex-col gap-4 max-[1080px]:contents">
           <div className="flex flex-col gap-4 max-[1080px]:order-1 lg:sticky lg:top-2">
-            {/* [A] selection */}
-            <div className="card card--flat overflow-hidden">
+            {/* [A] selection — overflow-visible so the token dropdown can escape the card clip */}
+            <div className="card card--flat !overflow-visible relative z-20">
               <ACardHead icon="coins" title="Token" accent/>
               <div className="p-4 flex flex-col gap-3">
                 <TokenSelector symbols={BT_SYMBOLS} selected={selected} onSelect={selectToken}/>

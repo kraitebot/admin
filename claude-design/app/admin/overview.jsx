@@ -222,9 +222,7 @@ const AdminOverview = ({ regime, score, halted }) => (
     {/* KPI row */}
     <div className="grid grid-cols-5 gap-3 mb-6 max-[1100px]:grid-cols-3 max-[680px]:grid-cols-2">
       <StatTile icon="users" label="Active traders" value="1,284" delta={1.4} sub="24H · +18 SIGNUPS"/>
-      <StatTile icon="cpu" label="Worker nodes" value="6 / 8" sub="HEALTHY · 1 DEGRADED">
-        <span className="flex items-center gap-1.5"><HealthDot state="degraded" pulse/><HealthDot state="draining"/></span>
-      </StatTile>
+      <StatTile icon="steps" label="Step dispatcher" value={<MiniGauge value={92}/>} sub="DISPATCH PERF · 4.2K STEPS/S"/>
       <StatTile icon="database" label="Capital under mgmt" value="$84.2M" delta={2.1} sub="AUM · ALL ACCOUNTS"/>
       <StatTile icon="activity" label="Engine throughput" value="3,420" sub="ORDERS / MIN" spark={[2800,3010,2950,3180,3240,3120,3360,3420]}/>
       <StatTile icon="layers" label="Open positions" value="9,612" sub="PLATFORM-WIDE"/>

@@ -46,6 +46,19 @@ const BtStatic = ({ label, value }) => (
   </div>
 );
 
+// stable per-token hue → each coin gets its own avatar without inventing brand palettes
+const tokenHue = (sym) => { let h = 0; for (let i = 0; i < sym.length; i++) h = (h * 31 + sym.charCodeAt(i)) >>> 0; return Math.round(((h * 0.6180339887) % 1) * 360); };
+const TokenAvatar = ({ token, size = 24 }) => {
+  const hue = tokenHue(token);
+  return (
+    <span className="flex items-center justify-center flex-shrink-0 rounded-chip font-mono font-bold leading-none"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.42), color: `oklch(0.76 0.13 ${hue})`,
+        background: `oklch(0.76 0.13 ${hue} / 0.15)`, border: `1px solid oklch(0.76 0.13 ${hue} / 0.32)` }}>
+      {token.slice(0, 1)}
+    </span>
+  );
+};
+
 // ---------- [A] token selector ----------
 const QUOTE_ORDER = (q) => (q === 'USDT' ? 0 : q === 'USDC' ? 1 : 2);
 const TokenSelector = ({ symbols, selected, onSelect }) => {
@@ -68,6 +81,7 @@ const TokenSelector = ({ symbols, selected, onSelect }) => {
         className="w-full flex items-center gap-2.5 h-[40px] px-3 bg-surface-2 border border-line rounded-control cursor-pointer hover:border-line-strong transition-colors duration-fast text-left">
         {selected ? (
           <>
+            <TokenAvatar token={selected.token} size={22}/>
             <span className="font-mono font-bold text-[14px] text-fg-1">{selected.token}</span>
             <span className="font-mono text-[12px] text-fg-mute">· {selected.quote}</span>
             {selected.rank && <span className="font-mono text-[9.5px] font-bold tabular-nums py-[2px] px-[6px] rounded-chip" style={{ color: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 14%, transparent)' }}>#{selected.rank}</span>}
@@ -90,8 +104,9 @@ const TokenSelector = ({ symbols, selected, onSelect }) => {
                   const on = selected && selected.id === s.id;
                   return (
                     <button key={s.id} onClick={() => { onSelect(s); setOpen(false); setQuery(''); }}
-                      className={"w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer border-b border-line-soft last:border-b-0 transition-colors duration-fast " + (on ? "bg-hover" : "hover:bg-hover")}>
-                      <span className="font-mono font-bold text-[13px] text-fg-1 w-[52px]">{s.token}</span>
+                      className={"w-full flex items-center gap-2.5 px-3 py-2 text-left cursor-pointer border-b border-line-soft last:border-b-0 transition-colors duration-fast " + (on ? "bg-hover" : "bg-transparent hover:bg-hover")}>
+                      <TokenAvatar token={s.token}/>
+                      <span className="font-mono font-bold text-[13px] text-fg-1 w-[44px]">{s.token}</span>
                       <span className="font-mono text-[11px] text-fg-mute">{s.exchange}</span>
                       {s.rank && <span className="font-mono text-[9.5px] tabular-nums text-fg-faint ml-auto">#{s.rank}</span>}
                       {s.status && <span className="w-[6px] h-[6px] rounded-chip flex-shrink-0" style={{ background: REVIEW_META[s.status].color, marginLeft: s.rank ? 0 : 'auto' }}/>}
