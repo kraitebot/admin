@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.9.0] — 2026-06-22
+
+### Features
+- **Backtesting risk gate — fresh + complete data, guaranteed.** A token can no longer be graded or approved on stale or gappy candle data (which could push a config outside its risk boundaries). **Run** now fires a dispatcher-orchestrated coverage block on the worker fleet — detect period → Binance Vision → REST + gap-fill → TAAPI → verify — polls it to completion ("Fetching history… N/4"), and grades **only** when the data holds the last closed candle with no gaps. Two hard server gates back it up independent of the UI: `run` returns **422 `data_not_ready`** (no grade) and **Approve is refused (422)** on stale/incomplete data. The coverage card now tells the truth — green **"Complete & live"** vs amber **"Stale — Nh behind"** — instead of a flat "complete coverage". New `ensure-coverage` + `coverage-status` endpoints; the heavy fetch lives in `kraitebot/core` (v1.56.0) step jobs run by the fleet, not in the web request.
+
 ## [0.8.8] — 2026-06-22
 
 ### Improvements

@@ -88,6 +88,8 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::get('/backtesting', [BacktrackingController::class, 'index'])->name('system.backtesting');
     Route::post('/backtesting/fetch-candles', [BacktrackingController::class, 'fetchCandles'])->name('system.backtesting.fetch-candles');
     Route::post('/backtesting/verify-coverage', [BacktrackingController::class, 'verifyCoverage'])->name('system.backtesting.verify-coverage');
+    Route::post('/backtesting/ensure-coverage', [BacktrackingController::class, 'ensureCoverage'])->name('system.backtesting.ensure-coverage');
+    Route::get('/backtesting/coverage-status', [BacktrackingController::class, 'coverageStatus'])->name('system.backtesting.coverage-status');
     Route::post('/backtesting/run', [BacktrackingController::class, 'run'])->name('system.backtesting.run');
     Route::post('/backtesting/toggle-approval', [BacktrackingController::class, 'toggleApproval'])->name('system.backtesting.toggle-approval');
     Route::post('/backtesting/ai-insights', [BacktrackingController::class, 'aiInsights'])

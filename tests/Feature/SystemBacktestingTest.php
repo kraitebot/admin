@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Kraite\Core\Support\Backtest\CandleCoverageVerifier;
 
 /**
  * The console backtesting index reads three kraitebot/core-owned tables
@@ -52,9 +53,19 @@ beforeEach(function (): void {
             $table->softDeletes();
         });
     }
+    // CandleCoverageVerifier::verify() only reads candles.timestamp for a
+    // (symbol, timeframe) — stub the minimum so the run/approve risk gate runs.
+    if (! Schema::hasTable('candles')) {
+        Schema::create('candles', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('exchange_symbol_id');
+            $table->string('timeframe');
+            $table->unsignedBigInteger('timestamp');
+        });
+    }
 });
 
-function seedBacktestableToken(): void
+function seedBacktestableToken(): int
 {
     $apiSystemId = DB::table('api_systems')->insertGetId(['canonical' => 'binance']);
     $symbolId = DB::table('symbols')->insertGetId([
@@ -63,7 +74,8 @@ function seedBacktestableToken(): void
         'cmc_category' => 'Layer 1',
         'image_url' => 'https://s2.coinmarketcap.com/static/img/coins/64x64/1.png',
     ]);
-    DB::table('exchange_symbols')->insert([
+
+    return (int) DB::table('exchange_symbols')->insertGetId([
         'symbol_id' => $symbolId,
         'api_system_id' => $apiSystemId,
         'quote' => 'USDT',
@@ -75,6 +87,23 @@ function seedBacktestableToken(): void
         'backtesting_review_status' => 'approved',
         'is_manually_enabled' => true,
     ]);
+}
+
+/**
+ * Seed `$count` contiguous candles for a symbol+timeframe ending at `$endTs`.
+ */
+function seedCandles(int $exchangeSymbolId, string $timeframe, int $count, int $endTs): void
+{
+    $iv = CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe];
+    $rows = [];
+    for ($i = 0; $i < $count; $i++) {
+        $rows[] = [
+            'exchange_symbol_id' => $exchangeSymbolId,
+            'timeframe' => $timeframe,
+            'timestamp' => $endTs - ($i * $iv),
+        ];
+    }
+    DB::table('candles')->insert($rows);
 }
 
 it('redirects guests on the backtesting console page to login', function (): void {
@@ -110,6 +139,44 @@ it('renders the backtesting workspace for admins', function (): void {
     // (@js escapes slashes, so assert the unique hyphenated path segments.)
     $response->assertSee('fetch-candles', false);
     $response->assertSee('verify-coverage', false);
+    $response->assertSee('ensure-coverage', false);
+    $response->assertSee('coverage-status', false);
     $response->assertSee('toggle-approval', false);
     $response->assertSee('ai-insights', false);
+});
+
+it('refuses to run a backtest on stale candle data (risk gate)', function (): void {
+    $esId = seedBacktestableToken();
+    $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
+    // Contiguous daily candles, but the latest is ~6 days old → stale for 1d.
+    $staleLatest = intdiv(time(), $iv) * $iv - (6 * $iv);
+    seedCandles($esId, '1d', 60, $staleLatest);
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $this->actingAs($admin)
+        ->postJson('https://admin.kraite.test/system/backtesting/run', [
+            'exchange_symbol_id' => $esId,
+            'timeframe' => '1d',
+            'tp_percent' => 1.5,
+            'sl_percent' => 8,
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('error', 'data_not_ready');
+});
+
+it('refuses to approve a token on stale candle data (risk gate)', function (): void {
+    $esId = seedBacktestableToken();
+    $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
+    $staleLatest = intdiv(time(), $iv) * $iv - (6 * $iv);
+    seedCandles($esId, '1d', 60, $staleLatest);
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $this->actingAs($admin)
+        ->postJson('https://admin.kraite.test/system/backtesting/toggle-approval', [
+            'exchange_symbol_id' => $esId,
+            'approve' => true,
+            'timeframe' => '1d',
+        ])
+        ->assertStatus(422)
+        ->assertJsonPath('error', 'data_not_ready');
 });

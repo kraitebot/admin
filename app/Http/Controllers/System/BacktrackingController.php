@@ -12,6 +12,9 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Kraite\Core\Jobs\Backtest\EnsureBacktestCandleCoverageStep;
+use Kraite\Core\Jobs\Backtest\VerifyCoverageResultStep;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
@@ -19,7 +22,9 @@ use Kraite\Core\Support\Backtest\BacktestSimulator;
 use Kraite\Core\Support\Backtest\BinanceRestCandleFetcher;
 use Kraite\Core\Support\Backtest\BinanceVisionCandleFetcher;
 use Kraite\Core\Support\Backtest\CandleCoverageVerifier;
+use Kraite\Core\Support\Backtest\CoverageGate;
 use Kraite\Core\Support\Backtest\TaapiCandlesFetcher;
+use StepDispatcher\Models\Step;
 use Throwable;
 
 /**
@@ -193,6 +198,125 @@ final class BacktrackingController extends Controller
         }
     }
 
+    /**
+     * Kick off the dispatcher-orchestrated candle-coverage ensure for a token +
+     * timeframe. Creates the EnsureBacktestCandleCoverageStep orchestrator and
+     * returns its block_uuid so the UI can poll coverageStatus to completion.
+     * Reuses an in-flight block for the same symbol+timeframe (dedupe).
+     */
+    public function ensureCoverage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'since' => ['nullable', 'date'],
+            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
+        ]);
+
+        $symbolId = (int) $validated['exchange_symbol_id'];
+        $timeframe = (string) $validated['timeframe'];
+
+        $existing = Step::query()
+            ->where('class', EnsureBacktestCandleCoverageStep::class)
+            ->whereJsonContains('arguments->exchangeSymbolId', $symbolId)
+            ->whereJsonContains('arguments->timeframe', $timeframe)
+            ->whereNotIn('state', Step::terminalStepStates())
+            ->latest('id')
+            ->first();
+
+        if ($existing !== null) {
+            return response()->json(['ok' => true, 'block_uuid' => $existing->block_uuid, 'reused' => true]);
+        }
+
+        $maxMonths = $this->resolveMaxMonths(
+            $timeframe,
+            $validated['since'] ?? null,
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+            $validated['max_months'] ?? null,
+        );
+        $gapLookbackTs = $this->resolveWindowSince(
+            $timeframe,
+            $validated['since'] ?? null,
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+        )?->getTimestamp();
+
+        $blockUuid = (string) Str::uuid();
+        Step::create([
+            'block_uuid' => $blockUuid,
+            'index' => 1,
+            'class' => EnsureBacktestCandleCoverageStep::class,
+            'queue' => 'indicators',
+            'arguments' => [
+                'exchangeSymbolId' => $symbolId,
+                'timeframe' => $timeframe,
+                'maxMonths' => $maxMonths,
+                'gapLookbackTs' => $gapLookbackTs,
+            ],
+        ]);
+
+        return response()->json(['ok' => true, 'block_uuid' => $blockUuid, 'reused' => false]);
+    }
+
+    /**
+     * Poll the coverage block created by ensureCoverage. Returns block progress
+     * plus the readiness verdict — from the final VerifyCoverageResultStep, or
+     * the orchestrator's own response when it completed inline (already covered).
+     */
+    public function coverageStatus(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['block_uuid' => ['required', 'string']]);
+
+        $orchestrator = Step::query()
+            ->where('block_uuid', $validated['block_uuid'])
+            ->where('class', EnsureBacktestCandleCoverageStep::class)
+            ->first();
+
+        if ($orchestrator === null) {
+            return response()->json(['ok' => false, 'error' => 'unknown coverage block'], 404);
+        }
+
+        $orchState = class_basename($orchestrator->state);
+
+        $verdict = $orchestrator->response;
+        $stepsDone = 0;
+        $stepsTotal = 0;
+
+        if ($orchestrator->child_block_uuid !== null) {
+            $children = Step::where('block_uuid', $orchestrator->child_block_uuid)->get();
+            $stepsTotal = $children->count();
+            $stepsDone = $children->filter(fn ($s) => in_array(get_class($s->state), Step::terminalStepStates(), true))->count();
+            $verdict = $children->firstWhere('class', VerifyCoverageResultStep::class)?->response ?? $verdict;
+        }
+
+        $state = 'queued';
+        $error = null;
+        if (in_array($orchState, ['Failed', 'Stopped', 'Cancelled'], true)) {
+            $state = 'failed';
+            $error = $orchestrator->error_message;
+        } elseif ($orchState === 'Completed') {
+            $state = 'done';
+        } elseif ($orchestrator->child_block_uuid !== null) {
+            $state = 'fetching';
+        } elseif ($orchState === 'Running') {
+            $state = 'checking';
+        } elseif (in_array($orchState, ['Pending', 'Dispatched'], true)
+            && $orchestrator->created_at?->lt(now()->subMinutes(3))) {
+            $state = 'daemon_slow';
+        }
+
+        return response()->json([
+            'ok' => true,
+            'state' => $state,
+            'steps_done' => $stepsDone,
+            'steps_total' => $stepsTotal,
+            'ready' => is_array($verdict) ? ($verdict['ready'] ?? null) : null,
+            'coverage' => is_array($verdict) ? ($verdict['coverage'] ?? null) : null,
+            'reason' => is_array($verdict) ? ($verdict['reason'] ?? null) : null,
+            'error' => $error,
+        ]);
+    }
+
     public function run(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -210,6 +334,20 @@ final class BacktrackingController extends Controller
         try {
             $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
             $timeframe = (string) $validated['timeframe'];
+
+            // RISK GATE: never grade on stale or gappy data. Re-verify at run
+            // time (stateless backstop, independent of the UI's ensure-coverage
+            // flow). A grade drives a real-money approve decision.
+            $coverage = (new CandleCoverageVerifier)->verify($symbol, $timeframe);
+            $gate = CoverageGate::evaluate($coverage, $timeframe);
+            if (! $gate['ready']) {
+                return response()->json([
+                    'ok' => false,
+                    'error' => 'data_not_ready',
+                    'message' => 'Candle data not ready: '.$gate['reason'],
+                    'coverage' => $coverage,
+                ], 422);
+            }
 
             $windowSince = $this->resolveWindowSince(
                 $timeframe,
@@ -285,6 +423,7 @@ final class BacktrackingController extends Controller
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
             'approve' => ['required', 'boolean'],
+            'timeframe' => ['required_if:approve,true', 'nullable', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
             'tp_percent' => ['nullable', 'numeric', 'gt:0'],
@@ -294,6 +433,21 @@ final class BacktrackingController extends Controller
         try {
             $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
             $approve = (bool) $validated['approve'];
+
+            // RISK GATE: approving pushes this config to the live engine — refuse
+            // if the data behind the grade is stale or gappy. (Reject is always
+            // allowed.) Last safe checkpoint before config goes live.
+            if ($approve) {
+                $coverage = (new CandleCoverageVerifier)->verify($symbol, (string) $validated['timeframe']);
+                $gate = CoverageGate::evaluate($coverage, (string) $validated['timeframe']);
+                if (! $gate['ready']) {
+                    return response()->json([
+                        'ok' => false,
+                        'error' => 'data_not_ready',
+                        'message' => 'Cannot approve on stale/incomplete candle data ('.$gate['reason'].') — re-run coverage first.',
+                    ], 422);
+                }
+            }
 
             $symbol->was_backtesting_approved = $approve;
             $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';

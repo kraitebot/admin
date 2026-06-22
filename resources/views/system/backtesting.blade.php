@@ -39,6 +39,8 @@
             'run' => route('system.backtesting.run'),
             'toggle' => route('system.backtesting.toggle-approval'),
             'ai' => route('system.backtesting.ai-insights'),
+            'ensure' => route('system.backtesting.ensure-coverage'),
+            'status' => route('system.backtesting.coverage-status'),
         ],
     ];
 @endphp
@@ -77,7 +79,8 @@
             maxRowsCap: 500,
             reviews: {},                         // id -> status override
             ai: { loading: false, text: null, model: null },
-            coverageWarning: null,               // thin-history alert after auto-fetch
+            coverageWarning: null,               // data-not-ready alert (blocks the grade)
+            coverageProgress: null,              // live "Fetching history… N/M" during the ensure-coverage block
 
             // ---- rows table filters ----
             statusFilter: 'all',
@@ -167,6 +170,8 @@
                     candles: c.total_present || 0,
                     holes: c.holes_count || 0,
                     contiguity: c.contiguity_percent != null ? c.contiguity_percent : 100,
+                    is_fresh: !!c.is_fresh,
+                    staleness_hours: c.staleness_hours != null ? c.staleness_hours : null,
                 };
             },
 
@@ -217,80 +222,87 @@
                 this.cov = this.mapCov(data.coverage);
             },
 
-            // How does stored coverage fall short of the requested run window?
-            // Returns a human message, or null when the window is fully covered.
-            // The run windows on candles_back (most-recent N); the Since field
-            // drives history depth. So "covered" means: candles exist, at least
-            // candles_back of them when a count is set, and history reaches back
-            // to Since when a date is set. Reads the mapped `cov` snapshot.
-            coverageShortfall() {
-                const c = this.cov;
-                const tf = this.tf;
-                const pair = this.selected ? `${this.selected.token}/${this.selected.quote}` : 'this symbol';
-                const present = c ? (c.candles || 0) : 0;
-
-                if (present === 0) {
-                    return `No ${tf} candles for ${pair} — the exchange returned no history, so there's nothing to simulate.`;
-                }
-
-                const candlesBack = this.cfg.candles_back ? Number(this.cfg.candles_back) : null;
-                if (candlesBack && present < candlesBack) {
-                    return `Thin history — only ${present.toLocaleString()} ${tf} candles for ${pair}, fewer than the ${candlesBack.toLocaleString()} requested. Ran on all available.`;
-                }
-
-                if (this.cfg.since && c && c.earliest && c.earliest !== '—'
-                    && new Date(c.earliest) > new Date(this.cfg.since + 'T23:59:59')) {
-                    return `Thin history — ${pair} ${tf} only goes back to ${c.earliest}, not the requested ${this.cfg.since}. Ran on what exists.`;
-                }
-
-                return null;
-            },
-
-            // Pre-run gate: audit coverage, and if the requested window isn't
-            // covered, fetch history first so Run never silently simulates on a
-            // gap. After the fetch, if history is STILL thin (the token just
-            // doesn't have that much real history), alert the admin — banner +
-            // toast — but proceed; the run uses whatever exists. Returns false
-            // only when a required fetch itself failed (its toast already shown).
+            // Dispatcher-orchestrated coverage gate (RISK GATE). Kicks off the
+            // ensure-coverage step block (detect period → Vision → REST/fillGaps
+            // → TAAPI → verify) on the worker fleet, polls it to completion, and
+            // returns true ONLY when the data is fresh + gap-free. On stale/gappy
+            // data (even after fetching everything available), failure, or
+            // timeout it warns and returns false so the run is BLOCKED — a grade
+            // is never produced on bad data. The server run-gate enforces the same.
             async ensureCoverage() {
-                this.busy = 'verify';
-                const { ok, data } = await hubUiFetch(this.routes.verify, { body: {
+                this.coverageProgress = 'Checking coverage…';
+                const { ok, data } = await hubUiFetch(this.routes.ensure, { body: {
                     exchange_symbol_id: this.selected.id,
                     timeframe: this.tf,
+                    since: this.cfg.since || null,
+                    candles_back: this.cfg.candles_back ? Number(this.cfg.candles_back) : null,
+                    max_months: this.cfg.max_months ? Number(this.cfg.max_months) : undefined,
                 } });
-                this.busy = null;
-                if (!ok) { this.flashToast(data.error || 'Coverage check failed', 'error'); return false; }
-
-                this.cov = this.mapCov(data.coverage);
-                if (! this.coverageShortfall()) return true;
-
-                // Window short (or no data at all) → fetch fills it.
-                const fetched = await this.doFetch();
-                if (! fetched) return false;
-
-                // Re-assess against the freshly-fetched coverage. Still short →
-                // thin real history; warn loudly and keep going.
-                const shortfall = this.coverageShortfall();
-                if (shortfall) {
-                    this.coverageWarning = shortfall;
-                    this.flashToast('Thin history — ran on what exists', 'warn');
+                if (!ok || !data.block_uuid) {
+                    this.coverageProgress = null;
+                    this.flashToast(data.error || 'Could not start coverage fetch', 'error');
+                    return false;
                 }
+                return await this.pollCoverage(data.block_uuid);
+            },
 
-                return true;
+            // Poll the coverage block until it lands. Updates the live progress
+            // label + the coverage snapshot. ~5min hard timeout (worker fleet may
+            // be down) — the server gate still refuses afterward, so this is a UX
+            // bound, not the security boundary.
+            async pollCoverage(blockUuid) {
+                const POLL_MS = 3000, TIMEOUT_MS = 300000, started = Date.now();
+                const labels = {
+                    queued: 'Queued for coverage fetch…',
+                    checking: 'Checking coverage…',
+                    daemon_slow: 'Waiting for worker fleet…',
+                    fetching: 'Fetching history…',
+                    done: 'Coverage verified',
+                    failed: 'Coverage fetch failed',
+                };
+                while (true) {
+                    if (Date.now() - started > TIMEOUT_MS) {
+                        this.coverageProgress = null;
+                        this.flashToast('Coverage timed out — worker fleet may be down. Try again, or use manual Fetch.', 'error');
+                        return false;
+                    }
+                    const { ok, data } = await hubUiFetch(this.routes.status + '?block_uuid=' + encodeURIComponent(blockUuid), { method: 'GET' });
+                    if (ok && data) {
+                        let label = labels[data.state] || 'Fetching…';
+                        if (data.state === 'fetching' && data.steps_total) label += ` ${data.steps_done}/${data.steps_total}`;
+                        this.coverageProgress = label;
+                        if (data.coverage) this.cov = this.mapCov(data.coverage);
+
+                        if (data.state === 'done') {
+                            this.coverageProgress = null;
+                            if (data.ready) return true;
+                            this.coverageWarning = 'Data not ready: ' + (data.reason || 'coverage incomplete') + ' — cannot grade safely. Run a manual Fetch or pick a token with full history.';
+                            this.flashToast('Data not ready — ' + (data.reason || 'incomplete'), 'error');
+                            return false;
+                        }
+                        if (data.state === 'failed') {
+                            this.coverageProgress = null;
+                            this.flashToast(data.error || 'Coverage fetch failed', 'error');
+                            return false;
+                        }
+                    }
+                    await new Promise((r) => setTimeout(r, POLL_MS));
+                }
             },
 
             async doRun() {
                 if (!this.selected || this.busy) return;
+                this.busy = 'run';
                 this.result = null;
                 this.ai = { loading: false, text: null, model: null };
                 this.coverageWarning = null;
+                this.coverageProgress = null;
 
-                // Auto-fetch: guarantee the candles this run's window needs are
-                // present before simulating. Audits coverage, fetches first if the
-                // stored window doesn't reach the requested Since / Candles-back.
-                if (! await this.ensureCoverage()) return;
+                // RISK GATE: ensure fresh + gap-free data via the dispatcher
+                // before simulating. Blocks the run (no grade) on stale/incomplete.
+                if (! await this.ensureCoverage()) { this.busy = null; this.coverageProgress = null; return; }
+                this.coverageProgress = null;
 
-                this.busy = 'run';
                 const { ok, data } = await hubUiFetch(this.routes.run, { body: {
                     exchange_symbol_id: this.selected.id,
                     timeframe: this.tf,
@@ -710,10 +722,10 @@
                     {{-- run --}}
                     <button type="button" x-on:click="doRun()" :disabled="!selected || busy"
                             class="{{ $btnBase }} border-transparent text-[color:var(--on-accent)]" style="background: var(--accent)">
-                        <template x-if="busy === 'run'"><span class="flex items-center gap-2"><span class="w-[14px] h-[14px] rounded-full border-2 border-current border-t-transparent animate-spin"></span>Simulating ladder…</span></template>
+                        <template x-if="busy === 'run'"><span class="flex items-center gap-2"><span class="w-[14px] h-[14px] rounded-full border-2 border-current border-t-transparent animate-spin"></span><span x-text="coverageProgress || 'Simulating ladder…'"></span></span></template>
                         <template x-if="busy !== 'run'"><span class="flex items-center gap-2"><x-feathericon-play class="w-4 h-4" stroke-width="1.75"/>Run backtest</span></template>
                     </button>
-                    <span class="ui-hint text-center">Fetch and Run can take a few seconds.</span>
+                    <span class="ui-hint text-center" x-text="coverageProgress || 'Run pulls fresh candles via the fleet, then grades — only on complete, current data.'"></span>
                 </div>
 
                 {{-- [G] approval --}}
@@ -776,11 +788,11 @@
                 </div>
                 <template x-if="cov">
                     <div class="card card--flat overflow-hidden">
-                        <div class="flex items-center gap-2.5 py-2.5 px-4 border-b border-line-soft" :style="`background: color-mix(in srgb, ${cov.holes === 0 ? 'var(--pnl-up-fg)' : 'var(--warn)'} 8%, transparent)`">
-                            <span class="w-[8px] h-[8px] rounded-chip flex-shrink-0" :style="`background: ${cov.holes === 0 ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"></span>
-                            <span class="font-mono text-[11px] font-bold tracking-[0.04em] uppercase" :style="`color: ${cov.holes === 0 ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"
-                                  x-text="cov.holes === 0 ? 'Complete coverage' : `${cov.holes} gap${cov.holes > 1 ? 's' : ''} · ${cov.contiguity}% contiguity`"></span>
-                            <span x-show="cov.holes > 0" class="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Fetch can backfill the gaps</span>
+                        <div class="flex items-center gap-2.5 py-2.5 px-4 border-b border-line-soft" :style="`background: color-mix(in srgb, ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'} 8%, transparent)`">
+                            <span class="w-[8px] h-[8px] rounded-chip flex-shrink-0" :style="`background: ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"></span>
+                            <span class="font-mono text-[11px] font-bold tracking-[0.04em] uppercase" :style="`color: ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"
+                                  x-text="!cov.is_fresh ? `Stale — ${cov.staleness_hours != null ? Math.round(cov.staleness_hours) + 'h behind' : 'not current'}` : (cov.holes === 0 ? 'Complete &amp; live' : `${cov.holes} gap${cov.holes > 1 ? 's' : ''} · ${cov.contiguity}% contiguity`)"></span>
+                            <span x-show="!cov.is_fresh || cov.holes > 0" class="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Run tops up before grading</span>
                         </div>
                         <div class="grid grid-cols-4 gap-3 py-3 px-4 max-[520px]:grid-cols-2 max-[520px]:gap-y-3">
                             <template x-for="c in [['Earliest', cov.earliest], ['Latest', cov.latest], ['Candles', cov.candles.toLocaleString()], ['Contiguity', cov.contiguity + '%']]" :key="c[0]">
