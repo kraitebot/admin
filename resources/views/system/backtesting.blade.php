@@ -88,6 +88,7 @@
 
             // ---- overlays ----
             confirm: null,                       // 'approve' | 'reject'
+            help: null,                          // active help-modal topic key (HELP_META)
             toast: null,
             _toastTimer: null,
 
@@ -105,6 +106,30 @@
                 null:     { label: 'Not reviewed', color: 'var(--fg-mute)' },
             },
             GRADE_COLOR: { A: 'var(--pnl-up-fg)', B: '#15b8a6', C: 'var(--warn)', D: '#ff8a3d', F: 'var(--danger)' },
+
+            // Explainer copy for every results label. Keyed by the topic the
+            // inline "[?]" dots pass to openHelp(); body is markdown rendered
+            // through renderMd() in the help modal. Definitions track the
+            // simulator + AI-insights semantics so the panel is self-documenting.
+            HELP_META: {
+                cov_earliest: { t: 'Earliest candle', s: 'Oldest stored candle for this token & timeframe.', b: "Oldest candle present for this token and timeframe. The backtest can only simulate trades from this point forward — anything before it is invisible to the engine, so a token listed mid-window simply has a later earliest." },
+                cov_latest: { t: 'Latest candle', s: 'Most recent stored candle — Fetch pulls forward to now.', b: "Newest candle present. The risk gate requires this to be the **last closed candle** (fresh). If the data is stale, grading and approval are **blocked** — a real-money decision is never made on outdated prices." },
+                cov_candles: { t: 'Candles', s: 'Total candles available across the window.', b: "Total OHLCV candles in the window. Each candle is a possible simulated entry, so more candles means a statistically stronger grade. Thin history is penalised by the sample-size guard." },
+                cov_contiguity: { t: 'Contiguity', s: 'Share of the window with no gaps — gaps weaken the grade.', b: "Percentage of expected candles actually present, with no gaps.\n\n- **100%** — an unbroken series\n- **Below 100%** — missing candles that could bias the result\n\nThe gate requires **≥ 99%** before it will grade." },
+                grade_verdict: { t: 'Grade · verdict', s: 'Letter grade and a one-line read on this config.', b: "The simulator's letter grade (**A–F**) for this exact config, plus a one-line plain-English verdict.\n\n- **A / B** — system proposes *approve*\n- **C** — borderline, review manually\n- **D / F** — proposes *reject*\n\nThe grade blends win rate, risk, ladder depth and speed into one call." },
+                overall_score: { t: 'Overall score', s: 'Composite 0–100 score across pass rate, risk and regime stability.', b: "Composite score from **0–100** behind the grade. It blends pass rate, risk (Max MAE), average rung depth and throughput. Higher is better — the single headline number for the config." },
+                risk_score: { t: 'Risk score', s: '0–100 risk score — higher means more drawdown / liquidation exposure.', b: "Risk sub-score from **0–100** — **lower is better**. Driven mainly by Max MAE and how often the ladder reaches its deepest rung, i.e. how close the config flirts with liquidation. A high pass rate with a high risk score is still a dangerous config." },
+                pass_rate: { t: 'Pass rate', s: 'Resolved sims that closed in profit — TP hit or WAP rebound.', b: "Share of **resolved** simulations that closed in profit — a take-profit on the market leg, or a weighted-average-price rebound. Inconclusive sims are excluded. This is the core *does this config win?* number." },
+                max_mae: { t: 'Max MAE %', s: 'Worst adverse excursion before resolving — a liquidation-risk proxy.', b: "**Maximum Adverse Excursion** — the worst move *against* an entry that any sim suffered, as a percent of entry price.\n\nIt is a liquidation proxy: at **20× leverage, ~5% adverse ≈ liquidation**, so a large Max MAE means a trade rode close to wipeout. It measures price trajectory only and does **not** depend on ladder size." },
+                avg_rung_depth: { t: 'Avg rung depth', s: 'Average ladder rung reached before close, out of 4.', b: "Average ladder rung reached across all sims, out of **4**. Higher means the strategy averaged-down deeper on average — more capital committed per trade and more exposure if price keeps running." },
+                avg_to_profit: { t: 'Avg → profit', s: 'Mean candles from entry to a profitable close.', b: "Average number of candles from entry to a profitable close. Lower is better: faster closes free capital sooner and compound the small edge more often." },
+                p95_to_profit: { t: 'P95 → profit', s: '95th-percentile candles to profit — the slow tail.', b: "The 95th-percentile candles-to-profit — **95% of winning trades closed within this many candles**. It exposes the slow tail the average hides: rare trades that lock capital for a long time." },
+                sample_size: { t: 'Sample size', s: 'Resolved sims behind these stats — below threshold means low confidence.', b: "Number of simulations the grade is built on. Below the threshold (~**180**) the result is statistically thin, the verdict is less trustworthy, and the simulator dampens its confidence." },
+                verdict_breakdown: { t: 'Verdict breakdown', s: 'How every resolved simulation closed, split by outcome class.', b: "How every resolved simulation ended:\n\n- **TP off market leg** — hit take-profit on the opening market leg alone, before any limit rung filled. The cleanest win.\n- **Reboundable (WAP)** — deeper rungs filled, then a weighted-average-price retrace closed it in profit. The martingale working as designed.\n- **Stopped out** — hit stop-loss after the deepest rung. A realised loss — the failure mode that matters for risk.\n- **Inconclusive** — ran out of forward data before TP or SL fired (usually very recent starts). Not actionable, excluded from pass rate." },
+                rung_distribution: { t: 'Rung distribution', s: 'How deep into the 4-rung ladder sims went before resolving.', b: "How many sims reached each ladder rung — i.e. filled that limit order.\n\n**Rung 1** is shallow; **Rung 4** is the deepest level of averaging-down and carries the most liquidation risk. The reach rate of the **deepest** rung is the single most important risk signal — a config that often hits rung 4 is one bad trend away from a large loss." },
+                config_echo: { t: 'Tested config', s: 'The exact ladder parameters this run used.', b: "The exact parameters this run was graded on:\n\n- **TP** — take-profit %, recomputed off WAP after each rung fill\n- **SL** — stop-loss %, arms only after the deepest rung is touched\n- **Gap L / Gap S** — % spacing between ladder rungs for long / short\n- **Lev** — leverage on notional (fixed 20× for backtests; ~5% adverse ≈ liquidation)\n- **Mult** — per-rung quantity multipliers; **[2,2,2,2]** doubles each rung, so 1+2+4+8+16 = **31×** the market leg at full fill\n- **Window** — the history span and timeframe simulated" },
+                regime_stability: { t: 'Regime stability', s: 'Pass rate per time bucket — exposes weak market regimes.', b: "Pass rate computed **per time-bucket** instead of over the whole window. It shows whether the config wins consistently across market regimes or only in certain conditions.\n\nEach bar is one time bucket, its height is that bucket's pass rate, and the **worst** bucket is highlighted — a config that is great on average but collapses in one regime is a hidden risk." },
+            },
 
             // ================= derived =================
             get selected() { return this.symbols.find((s) => s.id === this.selId) || null; },
@@ -350,6 +375,7 @@
 
             // ================= approval =================
             askConfirm(kind) { this.confirm = kind; },
+            openHelp(key) { this.help = key; },
             async onConfirm() {
                 const approve = this.confirm === 'approve';
                 this.confirm = null;
@@ -775,12 +801,22 @@
                             <span x-show="!cov.is_fresh || cov.holes > 0" class="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Run tops up before grading</span>
                         </div>
                         <div class="grid grid-cols-4 gap-3 py-3 px-4 max-[520px]:grid-cols-2 max-[520px]:gap-y-3">
-                            <template x-for="c in [['Earliest', cov.earliest], ['Latest', cov.latest], ['Candles', cov.candles.toLocaleString()], ['Contiguity', cov.contiguity + '%']]" :key="c[0]">
-                                <div class="flex flex-col gap-1 min-w-0">
-                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap" x-text="c[0]"></span>
-                                    <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="c[1]"></span>
-                                </div>
-                            </template>
+                            <div class="flex flex-col gap-1 min-w-0">
+                                <span class="flex items-center gap-[5px] font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">Earliest<x-ui.help-dot topic="cov_earliest"/></span>
+                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="cov.earliest"></span>
+                            </div>
+                            <div class="flex flex-col gap-1 min-w-0">
+                                <span class="flex items-center gap-[5px] font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">Latest<x-ui.help-dot topic="cov_latest"/></span>
+                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="cov.latest"></span>
+                            </div>
+                            <div class="flex flex-col gap-1 min-w-0">
+                                <span class="flex items-center gap-[5px] font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">Candles<x-ui.help-dot topic="cov_candles"/></span>
+                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="cov.candles.toLocaleString()"></span>
+                            </div>
+                            <div class="flex flex-col gap-1 min-w-0">
+                                <span class="flex items-center gap-[5px] font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">Contiguity<x-ui.help-dot topic="cov_contiguity"/></span>
+                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="cov.contiguity + '%'"></span>
+                            </div>
                         </div>
                     </div>
                 </template>
@@ -851,11 +887,11 @@
                                         <span class="font-mono font-bold text-[56px] leading-none tabular-nums" :style="`color: ${GRADE_COLOR[totals.grade] || 'var(--fg-1)'}`" x-text="totals.grade || '—'"></span>
                                     </div>
                                     <div class="flex flex-col justify-center gap-1.5 px-5 py-4 min-w-0">
-                                        <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute">Grade · verdict</span>
+                                        <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute inline-flex items-center gap-[5px]">Grade · verdict<x-ui.help-dot topic="grade_verdict"/></span>
                                         <span class="font-sans font-bold text-[17px] text-fg-1 leading-tight" x-text="totals.verdict || 'No verdict'"></span>
                                         <div class="flex items-center gap-4 mt-0.5">
-                                            <span class="font-mono text-[11.5px] text-fg-2">Overall <span class="font-bold tabular-nums text-fg-1" x-text="fmtFixed(totals.overall_score)"></span><span class="text-fg-faint">/100</span></span>
-                                            <span class="font-mono text-[11.5px] text-fg-2">Risk <span class="font-bold tabular-nums" :style="`color: ${(totals.risk_score || 0) > 50 ? 'var(--warn)' : 'var(--fg-1)'}`" x-text="fmtFixed(totals.risk_score)"></span></span>
+                                            <span class="font-mono text-[11.5px] text-fg-2">Overall <span class="font-bold tabular-nums text-fg-1" x-text="fmtFixed(totals.overall_score)"></span><span class="text-fg-faint">/100</span> <x-ui.help-dot topic="overall_score"/></span>
+                                            <span class="font-mono text-[11.5px] text-fg-2">Risk <span class="font-bold tabular-nums" :style="`color: ${(totals.risk_score || 0) > 50 ? 'var(--warn)' : 'var(--fg-1)'}`" x-text="fmtFixed(totals.risk_score)"></span> <x-ui.help-dot topic="risk_score"/></span>
                                         </div>
                                     </div>
                                 </div>
@@ -874,19 +910,19 @@
                                         $statVal = 'font-mono text-[20px] font-bold tabular-nums leading-none';
                                         $statSub = 'font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap text-fg-3';
                                     @endphp
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Pass rate</span><span class="{{ $statVal }}" style="color: var(--pnl-up-fg)" x-text="passRate.toFixed(1) + '%'"></span><span class="{{ $statSub }}">resolved sims</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Max MAE %</span><span class="{{ $statVal }}" style="color: var(--pnl-down-fg)" x-text="fmtFixed(totals.max_mae_pct)"></span><span class="{{ $statSub }}" style="color: var(--warn)">liq-risk proxy</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg rung depth</span><span class="{{ $statVal }} text-fg-1" x-text="fmtFixed(totals.avg_rung_depth)"></span><span class="{{ $statSub }}">of 4 rungs</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.avg_candles_to_profit == null ? '—' : totals.avg_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">p95 → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.p95_candles_to_profit == null ? '—' : totals.p95_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Sample size</span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Pass rate<x-ui.help-dot topic="pass_rate"/></span><span class="{{ $statVal }}" style="color: var(--pnl-up-fg)" x-text="passRate.toFixed(1) + '%'"></span><span class="{{ $statSub }}">resolved sims</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Max MAE %<x-ui.help-dot topic="max_mae"/></span><span class="{{ $statVal }}" style="color: var(--pnl-down-fg)" x-text="fmtFixed(totals.max_mae_pct)"></span><span class="{{ $statSub }}" style="color: var(--warn)">liq-risk proxy</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Avg rung depth<x-ui.help-dot topic="avg_rung_depth"/></span><span class="{{ $statVal }} text-fg-1" x-text="fmtFixed(totals.avg_rung_depth)"></span><span class="{{ $statSub }}">of 4 rungs</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Avg → profit<x-ui.help-dot topic="avg_to_profit"/></span><span class="{{ $statVal }} text-fg-1" x-text="totals.avg_candles_to_profit == null ? '—' : totals.avg_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">p95 → profit<x-ui.help-dot topic="p95_to_profit"/></span><span class="{{ $statVal }} text-fg-1" x-text="totals.p95_candles_to_profit == null ? '—' : totals.p95_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Sample size<x-ui.help-dot topic="sample_size"/></span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
                                 </div>
 
                                 {{-- verdict bar + rung chart --}}
                                 <div class="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
                                     {{-- verdict breakdown --}}
                                     <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="layers" title="Verdict breakdown" :accent="true">
+                                        <x-ui.card-head icon="layers" title="Verdict breakdown" :accent="true" tip="verdict_breakdown">
                                             <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="verdictTotal() + ' sims'"></span></x-slot:right>
                                         </x-ui.card-head>
                                         <div class="p-4">
@@ -910,7 +946,7 @@
 
                                     {{-- rung distribution --}}
                                     <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="bar-chart-2" title="Rung distribution" :accent="true" hint="ladder depth reached"/>
+                                        <x-ui.card-head icon="bar-chart-2" title="Rung distribution" :accent="true" hint="ladder depth reached" tip="rung_distribution"/>
                                         <div class="p-4 flex flex-col gap-2.5">
                                             <template x-for="r in rungBars" :key="r.rung">
                                                 <div class="flex items-center gap-3">
@@ -928,7 +964,7 @@
 
                                 {{-- config echo --}}
                                 <div class="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3">Config</span>
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 inline-flex items-center gap-[5px]">Config<x-ui.help-dot topic="config_echo"/></span>
                                     <template x-for="kv in configEcho" :key="kv[0]">
                                         <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-3" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
                                     </template>
@@ -937,7 +973,7 @@
                                 {{-- [H] regime stability --}}
                                 <template x-if="regimeBars.length">
                                     <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="activity" title="Regime stability" :accent="true">
+                                        <x-ui.card-head icon="activity" title="Regime stability" :accent="true" tip="regime_stability">
                                             <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="`worst ${(worstPass() * 100).toFixed(0)}% pass`"></span></x-slot:right>
                                         </x-ui.card-head>
                                         <div class="p-4">
@@ -1031,6 +1067,27 @@
                 </template>
             </div>
         </div>
+
+        {{-- ===================== HELP MODAL ===================== --}}
+        {{-- Per-label explainer. The "[?]" dots set `help` to a HELP_META key;
+             the body markdown renders through the same renderMd() the AI panel uses. --}}
+        <template x-if="help">
+            <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 animate-dd-in" style="background: rgba(0,0,0,0.55)"
+                 x-on:mousedown="help = null" x-on:keydown.escape.window="help = null">
+                <div class="w-[480px] max-w-full bg-surface border border-line-strong rounded-control shadow-3 overflow-hidden" x-on:mousedown.stop>
+                    <div class="flex items-center gap-2.5 py-3 px-5 bg-surface-2 border-b border-line-soft">
+                        <span class="w-[28px] h-[28px] rounded-control flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent)">
+                            <x-feathericon-help-circle class="w-[16px] h-[16px]" stroke-width="1.75"/>
+                        </span>
+                        <h4 class="font-sans font-bold text-[15px] text-fg-1" x-text="(HELP_META[help] || {}).t"></h4>
+                        <button type="button" x-on:click="help = null" class="ml-auto w-[28px] h-[28px] rounded-control inline-flex items-center justify-center text-fg-mute hover:text-fg-1 hover:bg-hover transition-colors duration-fast cursor-pointer">
+                            <x-feathericon-x class="w-4 h-4" stroke-width="2"/>
+                        </button>
+                    </div>
+                    <div class="p-5 max-h-[60vh] overflow-y-auto" x-html="renderMd((HELP_META[help] || {}).b)"></div>
+                </div>
+            </div>
+        </template>
 
         {{-- ===================== CONFIRM MODAL ===================== --}}
         <template x-if="confirm">

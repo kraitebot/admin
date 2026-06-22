@@ -2,6 +2,7 @@
     'icon' => null,
     'title',
     'hint' => null,
+    'tip' => null,
     'accent' => false,
     'collapsible' => false,
 ])
@@ -27,10 +28,13 @@
     </h4>
     {{-- A named `right` slot is only defined when the caller passes one;
          isset() gates it, then isNotEmpty() guards an explicitly-empty slot.
-         No slot → fall back to the `hint` text. --}}
+         No slot → fall back to the `hint` text. An optional `tip` (a HELP_META
+         topic key) appends an inline help dot beside whichever is shown —
+         mirrors the design's ACardHead `tip`. Only the backtesting console
+         passes it (where openHelp/HELP_META exist); other heads are unaffected. --}}
     @if(isset($right) && $right->isNotEmpty())
-        {{ $right }}
-    @elseif($hint)
-        <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">{{ $hint }}</span>
+        <span class="inline-flex items-center gap-[5px]">{{ $right }}@if($tip)<x-ui.help-dot :topic="$tip"/>@endif</span>
+    @elseif($hint || $tip)
+        <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.02em] inline-flex items-center gap-[5px]">{{ $hint }}@if($tip)<x-ui.help-dot :topic="$tip"/>@endif</span>
     @endif
 </{{ $tag }}>
