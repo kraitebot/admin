@@ -475,23 +475,25 @@ If Max MAE is high (>50% on 20× leverage means real liquidation exposure) AND s
 - Suggesting changes that improve total pass rate but push rung-N reach upward.
 - Three variants of the same tweak. Each suggestion must target a distinct lever.
 
-## OUTPUT — exact format
+## OUTPUT — exact format, COMPACT (this is a scan-in-5-seconds panel, not an essay)
+
+Telegraphic. Numbers over prose. No preamble, no recap, no hedging, no parentheticals-inside-parentheticals. Markdown only. The word caps below are hard limits — under them is better. Reason as deeply as the sections above demand, but EMIT only the distilled conclusion.
 
 ```
 ## Diagnosis
-3-5 sentences. MUST include:
- - **Stop classification**: "Structural (pure-trend)", "Avoidable (noise)", or "Mixed". Cite the failure-row pattern that drove your classification (direction clustering, time clustering, candles-to-rung-N).
- - Max MAE and what it implies at the live leverage (use the correct `1/leverage` liquidation math).
- - Rung-N reach rate and what portion stopped_out.
- - Throughput (avg_candles_to_profit) relative to the timeframe.
+Exactly four bullets, each ONE line, ≤ 16 words, leading with the bold label:
+- **Class:** Structural / Avoidable / Mixed — the failure-row pattern that proves it.
+- **Max MAE:** N% — liquidation implication at the live leverage (use 1/leverage math).
+- **Rung-N reach:** N% (M stopped) — one clause.
+- **Throughput:** N candles to profit — one clause vs the timeframe.
 
 ## Suggestions
-Exactly 3 numbered suggestions. **At least one must change exactly ONE parameter** — label it `(single-variable test)`. The other two may move multiple knobs. Each:
-
+Exactly 3, numbered. ≥1 changes exactly ONE parameter — tag it `(single-variable test)`. Each is exactly the title line + three labelled lines, NO blank lines or sub-paragraphs between them:
 1. **Short name** `(single-variable test)` — `param=value[, param2=value2]`
-   - Why: one sentence tying it to specific metrics above. Quote the numbers.
-   - Expected impact: quantified (e.g. "rung-4 reach drops ~1.9% → ~0.8%", "realised-loss-per-stop drops 31× → 13.2× cumulative → ~57% smaller").
-   - Trade-off: one sentence on what this costs (throughput, avg rung depth, scoring blind spots, etc).
+   - **Why** — one clause tied to a quoted metric. ≤ 18 words.
+   - **Impact** — quantified before→after, e.g. `rung-4 reach 1.9% → 0.8%`. ≤ 14 words.
+   - **Trade-off** — what it costs. ≤ 14 words.
+```
 
 ## Tunable levers + bounds (MUST respect)
 - `tp_percent`: 0.10 – 2.00
@@ -502,10 +504,7 @@ Exactly 3 numbered suggestions. **At least one must change exactly ONE parameter
 - `margin_percentage_long` / `margin_percentage_short` (account-level): 0.50 – 20.00
 - `limit_quantity_multipliers`: default `[2] × N`. Only propose changes if accompanied by explicit WAP math showing the new shape IMPROVES the per-rung TP-to-entry distance (i.e. rebounds get easier, not harder).
 
-If the config is already on the Pareto frontier (grade A, Max MAE low, rung-N reach ~0), say so plainly and suggest ONE small exploratory tweak per suggestion slot, explicitly labelled as exploratory. Do not invent problems that aren't in the numbers.
-
-Be direct. No hedging, no "you might consider", no unsourced claims. Quote the number from the payload for every claim.
-```
+If the config is already on the Pareto frontier (grade A, Max MAE low, rung-N reach ~0), say so in ONE line and give one small exploratory tweak per slot, tagged `(exploratory)`. Do not invent problems that aren't in the numbers. Quote a payload number for every claim.
 SYS;
 
         $user = sprintf(

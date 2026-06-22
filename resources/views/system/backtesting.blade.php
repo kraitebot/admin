@@ -455,24 +455,37 @@
             fmtNum(v) { return v == null ? '—' : Number(v).toLocaleString(); },
             fmtFixed(v, d = 1) { return v == null ? '—' : Number(v).toFixed(d); },
 
-            // ---- markdown (AI insights) ----
+            // ---- markdown (AI insights) — compact, scannable renderer ----
             renderMd(src) {
                 if (!src) return '';
                 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 const inl = (t) => esc(t)
-                    .replace(/`([^`]+)`/g, '<code class="font-mono text-[12px] px-1 py-[1px] rounded-r2 bg-surface-3 text-accent">$1</code>')
-                    .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-bold text-fg-1">$1</strong>')
+                    .replace(/`([^`]+)`/g, '<code class="font-mono text-[11.5px] px-1 py-[1px] rounded-r2 bg-surface-3 text-accent">$1</code>')
+                    .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-fg-1">$1</strong>')
                     .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em class="italic text-fg-2">$2</em>')
                     .replace(/_([^_]+)_/g, '<em class="italic text-fg-mute">$1</em>');
+                // A bullet renders as a label-column row when it leads with **Label** / **Label:**
+                // (the Why / Impact / Trade-off / Class / Max MAE lines), else a plain dot bullet.
+                const li = (body) => {
+                    const m = body.match(/^\*\*([^*]+?):?\*\*\s*[—–:-]?\s*([\s\S]*)$/);
+                    if (m && m[2].trim()) {
+                        return '<li class="flex gap-2.5"><span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-3 leading-tight mt-[3px] w-[74px] flex-shrink-0">' + esc(m[1]) + '</span><span class="text-[12.5px] text-fg-2 leading-normal min-w-0">' + inl(m[2]) + '</span></li>';
+                    }
+                    return '<li class="flex gap-2"><span class="text-accent flex-shrink-0 mt-[1px]">·</span><span class="text-[12.5px] text-fg-2 leading-normal min-w-0">' + inl(body) + '</span></li>';
+                };
                 const lines = src.split('\n'); const out = []; let list = null;
-                const flush = () => { if (list) { out.push('<ul class="flex flex-col gap-1.5 my-1.5 pl-1">' + list.join('') + '</ul>'); list = null; } };
-                lines.forEach((ln) => {
-                    if (/^###\s+/.test(ln)) { flush(); out.push('<h5 class="font-mono text-[10.5px] font-bold tracking-[0.1em] uppercase text-fg-mute mt-4 mb-1">' + inl(ln.replace(/^###\s+/, '')) + '</h5>'); }
-                    else if (/^##\s+/.test(ln)) { flush(); out.push('<h4 class="font-sans font-bold text-[15px] text-fg-1 mt-4 first:mt-0 mb-1.5 pb-1.5 border-b border-line-soft">' + inl(ln.replace(/^##\s+/, '')) + '</h4>'); }
-                    else if (/^\d+\.\s+/.test(ln)) { const m = ln.match(/^(\d+)\.\s+(.*)$/); list = list || []; list.push('<li class="flex gap-2.5 text-[13px] text-fg-2 leading-relaxed"><span class="font-mono text-[11px] font-bold text-accent flex-shrink-0 mt-[2px]">' + m[1] + '</span><span>' + inl(m[2]) + '</span></li>'); }
-                    else if (/^-\s+/.test(ln)) { list = list || []; list.push('<li class="flex gap-2.5 text-[13px] text-fg-2 leading-relaxed"><span class="text-accent flex-shrink-0">·</span><span>' + inl(ln.replace(/^-\s+/, '')) + '</span></li>'); }
+                const flush = () => { if (list) { out.push('<ul class="flex flex-col gap-[5px] mt-1 mb-2 pl-0.5">' + list.join('') + '</ul>'); list = null; } };
+                lines.forEach((raw) => {
+                    // Strip leading indent so sub-bullets nested under a numbered
+                    // suggestion are still detected as bullets (label-column rows).
+                    const ln = raw.replace(/^[ \t]+/, '');
+                    if (/^(\s*[-*_]){3,}\s*$/.test(ln)) { flush(); out.push('<div class="my-3 border-t border-line-soft"></div>'); }
+                    else if (/^###\s+/.test(ln)) { flush(); out.push('<h5 class="font-mono text-[10px] font-bold tracking-[0.1em] uppercase text-fg-mute mt-3 mb-1">' + inl(ln.replace(/^###\s+/, '')) + '</h5>'); }
+                    else if (/^##\s+/.test(ln)) { flush(); out.push('<h4 class="font-sans font-bold text-[14px] text-fg-1 mt-4 first:mt-0 mb-2 pb-1 border-b border-line-soft">' + inl(ln.replace(/^##\s+/, '')) + '</h4>'); }
+                    else if (/^\d+\.\s+/.test(ln)) { flush(); const m = ln.match(/^(\d+)\.\s+(.*)$/); out.push('<div class="flex gap-2.5 items-baseline mt-3 first:mt-0"><span class="font-mono text-[11px] font-bold text-accent flex-shrink-0">' + m[1] + '</span><span class="text-[12.5px] font-semibold text-fg-1 leading-snug min-w-0">' + inl(m[2]) + '</span></div>'); }
+                    else if (/^[-*]\s+/.test(ln)) { list = list || []; list.push(li(ln.replace(/^[-*]\s+/, ''))); }
                     else if (ln.trim() === '') { flush(); }
-                    else { flush(); out.push('<p class="text-[13px] text-fg-2 leading-relaxed my-1.5">' + inl(ln) + '</p>'); }
+                    else { flush(); out.push('<p class="text-[12.5px] text-fg-2 leading-normal my-1.5">' + inl(ln) + '</p>'); }
                 });
                 flush();
                 return out.join('');
@@ -630,27 +643,27 @@
                             <div class="p-4 flex flex-col gap-4">
                                 {{-- window --}}
                                 <div class="flex flex-col gap-3">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Window</span>
+                                    <span class="ui-eyebrow">Window</span>
                                     <div class="grid grid-cols-2 gap-3">
                                         <label class="flex flex-col gap-[6px]">
-                                            <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3">Since</span>
+                                            <span class="ui-field-label">Since</span>
                                             <input type="date" x-model="cfg.since" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
                                         </label>
                                         <label class="flex flex-col gap-[6px]">
-                                            <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3">Candles back</span>
+                                            <span class="ui-field-label">Candles back</span>
                                             <input type="number" x-model="cfg.candles_back" placeholder="all" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
                                         </label>
                                     </div>
-                                    <span class="font-mono text-[10px] text-fg-3 tracking-[0.01em] leading-snug">Leave both empty to walk all history. Date drives the fetch depth; candle count windows the run.</span>
+                                    <span class="ui-hint">Leave both empty to walk all history. Date drives the fetch depth; candle count windows the run.</span>
                                 </div>
 
                                 {{-- strategy --}}
                                 <div class="flex flex-col gap-3 pt-3 border-t border-line-soft">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3">Strategy</span>
+                                    <span class="ui-eyebrow">Strategy</span>
                                     <div class="grid grid-cols-2 gap-3">
                                         @php
                                             $btInput = 'w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed';
-                                            $btLabel = 'font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-3';
+                                            $btLabel = 'ui-field-label';
                                         @endphp
                                         <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Take-profit %</span><input type="number" step="0.01" x-model="cfg.tp" :disabled="!selected" class="{{ $btInput }}"/></label>
                                         <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Stop-loss %</span><input type="number" step="0.01" x-model="cfg.sl" :disabled="!selected" class="{{ $btInput }}"/></label>
@@ -663,14 +676,14 @@
 
                                 {{-- fixed envelope --}}
                                 <div class="flex flex-col gap-2 pt-3 border-t border-line-soft">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase text-fg-3 mb-0.5">Fixed envelope</span>
+                                    <span class="ui-eyebrow mb-0.5">Fixed envelope</span>
                                     @foreach(['Margin' => '5,000', 'Leverage' => '20×', 'Limit orders' => '4', 'Multipliers' => '[2,2,2,2]'] as $k => $v)
                                         <div class="flex items-center justify-between gap-3 py-[7px] border-b border-line-soft last:border-b-0">
                                             <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">{{ $k }}</span>
                                             <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-2">{{ $v }}</span>
                                         </div>
                                     @endforeach
-                                    <span class="font-mono text-[10px] text-fg-3 tracking-[0.01em] leading-snug mt-1">Sizing is fixed — backtests measure price geometry (does WAP recover to TP?), not capital allocation.</span>
+                                    <span class="ui-hint mt-1">Sizing is fixed — backtests measure price geometry (does WAP recover to TP?), not capital allocation.</span>
                                 </div>
                             </div>
                         </div>
@@ -700,7 +713,7 @@
                         <template x-if="busy === 'run'"><span class="flex items-center gap-2"><span class="w-[14px] h-[14px] rounded-full border-2 border-current border-t-transparent animate-spin"></span>Simulating ladder…</span></template>
                         <template x-if="busy !== 'run'"><span class="flex items-center gap-2"><x-feathericon-play class="w-4 h-4" stroke-width="1.75"/>Run backtest</span></template>
                     </button>
-                    <span class="font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug text-center">Fetch and Run can take a few seconds.</span>
+                    <span class="ui-hint text-center">Fetch and Run can take a few seconds.</span>
                 </div>
 
                 {{-- [G] approval --}}
@@ -715,7 +728,7 @@
                             </x-slot:right>
                         </x-ui.card-head>
                         <div class="p-4 flex flex-col gap-2.5">
-                            <span x-show="!result" class="font-mono text-[10px] text-fg-faint tracking-[0.01em] leading-snug">Run a backtest before approving — the decision pushes the tested config live.</span>
+                            <span x-show="!result" class="ui-hint">Run a backtest before approving — the decision pushes the tested config live.</span>
                             {{-- system proposal — recommended decision derived from the grade --}}
                             <template x-if="result && proposal">
                                 <div class="flex items-center gap-2.5 py-2.5 px-3 rounded-control border"
@@ -758,8 +771,8 @@
                 </template>
                 {{-- [D] coverage strip --}}
                 <div x-show="!cov" class="card card--flat flex items-center gap-2.5 py-3 px-4">
-                    <x-feathericon-database class="w-[15px] h-[15px] text-fg-faint" stroke-width="1.75"/>
-                    <span class="text-[12px] text-fg-mute">No coverage data — run <span class="font-semibold text-fg-2">Verify</span> or <span class="font-semibold text-fg-2">Fetch</span>.</span>
+                    <x-feathericon-database class="w-[15px] h-[15px] text-fg-3" stroke-width="1.75"/>
+                    <span class="text-[12px] text-fg-3">No coverage data — run <span class="font-semibold text-fg-2">Verify</span> or <span class="font-semibold text-fg-2">Fetch</span>.</span>
                 </div>
                 <template x-if="cov">
                     <div class="card card--flat overflow-hidden">
@@ -916,7 +929,7 @@
                                                     <span class="font-mono text-[11.5px] font-semibold tabular-nums text-fg-1 w-[36px] text-right" x-text="r.n"></span>
                                                 </div>
                                             </template>
-                                            <span class="font-mono text-[10px] text-fg-faint mt-0.5">Deeper rungs = more averaging-down — the deepest rung's reach is the key risk signal.</span>
+                                            <span class="ui-hint mt-0.5">Deeper rungs = more averaging-down — the deepest rung's reach is the key risk signal.</span>
                                         </div>
                                     </div>
                                 </div>
@@ -1005,7 +1018,7 @@
                                     <x-ui.card-head icon="zap" title="AI insights" :accent="true">
                                         <x-slot:right>
                                             <span x-show="ai.text" class="font-mono text-[10px] text-fg-faint" x-text="'via ' + (ai.model || 'model')"></span>
-                                            <span x-show="!ai.text" class="font-mono text-[10px] text-fg-faint">advisory · applies no changes</span>
+                                            <span x-show="!ai.text" class="font-mono text-[10px] text-fg-3">advisory · applies no changes</span>
                                         </x-slot:right>
                                     </x-ui.card-head>
                                     <div x-show="!ai.text && !ai.loading" class="flex items-center gap-3 p-4 max-[520px]:flex-col max-[520px]:items-stretch">
@@ -1018,7 +1031,7 @@
                                         <span class="w-[15px] h-[15px] rounded-full border-2 border-t-transparent animate-spin" style="border-color: var(--accent); border-top-color: transparent"></span>
                                         <span class="font-mono text-[12px] text-fg-mute">Analysing ladder behaviour…</span>
                                     </div>
-                                    <div x-show="ai.text" class="p-5" x-html="renderMd(ai.text)"></div>
+                                    <div x-show="ai.text" class="p-5 max-w-[760px]" x-html="renderMd(ai.text)"></div>
                                 </div>
                             </div>
                         </template>

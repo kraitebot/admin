@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.8.8] — 2026-06-22
+
+### Improvements
+- **AI insights are compact and scannable** — the backtest-insights prompt now enforces a telegraphic, capped format (Diagnosis as four one-line labelled bullets; three Suggestions with terse Why / Impact / Trade-off), roughly halving output length while keeping the analysis. The client markdown renderer was rewritten to match: numbered suggestions render as bold title rows, the labelled lines render as an aligned label column, `---` becomes a divider instead of literal text, leading indent is normalised, and the body is width-capped for a readable line length.
+- **Backtesting label legibility** — the Config card section labels, field labels, and hint copy moved off the near-invisible `--fg-faint` onto `--fg-3`; the coverage strip and actions/decision hints were lightened the same way.
+- **Structural micro-typography** — introduced shared `.ui-eyebrow` / `.ui-field-label` / `.ui-hint` component classes (raw CSS reading the design tokens) and refactored the backtesting readable labels/hints onto them, so a legibility or scale change is a single edit instead of a per-span sweep.
+
 ## [0.8.7] — 2026-06-21
 
 ### Improvements

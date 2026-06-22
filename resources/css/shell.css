@@ -162,3 +162,36 @@ body { background: var(--black); overflow: hidden; }
 .content[data-theme="dark"] .card.card--alert:hover { border: 2px solid var(--danger); }
 .content[data-theme="dark"] .card.card--warn,
 .content[data-theme="dark"] .card.card--warn:hover { border: 2px solid var(--warn); }
+
+/* =========================================================================
+   MICRO-TYPOGRAPHY ROLES
+   Readable labels + hints each share ONE definition, so a legibility / scale
+   change is a single edit here instead of a per-span hunt across the views.
+   Colour stays token-driven (var(--fg-3)), so it also follows a token change.
+   Deliberately-faint decorative micro-text (table headers, counts, group
+   headers, result-panel labels) stays inline — that's a different, intentionally
+   subtle role and must not be swept up by a legibility pass.
+   ========================================================================= */
+.ui-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.ui-field-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.ui-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.01em;
+  line-height: 1.375;
+  color: var(--fg-3);
+}
