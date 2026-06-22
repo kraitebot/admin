@@ -364,12 +364,12 @@ const AdminBacktesting = () => {
                 </div>
               )}
               <div className="grid grid-cols-3 gap-3 max-[640px]:grid-cols-2">
-                <StatMini label="Pass rate" value={result.totals.pass_rate.toFixed(1) + '%'} color="var(--pnl-up-fg)" sub="resolved sims"/>
-                <StatMini label="Max MAE %" value={result.totals.max_mae_pct.toFixed(1)} color="var(--pnl-down-fg)" sub="liq-risk proxy" warn/>
-                <StatMini label="Avg rung depth" value={result.totals.avg_rung_depth.toFixed(1)} sub="of 4 rungs"/>
-                <StatMini label="Avg → profit" value={result.totals.avg_candles_profit + ' c'} sub="candles"/>
-                <StatMini label="p95 → profit" value={result.totals.p95_candles_profit + ' c'} sub="candles"/>
-                <StatMini label="Sample size" value={result.totals.sample_size.toLocaleString()} sub={result.totals.sample_size >= result.totals.sample_size_threshold ? 'sims' : 'below threshold'} warn={result.totals.sample_size < result.totals.sample_size_threshold}/>
+                <StatMini label="Pass rate" value={result.totals.pass_rate.toFixed(1) + '%'} color="var(--pnl-up-fg)" sub="resolved sims" tip="Resolved sims that closed in profit — TP hit or WAP rebound."/>
+                <StatMini label="Max MAE %" value={result.totals.max_mae_pct.toFixed(1)} color="var(--pnl-down-fg)" sub="liq-risk proxy" warn tip="Worst adverse excursion before resolving — a liquidation-risk proxy."/>
+                <StatMini label="Avg rung depth" value={result.totals.avg_rung_depth.toFixed(1)} sub="of 4 rungs" tip="Average ladder rung reached before close, out of 4."/>
+                <StatMini label="Avg → profit" value={result.totals.avg_candles_profit + ' c'} sub="candles" tip="Mean candles from entry to a profitable close."/>
+                <StatMini label="p95 → profit" value={result.totals.p95_candles_profit + ' c'} sub="candles" tip="95th-percentile candles to profit — the slow tail."/>
+                <StatMini label="Sample size" value={result.totals.sample_size.toLocaleString()} sub={result.totals.sample_size >= result.totals.sample_size_threshold ? 'sims' : 'below threshold'} warn={result.totals.sample_size < result.totals.sample_size_threshold} tip="Resolved sims behind these stats — below threshold means low confidence."/>
               </div>
 
               <div className="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
@@ -379,7 +379,7 @@ const AdminBacktesting = () => {
 
               {/* config echo */}
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
-                <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3">Config</span>
+                <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 inline-flex items-center gap-[5px]">Config<BtHelp tip="The exact ladder parameters this run used."/></span>
                 {[['TP', meta.tp + '%'], ['SL', meta.sl + '%'], ['Gap L', meta.gapL + '%'], ['Gap S', meta.gapS + '%'], ['Lev', meta.leverage], ['Mult', meta.mult], ['Window', meta.window]].map(([k, v]) => (
                   <span key={k} className="font-mono text-[10.5px] text-fg-mute"><span className="text-fg-3">{k}</span> <span className="font-semibold text-fg-2 tabular-nums">{v}</span></span>
                 ))}

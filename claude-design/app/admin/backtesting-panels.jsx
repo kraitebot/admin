@@ -12,9 +12,9 @@ const CoverageStrip = ({ cov }) => {
   );
   const clean = cov.holes === 0;
   const c = clean ? 'var(--pnl-up-fg)' : 'var(--warn)';
-  const cell = (k, v) => (
+  const cell = (k, v, tip) => (
     <div className="flex flex-col gap-1 min-w-0">
-      <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">{k}</span>
+      <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap inline-flex items-center gap-[5px]">{k}{tip && <BtHelp tip={tip}/>}</span>
       <span className="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap">{v}</span>
     </div>
   );
@@ -28,10 +28,10 @@ const CoverageStrip = ({ cov }) => {
         {!clean && <span className="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Fetch can backfill the gaps</span>}
       </div>
       <div className="grid grid-cols-4 gap-3 py-3 px-4 max-[520px]:grid-cols-2 max-[520px]:gap-y-3">
-        {cell('Earliest', cov.earliest)}
-        {cell('Latest', cov.latest)}
-        {cell('Candles', cov.candles.toLocaleString())}
-        {cell('Contiguity', cov.contiguity + '%')}
+        {cell('Earliest', cov.earliest, 'Oldest stored candle for this token & timeframe.')}
+        {cell('Latest', cov.latest, 'Most recent stored candle — Fetch pulls forward to now.')}
+        {cell('Candles', cov.candles.toLocaleString(), 'Total candles available across the window.')}
+        {cell('Contiguity', cov.contiguity + '%', 'Share of the window with no gaps — gaps weaken the grade.')}
       </div>
     </div>
   );
@@ -72,9 +72,9 @@ const FetchReport = ({ report }) => {
 };
 
 // ---------- [F] scorecards ----------
-const StatMini = ({ label, value, sub, color, warn }) => (
+const StatMini = ({ label, value, sub, color, warn, tip }) => (
   <div className="card card--flat px-3.5 py-3 flex flex-col gap-1.5">
-    <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute whitespace-nowrap">{label}</span>
+    <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute whitespace-nowrap inline-flex items-center gap-[5px]">{label}{tip && <BtHelp tip={tip}/>}</span>
     <span className="font-mono text-[20px] font-bold tabular-nums leading-none" style={{ color: color || 'var(--fg-1)' }}>{value}</span>
     {sub && <span className="font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap" style={{ color: warn ? 'var(--warn)' : 'var(--fg-3)' }}>{sub}</span>}
   </div>
@@ -88,11 +88,11 @@ const GradeHero = ({ totals }) => {
         <span className="font-mono font-bold text-[56px] leading-none tabular-nums" style={{ color: gc }}>{totals.grade}</span>
       </div>
       <div className="flex flex-col justify-center gap-1.5 px-5 py-4 min-w-0">
-        <span className="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute">Grade · verdict</span>
+        <span className="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute inline-flex items-center gap-[5px]">Grade · verdict<BtHelp tip="Letter grade and a one-line read on this config."/></span>
         <span className="font-sans font-bold text-[17px] text-fg-1 leading-tight">{totals.verdict}</span>
         <div className="flex items-center gap-4 mt-0.5">
-          <span className="font-mono text-[11.5px] text-fg-2">Overall <span className="font-bold tabular-nums text-fg-1">{totals.overall_score.toFixed(1)}</span><span className="text-fg-faint">/100</span></span>
-          <span className="font-mono text-[11.5px] text-fg-2">Risk <span className="font-bold tabular-nums" style={{ color: totals.risk_score > 50 ? 'var(--warn)' : 'var(--fg-1)' }}>{totals.risk_score.toFixed(1)}</span></span>
+          <span className="font-mono text-[11.5px] text-fg-2">Overall <span className="font-bold tabular-nums text-fg-1">{totals.overall_score.toFixed(1)}</span><span className="text-fg-faint">/100</span> <BtHelp tip="Composite 0–100 score across pass rate, risk and regime stability."/></span>
+          <span className="font-mono text-[11.5px] text-fg-2">Risk <span className="font-bold tabular-nums" style={{ color: totals.risk_score > 50 ? 'var(--warn)' : 'var(--fg-1)' }}>{totals.risk_score.toFixed(1)}</span> <BtHelp tip="0–100 risk score — higher means more drawdown / liquidation exposure."/></span>
         </div>
       </div>
     </div>
@@ -104,7 +104,7 @@ const VerdictBar = ({ verdict }) => {
   const total = verdict.reduce((a, v) => a + v.n, 0);
   return (
     <div className="card card--flat overflow-hidden">
-      <ACardHead icon="layers" title="Verdict breakdown" accent hint={total + ' sims'}/>
+      <ACardHead icon="layers" title="Verdict breakdown" accent hint={total + ' sims'} tip="How every resolved simulation closed, split by outcome class."/>
       <div className="p-4">
         <div className="flex h-[26px] rounded-control overflow-hidden border border-line">
           {verdict.map(v => (
@@ -136,7 +136,7 @@ const RungChart = ({ rungs }) => {
   const max = Math.max(...rungs.map(r => r.n));
   return (
     <div className="card card--flat overflow-hidden">
-      <ACardHead icon="steps" title="Rung distribution" accent hint="ladder depth reached"/>
+      <ACardHead icon="steps" title="Rung distribution" accent hint="ladder depth reached" tip="How deep into the 4-rung ladder sims went before resolving."/>
       <div className="p-4 flex flex-col gap-2.5">
         {rungs.map(r => {
           const deepest = r.rung === rungs.length;
@@ -163,7 +163,7 @@ const RegimeBand = ({ regimes }) => {
   const passColor = (p) => p >= 0.8 ? 'var(--pnl-up-fg)' : p >= 0.6 ? 'var(--warn)' : 'var(--pnl-down-fg)';
   return (
     <div className="card card--flat overflow-hidden">
-      <ACardHead icon="activity" title="Regime stability" accent hint={`worst ${(worst * 100).toFixed(0)}% pass`}/>
+      <ACardHead icon="activity" title="Regime stability" accent hint={`worst ${(worst * 100).toFixed(0)}% pass`} tip="Pass rate per time bucket — exposes weak market regimes."/>
       <div className="p-4">
         <div className="flex items-end gap-1.5 h-[96px]">
           {regimes.map((r, i) => {

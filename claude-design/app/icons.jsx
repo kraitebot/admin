@@ -75,6 +75,7 @@ const KI_UI = {
   trendingUp: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M3 17l6-6 4 4 8-8M17 7h4v4"/></svg>),
   maintenance: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M14.5 5.5a3.5 3.5 0 0 0-4.8 4.3l-6 6a1.5 1.5 0 0 0 2.1 2.1l6-6a3.5 3.5 0 0 0 4.3-4.8l-2 2-1.6-.4-.4-1.6 2-2z"/></svg>),
   steps: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="square" strokeLinejoin="miter"><path d="M3 19h4v-4h4v-4h4V7h6"/></svg>),
+  help: (p) => (<svg {...p} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.85" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9.5"/><path d="M9.25 9.3a3 3 0 0 1 5.6 1.1c0 1.9-2.85 2.55-2.85 2.55"/><path d="M12 17.1h.01"/></svg>),
 };
 
 const RailIcon = ({ name, size = 22 }) => (

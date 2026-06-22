@@ -14,7 +14,7 @@ const A_H1 = "font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leadi
 const A_SUB = "text-[13px] text-fg-3 mt-1.5";
 
 // ---------- section card head (mirrors AcctBandHead) ----------
-const ACardHead = ({ icon, title, hint, right, accent, onClick, collapsed }) => {
+const ACardHead = ({ icon, title, hint, tip, right, accent, onClick, collapsed }) => {
   const Tag = onClick ? 'button' : 'div';
   return (
     <Tag onClick={onClick}
@@ -24,7 +24,7 @@ const ACardHead = ({ icon, title, hint, right, accent, onClick, collapsed }) => 
       <h4 className="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
         {icon && <UIcon name={icon} size={16} style={{ color: accent ? 'var(--accent)' : 'var(--fg-3)' }}/>}{title}
       </h4>
-      {right || (hint ? <span className="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">{hint}</span> : null)}
+      {right || (hint || tip ? <span className="font-mono text-[10.5px] text-fg-mute tracking-[0.02em] inline-flex items-center gap-[5px]">{hint}{tip && <BtHelp tip={tip}/>}</span> : null)}
     </Tag>
   );
 };

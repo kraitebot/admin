@@ -31,6 +31,15 @@ const BtPill = ({ color, children, dot }) => (
   </span>
 );
 
+// ---------- help affordance — subtle icon + native tooltip on metric labels ----------
+const BtHelp = ({ tip }) => (
+  <span title={tip} role="img" aria-label={tip}
+    className="inline-flex items-center justify-center align-middle flex-shrink-0 text-fg-mute hover:text-accent transition-colors duration-fast cursor-help"
+    style={{ width: 13, height: 13 }}>
+    <UIcon name="help" size={13}/>
+  </span>
+);
+
 const BtField = ({ label, hint, children }) => (
   <label className="flex flex-col gap-[6px]">
     <span className={BT_FLABEL}>{label}</span>
@@ -169,5 +178,5 @@ const BtActionBtn = ({ variant, icon, label, loading, loadingText, onClick, disa
 
 Object.assign(window, {
   BT_INPUT, BT_FLABEL, BT_HINT, GRADE_COLOR, STATUS_META, REVIEW_META,
-  BtPill, BtField, BtStatic, TokenSelector, TokenHeader, BtActionBtn,
+  BtPill, BtHelp, BtField, BtStatic, TokenSelector, TokenHeader, BtActionBtn,
 });
