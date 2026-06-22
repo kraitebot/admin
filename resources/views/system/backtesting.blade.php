@@ -150,10 +150,8 @@
                 this.selOpen = false;
                 this.query = '';
                 this.cfg = {
-                    since: '', candles_back: '',
                     tp: this.defaults.tp_percent, sl: this.defaults.sl_percent,
                     gapL: s.gapL, gapS: s.gapS,
-                    limit_hit: '', max_rows: '500',
                     taapi: true, max_months: '',
                 };
                 this.cov = null; this.fetchReport = null; this.result = null;
@@ -653,24 +651,8 @@
                          :style="cfgOpen ? 'grid-template-rows: 1fr' : 'grid-template-rows: 0fr'">
                         <div class="overflow-hidden min-h-0">
                             <div class="p-4 flex flex-col gap-4">
-                                {{-- window --}}
-                                <div class="flex flex-col gap-3">
-                                    <span class="ui-eyebrow">Window</span>
-                                    <div class="grid grid-cols-2 gap-3">
-                                        <label class="flex flex-col gap-[6px]">
-                                            <span class="ui-field-label">Since</span>
-                                            <input type="date" x-model="cfg.since" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
-                                        </label>
-                                        <label class="flex flex-col gap-[6px]">
-                                            <span class="ui-field-label">Candles back</span>
-                                            <input type="number" x-model="cfg.candles_back" placeholder="all" :disabled="!selected" class="w-full h-[34px] px-2.5 bg-surface-2 border border-line rounded-control font-mono text-[12.5px] text-fg-1 tabular-nums outline-none transition-colors duration-fast focus:border-line-focus placeholder:text-fg-faint disabled:opacity-45 disabled:cursor-not-allowed"/>
-                                        </label>
-                                    </div>
-                                    <span class="ui-hint">Leave both empty to walk all history. Date drives the fetch depth; candle count windows the run.</span>
-                                </div>
-
                                 {{-- strategy --}}
-                                <div class="flex flex-col gap-3 pt-3 border-t border-line-soft">
+                                <div class="flex flex-col gap-3">
                                     <span class="ui-eyebrow">Strategy</span>
                                     <div class="grid grid-cols-2 gap-3">
                                         @php
@@ -681,8 +663,6 @@
                                         <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Stop-loss %</span><input type="number" step="0.01" x-model="cfg.sl" :disabled="!selected" class="{{ $btInput }}"/></label>
                                         <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap long %</span><input type="number" step="0.01" x-model="cfg.gapL" :disabled="!selected" class="{{ $btInput }}"/></label>
                                         <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Gap short %</span><input type="number" step="0.01" x-model="cfg.gapS" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Limit hit ≥</span><input type="number" x-model="cfg.limit_hit" placeholder="any" :disabled="!selected" class="{{ $btInput }}"/></label>
-                                        <label class="flex flex-col gap-[6px]"><span class="{{ $btLabel }}">Max rows</span><input type="number" x-model="cfg.max_rows" :disabled="!selected" class="{{ $btInput }}"/></label>
                                     </div>
                                 </div>
 
@@ -797,7 +777,7 @@
                         <div class="grid grid-cols-4 gap-3 py-3 px-4 max-[520px]:grid-cols-2 max-[520px]:gap-y-3">
                             <template x-for="c in [['Earliest', cov.earliest], ['Latest', cov.latest], ['Candles', cov.candles.toLocaleString()], ['Contiguity', cov.contiguity + '%']]" :key="c[0]">
                                 <div class="flex flex-col gap-1 min-w-0">
-                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-faint whitespace-nowrap" x-text="c[0]"></span>
+                                    <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap" x-text="c[0]"></span>
                                     <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap" x-text="c[1]"></span>
                                 </div>
                             </template>
@@ -892,14 +872,14 @@
                                         $statCard = 'card card--flat px-3.5 py-3 flex flex-col gap-1.5';
                                         $statLabel = 'font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute whitespace-nowrap';
                                         $statVal = 'font-mono text-[20px] font-bold tabular-nums leading-none';
-                                        $statSub = 'font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap';
+                                        $statSub = 'font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap text-fg-3';
                                     @endphp
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Pass rate</span><span class="{{ $statVal }}" style="color: var(--pnl-up-fg)" x-text="passRate.toFixed(1) + '%'"></span><span class="{{ $statSub }} text-fg-faint">resolved sims</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Pass rate</span><span class="{{ $statVal }}" style="color: var(--pnl-up-fg)" x-text="passRate.toFixed(1) + '%'"></span><span class="{{ $statSub }}">resolved sims</span></div>
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Max MAE %</span><span class="{{ $statVal }}" style="color: var(--pnl-down-fg)" x-text="fmtFixed(totals.max_mae_pct)"></span><span class="{{ $statSub }}" style="color: var(--warn)">liq-risk proxy</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg rung depth</span><span class="{{ $statVal }} text-fg-1" x-text="fmtFixed(totals.avg_rung_depth)"></span><span class="{{ $statSub }} text-fg-faint">of 4 rungs</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.avg_candles_to_profit == null ? '—' : totals.avg_candles_to_profit + ' c'"></span><span class="{{ $statSub }} text-fg-faint">candles</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">p95 → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.p95_candles_to_profit == null ? '—' : totals.p95_candles_to_profit + ' c'"></span><span class="{{ $statSub }} text-fg-faint">candles</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Sample size</span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-faint)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg rung depth</span><span class="{{ $statVal }} text-fg-1" x-text="fmtFixed(totals.avg_rung_depth)"></span><span class="{{ $statSub }}">of 4 rungs</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Avg → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.avg_candles_to_profit == null ? '—' : totals.avg_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">p95 → profit</span><span class="{{ $statVal }} text-fg-1" x-text="totals.p95_candles_to_profit == null ? '—' : totals.p95_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }}">Sample size</span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
                                 </div>
 
                                 {{-- verdict bar + rung chart --}}
@@ -948,9 +928,9 @@
 
                                 {{-- config echo --}}
                                 <div class="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint">Config</span>
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3">Config</span>
                                     <template x-for="kv in configEcho" :key="kv[0]">
-                                        <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-faint" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
+                                        <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-3" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
                                     </template>
                                 </div>
 
@@ -973,9 +953,9 @@
                                                 </template>
                                             </div>
                                             <div class="flex items-center justify-between mt-2 pt-2 border-t border-line-soft">
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint" x-text="regimeBars[0].from"></span>
+                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[0].from"></span>
                                                 <span class="font-mono text-[10px] text-fg-mute max-[520px]:hidden">Each bar = a time bucket · height = pass rate · worst highlighted</span>
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint" x-text="regimeBars[regimeBars.length - 1].to"></span>
+                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[regimeBars.length - 1].to"></span>
                                             </div>
                                         </div>
                                     </div>
@@ -989,21 +969,21 @@
 
                                     {{-- filter chips --}}
                                     <div class="flex items-center gap-1.5 flex-wrap py-2.5 px-4 border-b border-line-soft" style="background: color-mix(in srgb, var(--bg-elev-2) 40%, transparent)">
-                                        <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint mr-1">Status</span>
+                                        <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Status</span>
                                         @php $chip = 'appearance-none cursor-pointer inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-chip border font-mono text-[10.5px] font-semibold tracking-[0.04em] whitespace-nowrap transition-colors duration-fast'; @endphp
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'all'" :style="statusFilter === 'all' ? 'color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">All</button>
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'stopped_out'" :style="statusFilter === 'stopped_out' ? 'color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="1.75"/>Stopped · <span x-text="rowCounts().stopped_out || 0"></span></button>
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'reboundable'" :style="statusFilter === 'reboundable' ? 'color: #15b8a6; border-color: color-mix(in srgb, #15b8a6 45%, transparent); background: color-mix(in srgb, #15b8a6 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Rebound · <span x-text="rowCounts().reboundable || 0"></span></button>
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'tp_market_only'" :style="statusFilter === 'tp_market_only' ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">TP market · <span x-text="rowCounts().tp_market_only || 0"></span></button>
                                         <span class="w-px h-4 bg-line-soft mx-1.5"></span>
-                                        <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint mr-1">Side</span>
+                                        <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Side</span>
                                         <button type="button" class="{{ $chip }}" x-on:click="dirFilter = 'all'" :style="dirFilter === 'all' ? 'color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Both</button>
                                         <button type="button" class="{{ $chip }}" x-on:click="dirFilter = 'LONG'" :style="dirFilter === 'LONG' ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Long</button>
                                         <button type="button" class="{{ $chip }}" x-on:click="dirFilter = 'SHORT'" :style="dirFilter === 'SHORT' ? 'color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Short</button>
                                     </div>
 
                                     {{-- header --}}
-                                    <div class="hidden lg:grid grid-cols-[64px_136px_1fr_56px_136px_1fr_64px_112px] gap-2 py-2 px-4 border-b border-line-soft bg-surface-2 font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-faint">
+                                    <div class="hidden lg:grid grid-cols-[64px_136px_1fr_56px_136px_1fr_64px_112px] gap-2 py-2 px-4 border-b border-line-soft bg-surface-2 font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-3">
                                         <span>Side</span><span>Start candle</span><span>Entry ref</span><span>Rung</span><span>Last touch</span><span>TP price</span><span>MAE %</span><span>Status</span>
                                     </div>
 
