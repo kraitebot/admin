@@ -28,20 +28,20 @@ const RowsTable = ({ rows, totals }) => {
 
       {/* filter chips */}
       <div className="flex items-center gap-1.5 flex-wrap py-2.5 px-4 border-b border-line-soft bg-surface-2/40">
-        <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint mr-1">Status</span>
+        <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Status</span>
         {chip(statusFilter === 'all', null, () => setStatusFilter('all'), <>All</>)}
         {chip(statusFilter === 'stopped_out', 'var(--pnl-down-fg)', () => setStatusFilter('stopped_out'), <><UIcon name="alert" size={12}/>Stopped out · {counts.stopped_out || 0}</>)}
         {chip(statusFilter === 'reboundable', BT_TEAL, () => setStatusFilter('reboundable'), <>Reboundable · {counts.reboundable || 0}</>)}
         {chip(statusFilter === 'tp_market_only', 'var(--pnl-up-fg)', () => setStatusFilter('tp_market_only'), <>TP market · {counts.tp_market_only || 0}</>)}
         <span className="w-px h-4 bg-line-soft mx-1.5"/>
-        <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint mr-1">Side</span>
+        <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Side</span>
         {chip(dirFilter === 'all', null, () => setDirFilter('all'), <>Both</>)}
         {chip(dirFilter === 'LONG', 'var(--pnl-up-fg)', () => setDirFilter('LONG'), <>Long</>)}
         {chip(dirFilter === 'SHORT', 'var(--pnl-down-fg)', () => setDirFilter('SHORT'), <>Short</>)}
       </div>
 
       {/* header */}
-      <div className={"hidden lg:grid " + COLS + " gap-2 py-2 px-4 border-b border-line-soft bg-surface-2 font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-faint"}>
+      <div className={"hidden lg:grid " + COLS + " gap-2 py-2 px-4 border-b border-line-soft bg-surface-2 font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-3"}>
         <span>Side</span><span>Start candle</span><span>Entry ref</span><span>Rung</span><span>Last touch</span><span>TP price</span><span>MAE %</span><span>Status</span>
       </div>
 
@@ -379,9 +379,9 @@ const AdminBacktesting = () => {
 
               {/* config echo */}
               <div className="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
-                <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-faint">Config</span>
+                <span className="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3">Config</span>
                 {[['TP', meta.tp + '%'], ['SL', meta.sl + '%'], ['Gap L', meta.gapL + '%'], ['Gap S', meta.gapS + '%'], ['Lev', meta.leverage], ['Mult', meta.mult], ['Window', meta.window]].map(([k, v]) => (
-                  <span key={k} className="font-mono text-[10.5px] text-fg-mute"><span className="text-fg-faint">{k}</span> <span className="font-semibold text-fg-2 tabular-nums">{v}</span></span>
+                  <span key={k} className="font-mono text-[10.5px] text-fg-mute"><span className="text-fg-3">{k}</span> <span className="font-semibold text-fg-2 tabular-nums">{v}</span></span>
                 ))}
               </div>
 

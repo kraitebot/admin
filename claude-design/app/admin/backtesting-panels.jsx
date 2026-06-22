@@ -14,7 +14,7 @@ const CoverageStrip = ({ cov }) => {
   const c = clean ? 'var(--pnl-up-fg)' : 'var(--warn)';
   const cell = (k, v) => (
     <div className="flex flex-col gap-1 min-w-0">
-      <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-faint whitespace-nowrap">{k}</span>
+      <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-3 whitespace-nowrap">{k}</span>
       <span className="font-mono text-[12px] font-semibold tabular-nums text-fg-1 whitespace-nowrap">{v}</span>
     </div>
   );
@@ -76,7 +76,7 @@ const StatMini = ({ label, value, sub, color, warn }) => (
   <div className="card card--flat px-3.5 py-3 flex flex-col gap-1.5">
     <span className="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute whitespace-nowrap">{label}</span>
     <span className="font-mono text-[20px] font-bold tabular-nums leading-none" style={{ color: color || 'var(--fg-1)' }}>{value}</span>
-    {sub && <span className="font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap" style={{ color: warn ? 'var(--warn)' : 'var(--fg-faint)' }}>{sub}</span>}
+    {sub && <span className="font-mono text-[9px] tracking-[0.05em] uppercase whitespace-nowrap" style={{ color: warn ? 'var(--warn)' : 'var(--fg-3)' }}>{sub}</span>}
   </div>
 );
 
@@ -184,9 +184,9 @@ const RegimeBand = ({ regimes }) => {
           })}
         </div>
         <div className="flex items-center justify-between mt-2 pt-2 border-t border-line-soft">
-          <span className="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint">{regimes[0].from}</span>
+          <span className="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3">{regimes[0].from}</span>
           <span className="font-mono text-[10px] text-fg-mute">Each bar = a time bucket · height = pass rate · worst highlighted</span>
-          <span className="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint">{regimes[regimes.length - 1].to}</span>
+          <span className="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3">{regimes[regimes.length - 1].to}</span>
         </div>
       </div>
     </div>
