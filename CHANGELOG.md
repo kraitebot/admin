@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.11.0] — 2026-06-23
+
+### Changed
+- **Backtesting coverage gate softened from hard block to advisory warning.** The v0.9.0 risk gate refused to grade or approve on stale / gappy candle data (the server returned **422 `data_not_ready`** and the UI blocked the run outright). It now grades on whatever candles are present and surfaces a warning instead. The run still fires the dispatcher-orchestrated ensure-coverage block (detect period → Vision → REST / fill-gaps → TAAPI → verify) to top the data up as far as the sources allow — but it no longer blocks when the result is still imperfect. `run` attaches `coverage` + `coverage_warning` to its response; the UI shows an amber "graded on imperfect data" toast and a warning line rather than refusing to produce a grade. **Approve / reject is now the operator's final call** — the server no longer blocks the live-config push on stale data. The operator reads the grade with eyes open instead of seeing nothing, and weighs the warning before pushing a config live.
+
 ## [0.10.0] — 2026-06-23
 
 ### Features

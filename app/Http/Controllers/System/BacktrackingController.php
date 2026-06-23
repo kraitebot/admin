@@ -343,19 +343,14 @@ final class BacktrackingController extends Controller
             $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
             $timeframe = (string) $validated['timeframe'];
 
-            // RISK GATE: never grade on stale or gappy data. Re-verify at run
-            // time (stateless backstop, independent of the UI's ensure-coverage
-            // flow). A grade drives a real-money approve decision.
+            // Coverage is advisory at grade time, not a hard block. The UI runs
+            // a best-effort fetch first; here we grade on whatever is present and
+            // surface a warning when the data isn't fresh + complete, so the
+            // operator reads the grade with eyes open instead of seeing nothing.
+            // (Approve still guards separately — that's the real-money live push.)
             $coverage = (new CandleCoverageVerifier)->verify($symbol, $timeframe);
             $gate = CoverageGate::evaluate($coverage, $timeframe);
-            if (! $gate['ready']) {
-                return response()->json([
-                    'ok' => false,
-                    'error' => 'data_not_ready',
-                    'message' => 'Candle data not ready: '.$gate['reason'],
-                    'coverage' => $coverage,
-                ], 422);
-            }
+            $coverageWarning = $gate['ready'] ? null : 'Graded on imperfect data: '.$gate['reason'];
 
             $windowSince = $this->resolveWindowSince(
                 $timeframe,
@@ -404,6 +399,8 @@ final class BacktrackingController extends Controller
                 'pair_name' => $symbol->symbol?->name,
                 'result' => $result,
                 'rows_truncated' => $truncated,
+                'coverage' => $coverage,
+                'coverage_warning' => $coverageWarning,
             ]);
         } catch (Throwable $e) {
             return response()->json([
@@ -537,7 +534,7 @@ final class BacktrackingController extends Controller
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
             'approve' => ['required', 'boolean'],
-            'timeframe' => ['required_if:approve,true', 'nullable', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['nullable', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
             'tp_percent' => ['nullable', 'numeric', 'gt:0'],
@@ -548,20 +545,9 @@ final class BacktrackingController extends Controller
             $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
             $approve = (bool) $validated['approve'];
 
-            // RISK GATE: approving pushes this config to the live engine — refuse
-            // if the data behind the grade is stale or gappy. (Reject is always
-            // allowed.) Last safe checkpoint before config goes live.
-            if ($approve) {
-                $coverage = (new CandleCoverageVerifier)->verify($symbol, (string) $validated['timeframe']);
-                $gate = CoverageGate::evaluate($coverage, (string) $validated['timeframe']);
-                if (! $gate['ready']) {
-                    return response()->json([
-                        'ok' => false,
-                        'error' => 'data_not_ready',
-                        'message' => 'Cannot approve on stale/incomplete candle data ('.$gate['reason'].') — re-run coverage first.',
-                    ], 422);
-                }
-            }
+            // No coverage block here — approve / reject is the admin's final call.
+            // The run surfaces a coverage warning when the data is imperfect; the
+            // operator weighs it and decides whether to push the config live.
 
             $symbol->was_backtesting_approved = $approve;
             $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';

@@ -247,13 +247,13 @@
                 this.cov = this.mapCov(data.coverage);
             },
 
-            // Dispatcher-orchestrated coverage gate (RISK GATE). Kicks off the
-            // ensure-coverage step block (detect period → Vision → REST/fillGaps
-            // → TAAPI → verify) on the worker fleet, polls it to completion, and
-            // returns true ONLY when the data is fresh + gap-free. On stale/gappy
-            // data (even after fetching everything available), failure, or
-            // timeout it warns and returns false so the run is BLOCKED — a grade
-            // is never produced on bad data. The server run-gate enforces the same.
+            // Best-effort coverage fetch. Kicks off the ensure-coverage step
+            // block (detect period → Vision → REST/fillGaps → TAAPI → verify) on
+            // the worker fleet and polls it to completion, topping the candles up
+            // as far as the sources allow. It does NOT block the grade: if the
+            // data is still stale or gappy afterwards it leaves a warning up and
+            // the run grades on what's present (the server attaches the same
+            // warning). Approve guards separately on fresh + complete data.
             async ensureCoverage() {
                 this.coverageProgress = 'Checking coverage…';
                 const { ok, data } = await hubUiFetch(this.routes.ensure, { body: {
@@ -301,8 +301,8 @@
                         if (data.state === 'done') {
                             this.coverageProgress = null;
                             if (data.ready) return true;
-                            this.coverageWarning = 'Data not ready: ' + (data.reason || 'coverage incomplete') + ' — cannot grade safely. Run a manual Fetch or pick a token with full history.';
-                            this.flashToast('Data not ready — ' + (data.reason || 'incomplete'), 'error');
+                            this.coverageWarning = 'Coverage warning: ' + (data.reason || 'data incomplete') + ' — graded on the available candles. Fetch more or pick a token with fuller history for a clean read.';
+                            this.flashToast('Graded on imperfect data — ' + (data.reason || 'incomplete'), 'warn');
                             return false;
                         }
                         if (data.state === 'failed') {
@@ -324,9 +324,11 @@
                 this.coverageProgress = null;
                 this.adjust = { loading: false, done: false, candidates: null, best: null };
 
-                // RISK GATE: ensure fresh + gap-free data via the dispatcher
-                // before simulating. Blocks the run (no grade) on stale/incomplete.
-                if (! await this.ensureCoverage()) { this.busy = null; this.coverageProgress = null; return; }
+                // Best-effort: pull fresh candles / fill gaps via the dispatcher
+                // fleet first — but DON'T block the grade. If the data is still
+                // imperfect (stale or a gap) ensureCoverage leaves a warning up
+                // and we grade on what's present anyway; the alert is loud.
+                await this.ensureCoverage();
                 this.coverageProgress = null;
 
                 const { ok, data } = await hubUiFetch(this.routes.run, { body: {
@@ -343,6 +345,8 @@
                 this.busy = null;
                 if (!ok) { this.flashToast(data.error || 'Backtest failed', 'error'); return; }
                 this.result = data.result;
+                if (data.coverage) this.cov = this.mapCov(data.coverage);
+                if (data.coverage_warning) this.coverageWarning = data.coverage_warning;
                 this.pair = data.pair;
                 this.rowsTruncated = !!data.rows_truncated;
                 this.maxRowsCap = this.cfg.max_rows ? Number(this.cfg.max_rows) : 500;

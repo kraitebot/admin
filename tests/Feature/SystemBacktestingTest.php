@@ -145,7 +145,7 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('ai-insights', false);
 });
 
-it('refuses to run a backtest on stale candle data (risk gate)', function (): void {
+it('no longer hard-blocks a backtest run on stale candle data (soft coverage gate)', function (): void {
     $esId = seedBacktestableToken();
     $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
     // Contiguous daily candles, but the latest is ~6 days old → stale for 1d.
@@ -153,30 +153,38 @@ it('refuses to run a backtest on stale candle data (risk gate)', function (): vo
     seedCandles($esId, '1d', 60, $staleLatest);
     $admin = User::factory()->create(['is_admin' => true]);
 
-    $this->actingAs($admin)
+    $response = $this->actingAs($admin)
         ->postJson('https://admin.kraite.test/system/backtesting/run', [
             'exchange_symbol_id' => $esId,
             'timeframe' => '1d',
             'tp_percent' => 1.5,
             'sl_percent' => 8,
-        ])
-        ->assertStatus(422)
-        ->assertJsonPath('error', 'data_not_ready');
+        ]);
+
+    // The coverage gate no longer refuses the grade on stale data — it grades on
+    // the available candles and attaches a warning instead. (The MySQL-coupled
+    // simulator can't actually run under the SQLite stub, so we only assert the
+    // coverage gate is no longer the blocker — `data_not_ready` is gone.)
+    expect($response->json('error'))->not->toBe('data_not_ready');
 });
 
-it('refuses to approve a token on stale candle data (risk gate)', function (): void {
+it('no longer blocks approval on stale candle data (admin final call)', function (): void {
     $esId = seedBacktestableToken();
     $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
     $staleLatest = intdiv(time(), $iv) * $iv - (6 * $iv);
     seedCandles($esId, '1d', 60, $staleLatest);
     $admin = User::factory()->create(['is_admin' => true]);
 
-    $this->actingAs($admin)
+    $response = $this->actingAs($admin)
         ->postJson('https://admin.kraite.test/system/backtesting/toggle-approval', [
             'exchange_symbol_id' => $esId,
             'approve' => true,
             'timeframe' => '1d',
-        ])
-        ->assertStatus(422)
-        ->assertJsonPath('error', 'data_not_ready');
+        ]);
+
+    // Coverage no longer blocks the decision — approve / reject is the admin's
+    // final call. (The ExchangeSymbolObserver's cross-exchange propagation is
+    // MySQL/core-coupled and can't complete under the SQLite stub, so we only
+    // assert the coverage gate is gone — `data_not_ready` no longer appears.)
+    expect($response->json('error'))->not->toBe('data_not_ready');
 });
