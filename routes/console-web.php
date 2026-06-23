@@ -91,6 +91,7 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::post('/backtesting/ensure-coverage', [BacktrackingController::class, 'ensureCoverage'])->name('system.backtesting.ensure-coverage');
     Route::get('/backtesting/coverage-status', [BacktrackingController::class, 'coverageStatus'])->name('system.backtesting.coverage-status');
     Route::post('/backtesting/run', [BacktrackingController::class, 'run'])->name('system.backtesting.run');
+    Route::post('/backtesting/suggest-adjustment', [BacktrackingController::class, 'suggestAdjustment'])->name('system.backtesting.suggest-adjustment');
     Route::post('/backtesting/toggle-approval', [BacktrackingController::class, 'toggleApproval'])->name('system.backtesting.toggle-approval');
     Route::post('/backtesting/ai-insights', [BacktrackingController::class, 'aiInsights'])
         ->middleware('throttle:10,1')

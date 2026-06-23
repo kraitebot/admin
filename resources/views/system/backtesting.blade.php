@@ -37,6 +37,7 @@
             'fetch' => route('system.backtesting.fetch-candles'),
             'verify' => route('system.backtesting.verify-coverage'),
             'run' => route('system.backtesting.run'),
+            'adjust' => route('system.backtesting.suggest-adjustment'),
             'toggle' => route('system.backtesting.toggle-approval'),
             'ai' => route('system.backtesting.ai-insights'),
             'ensure' => route('system.backtesting.ensure-coverage'),
@@ -81,13 +82,13 @@
             ai: { loading: false, text: null, model: null },
             coverageWarning: null,               // data-not-ready alert (blocks the grade)
             coverageProgress: null,              // live "Fetching history… N/M" during the ensure-coverage block
+            adjust: { loading: false, done: false, candidates: null, best: null }, // smart-adjustment search (5–10 bad band)
 
             // ---- rows table filters ----
             statusFilter: 'all',
             dirFilter: 'all',
 
             // ---- overlays ----
-            confirm: null,                       // 'approve' | 'reject'
             help: null,                          // active help-modal topic key (HELP_META)
             toast: null,
             _toastTimer: null,
@@ -182,6 +183,7 @@
                 this.cov = null; this.fetchReport = null; this.result = null;
                 this.ai = { loading: false, text: null, model: null };
                 this.coverageWarning = null;
+                this.adjust = { loading: false, done: false, candidates: null, best: null };
                 this.statusFilter = 'all'; this.dirFilter = 'all';
             },
 
@@ -320,6 +322,7 @@
                 this.ai = { loading: false, text: null, model: null };
                 this.coverageWarning = null;
                 this.coverageProgress = null;
+                this.adjust = { loading: false, done: false, candidates: null, best: null };
 
                 // RISK GATE: ensure fresh + gap-free data via the dispatcher
                 // before simulating. Blocks the run (no grade) on stale/incomplete.
@@ -374,14 +377,50 @@
             },
 
             // ================= approval =================
-            askConfirm(kind) { this.confirm = kind; },
             openHelp(key) { this.help = key; },
-            async onConfirm() {
-                const approve = this.confirm === 'approve';
-                this.confirm = null;
+
+            // ================= smart adjustment (5–10 bad band) =================
+            // Tries small gap / SL bumps (+0.5 / +1.0 / +1.5%) server-side and
+            // reports which, if any, drops the token under 5 stop-loss hits.
+            async suggestAdjustment() {
+                if (!this.selected || this.adjust.loading) return;
+                this.adjust = { loading: true, done: false, candidates: null, best: null };
+                const { ok, data } = await hubUiFetch(this.routes.adjust, { body: {
+                    exchange_symbol_id: this.selected.id,
+                    timeframe: this.tf,
+                    tp_percent: Number(this.cfg.tp),
+                    sl_percent: Number(this.cfg.sl),
+                    gap_long_percent: Number(this.cfg.gapL),
+                    gap_short_percent: Number(this.cfg.gapS),
+                } });
+                if (!ok) {
+                    this.adjust = { loading: false, done: false, candidates: null, best: null };
+                    this.flashToast(data.error || 'Adjustment search failed', 'error');
+                    return;
+                }
+                this.adjust = { loading: false, done: true, candidates: data.candidates, best: data.best };
+            },
+            adjustLabel(c) {
+                return c.lever === 'gap'
+                    ? `Wider gap +${c.delta}% → ${c.gap_long} / ${c.gap_short}`
+                    : `Wider SL +${c.delta}% → ${c.sl}%`;
+            },
+            // Apply the winning config AND immediately re-run the backtest, so
+            // the operator confirms the fix in one click.
+            async applyAdjustment(c) {
+                if (this.busy) return;
+                if (c.lever === 'gap') { this.cfg.gapL = String(c.gap_long); this.cfg.gapS = String(c.gap_short); }
+                else { this.cfg.sl = String(c.sl); }
+                if (!this.cfgOpen) this.cfgOpen = true;
+                await this.doRun();
+            },
+            // Approve / reject fire immediately — no confirm step. Approve pushes
+            // the tested config live; reject just flags the token.
+            async submitDecision(approve) {
                 const { ok, data } = await hubUiFetch(this.routes.toggle, { body: {
                     exchange_symbol_id: this.selected.id,
                     approve: approve,
+                    timeframe: this.tf,
                     gap_long_percent: approve && this.cfg.gapL ? Number(this.cfg.gapL) : null,
                     gap_short_percent: approve && this.cfg.gapS ? Number(this.cfg.gapS) : null,
                     tp_percent: approve && this.cfg.tp ? Number(this.cfg.tp) : null,
@@ -419,19 +458,19 @@
             // call). Drives the proposal banner + the suggested-button emphasis.
             get proposal() {
                 if (! this.result) return null;
-                const g = this.totals.grade;
-                if (g === 'A' || g === 'B') return { action: 'approve', verb: 'Recommend approve', color: 'var(--pnl-up-fg)' };
-                if (g === 'D' || g === 'F') return { action: 'reject', verb: 'Recommend reject', color: 'var(--pnl-down-fg)' };
-                return { action: 'review', verb: 'Borderline — review manually', color: 'var(--warn)' };
+                // Decision rule: stop-loss hits across the backtest.
+                // Under 5 → approve · 5–10 → adjust the config · over 10 → reject.
+                const stops = this.totals.stops ?? 0;
+                if (stops < 5) return { action: 'approve', verb: 'Recommend approve', color: 'var(--pnl-up-fg)' };
+                if (stops <= 10) return { action: 'adjust', verb: 'Adjust configuration', color: 'var(--warn)' };
+                return { action: 'reject', verb: 'Recommend reject', color: 'var(--pnl-down-fg)' };
             },
             get proposalReason() {
                 if (! this.result) return '';
-                const t = this.totals;
-                const parts = [];
-                if (t.grade) parts.push('Grade ' + t.grade);
-                if (t.overall_score != null) parts.push(this.fmtFixed(t.overall_score) + '/100');
-                parts.push(this.passRate.toFixed(1) + '% pass');
-                return parts.join(' · ');
+                const stops = this.totals.stops ?? 0;
+                return stops === 0
+                    ? 'No stop-loss hits across the backtest'
+                    : `${stops} stop-loss ${stops === 1 ? 'hit' : 'hits'} · approve under 5`;
             },
             get verdictBars() {
                 const t = this.totals;
@@ -760,14 +799,59 @@
                                     </div>
                                 </div>
                             </template>
+
+                            {{-- smart adjustment — only when the proposal is "adjust" (5–10 bad).
+                                 Tries small gap / SL bumps and reports which gets the token safe. --}}
+                            <template x-if="result && proposal && proposal.action === 'adjust'">
+                                <div class="flex flex-col gap-2">
+                                    <button type="button" x-on:click="suggestAdjustment()" :disabled="adjust.loading"
+                                            class="appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[34px] rounded-control font-sans text-[12px] font-semibold border transition-colors duration-fast disabled:opacity-50"
+                                            style="color: var(--warn); border-color: color-mix(in srgb, var(--warn) 40%, transparent); background: color-mix(in srgb, var(--warn) 8%, transparent)">
+                                        <template x-if="adjust.loading"><span class="flex items-center gap-2"><span class="w-[13px] h-[13px] rounded-full border-2 border-current border-t-transparent animate-spin"></span>Testing small bumps…</span></template>
+                                        <template x-if="!adjust.loading"><span class="flex items-center gap-2"><x-feathericon-sliders class="w-[14px] h-[14px]" stroke-width="1.75"/><span x-text="adjust.done ? 'Re-test adjustments' : 'Find a safe adjustment'"></span></span></template>
+                                    </button>
+
+                                    <template x-if="adjust.done">
+                                        <div class="flex flex-col gap-1.5">
+                                            <template x-if="adjust.best">
+                                                <div class="flex items-start gap-2 py-2 px-2.5 rounded-control border" style="border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent); background: color-mix(in srgb, var(--pnl-up-fg) 8%, transparent)">
+                                                    <x-feathericon-check class="w-[14px] h-[14px] mt-px flex-shrink-0" style="color: var(--pnl-up-fg)" stroke-width="2.5"/>
+                                                    <div class="flex flex-col gap-1.5 min-w-0 flex-1">
+                                                        <span class="text-[12px] text-fg-1 font-semibold leading-snug" x-text="adjustLabel(adjust.best) + ' → ' + adjust.best.stops + ' stops (acceptable)'"></span>
+                                                        <button type="button" x-on:click="applyAdjustment(adjust.best)" :disabled="busy" class="self-start appearance-none cursor-pointer inline-flex items-center gap-1.5 font-sans text-[11.5px] font-semibold py-[5px] px-3 rounded-control border-0 disabled:opacity-50" style="color: var(--on-accent); background: var(--pnl-up-fg)"><x-feathericon-play class="w-[12px] h-[12px]" stroke-width="2.5"/>Apply config and backtest again</button>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                            <template x-if="!adjust.best">
+                                                <div class="flex items-start gap-2 py-2 px-2.5 rounded-control border" style="border-color: color-mix(in srgb, var(--pnl-down-fg) 40%, transparent); background: color-mix(in srgb, var(--pnl-down-fg) 8%, transparent)">
+                                                    <x-feathericon-alert-triangle class="w-[14px] h-[14px] mt-px flex-shrink-0" style="color: var(--pnl-down-fg)" stroke-width="1.75"/>
+                                                    <span class="text-[12px] text-fg-2 leading-snug">No bump up to +1.5% gets under 5 stops — lean reject or rework the ladder.</span>
+                                                </div>
+                                            </template>
+                                            <div class="flex flex-col gap-0.5 mt-0.5 pt-1.5 border-t border-line-soft">
+                                                <template x-for="c in adjust.candidates" :key="c.lever + c.delta">
+                                                    <div class="flex items-center gap-2 py-[3px]">
+                                                        <span class="flex w-[13px] flex-shrink-0" :style="`color: ${c.acceptable ? 'var(--pnl-up-fg)' : 'var(--fg-faint)'}`">
+                                                            <x-feathericon-check x-show="c.acceptable" class="w-[12px] h-[12px]" stroke-width="2.5"/>
+                                                            <x-feathericon-x x-show="!c.acceptable" class="w-[12px] h-[12px]" stroke-width="2"/>
+                                                        </span>
+                                                        <span class="font-mono text-[10.5px] text-fg-2 flex-1 truncate" x-text="adjustLabel(c)"></span>
+                                                        <span class="font-mono text-[10.5px] font-semibold tabular-nums flex-shrink-0" :style="`color: ${c.acceptable ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`" x-text="c.stops + ' stops'"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
                             <div class="flex gap-2">
-                                <button type="button" x-on:click="askConfirm('approve')" :disabled="!result || status === 'approved'"
+                                <button type="button" x-on:click="submitDecision(true)" :disabled="!result || status === 'approved'"
                                         class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-up-fg)"
                                         :style="{ boxShadow: proposal && proposal.action === 'approve' ? '0 0 0 2px color-mix(in srgb, var(--pnl-up-fg) 50%, transparent)' : '' }">
                                     <x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/>Approve
                                 </button>
-                                <button type="button" x-on:click="askConfirm('reject')" :disabled="!result || status === 'rejected'"
-                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold border transition-colors duration-fast hover:bg-hover disabled:opacity-40 disabled:cursor-not-allowed" style="color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 40%, transparent)"
+                                <button type="button" x-on:click="submitDecision(false)" :disabled="!result || status === 'rejected'"
+                                        class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-down-fg)"
                                         :style="{ boxShadow: proposal && proposal.action === 'reject' ? '0 0 0 2px color-mix(in srgb, var(--pnl-down-fg) 45%, transparent)' : '' }">
                                     <x-feathericon-power class="w-[15px] h-[15px]" stroke-width="2"/>Reject
                                 </button>
@@ -918,85 +1002,6 @@
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Sample size<x-ui.help-dot topic="sample_size"/></span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
                                 </div>
 
-                                {{-- verdict bar + rung chart --}}
-                                <div class="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
-                                    {{-- verdict breakdown --}}
-                                    <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="layers" title="Verdict breakdown" :accent="true" tip="verdict_breakdown">
-                                            <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="verdictTotal() + ' sims'"></span></x-slot:right>
-                                        </x-ui.card-head>
-                                        <div class="p-4">
-                                            <div class="flex h-[26px] rounded-control overflow-hidden border border-line">
-                                                <template x-for="v in verdictBars" :key="v.key">
-                                                    <div :title="`${v.label} · ${v.n}`" :style="`width: ${v.n / verdictTotal() * 100}%; background: ${v.striped ? `repeating-linear-gradient(45deg, color-mix(in srgb, ${v.color} 40%, transparent), color-mix(in srgb, ${v.color} 40%, transparent) 5px, transparent 5px, transparent 10px)` : v.color}`"></div>
-                                                </template>
-                                            </div>
-                                            <div class="grid grid-cols-2 gap-x-5 gap-y-2 mt-3.5 max-[420px]:grid-cols-1">
-                                                <template x-for="v in verdictBars" :key="v.key">
-                                                    <div class="flex items-center gap-2">
-                                                        <span class="w-[10px] h-[10px] rounded-r2 flex-shrink-0" :style="`background: ${v.color}; opacity: ${v.striped ? 0.6 : 1}`"></span>
-                                                        <span class="font-mono text-[11px] text-fg-2 truncate" x-text="v.label"></span>
-                                                        <span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" :style="`color: ${v.color}`" x-text="v.n"></span>
-                                                        <span class="font-mono text-[10px] tabular-nums text-fg-faint w-[38px] text-right" x-text="(v.n / verdictTotal() * 100).toFixed(0) + '%'"></span>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {{-- rung distribution --}}
-                                    <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="bar-chart-2" title="Rung distribution" :accent="true" hint="ladder depth reached" tip="rung_distribution"/>
-                                        <div class="p-4 flex flex-col gap-2.5">
-                                            <template x-for="r in rungBars" :key="r.rung">
-                                                <div class="flex items-center gap-3">
-                                                    <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-fg-mute w-[48px] flex-shrink-0" x-text="'Rung ' + r.rung"></span>
-                                                    <div class="flex-1 h-[16px] rounded-chip bg-surface-3 overflow-hidden">
-                                                        <div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${r.n / rungMax() * 100}%; background: ${rungColor(r.rung)}`"></div>
-                                                    </div>
-                                                    <span class="font-mono text-[11.5px] font-semibold tabular-nums text-fg-1 w-[36px] text-right" x-text="r.n"></span>
-                                                </div>
-                                            </template>
-                                            <span class="ui-hint mt-0.5">Deeper rungs = more averaging-down — the deepest rung's reach is the key risk signal.</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {{-- config echo --}}
-                                <div class="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
-                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 inline-flex items-center gap-[5px]">Config<x-ui.help-dot topic="config_echo"/></span>
-                                    <template x-for="kv in configEcho" :key="kv[0]">
-                                        <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-3" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
-                                    </template>
-                                </div>
-
-                                {{-- [H] regime stability --}}
-                                <template x-if="regimeBars.length">
-                                    <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="activity" title="Regime stability" :accent="true" tip="regime_stability">
-                                            <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="`worst ${(worstPass() * 100).toFixed(0)}% pass`"></span></x-slot:right>
-                                        </x-ui.card-head>
-                                        <div class="p-4">
-                                            <div class="flex items-end gap-1.5 h-[96px]">
-                                                <template x-for="(r, i) in regimeBars" :key="i">
-                                                    <div class="flex-1 flex flex-col items-center justify-end h-full group relative">
-                                                        <div class="w-full rounded-t-[3px] transition-all duration-base relative" :style="`height: ${r.pass * 100}%; min-height: 4px; background: ${regimeColor(r.pass)}; opacity: ${r.pass === worstPass() ? 1 : 0.8}; box-shadow: ${r.pass === worstPass() ? `0 0 0 2px color-mix(in srgb, ${regimeColor(r.pass)} 55%, transparent)` : 'none'}`"></div>
-                                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
-                                                            <div class="font-mono text-[10px] font-bold text-fg-1" x-text="`${r.from} – ${r.to}`"></div>
-                                                            <div class="font-mono text-[10px]" :style="`color: ${regimeColor(r.pass)}`" x-text="`${(r.pass * 100).toFixed(0)}% pass · ${r.stops} stops`"></div>
-                                                        </div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                            <div class="flex items-center justify-between mt-2 pt-2 border-t border-line-soft">
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[0].from"></span>
-                                                <span class="font-mono text-[10px] text-fg-mute max-[520px]:hidden">Each bar = a time bucket · height = pass rate · worst highlighted</span>
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[regimeBars.length - 1].to"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
-
                                 {{-- [I] rows table --}}
                                 <div class="card card--flat overflow-hidden">
                                     <x-ui.card-head icon="database" title="Per-simulation rows" :accent="true">
@@ -1041,6 +1046,85 @@
                                     </div>
                                 </div>
 
+                                {{-- config echo --}}
+                                <div class="flex items-center gap-x-4 gap-y-1 flex-wrap py-2.5 px-4 card card--flat">
+                                    <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 inline-flex items-center gap-[5px]">Config<x-ui.help-dot topic="config_echo"/></span>
+                                    <template x-for="kv in configEcho" :key="kv[0]">
+                                        <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-3" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
+                                    </template>
+                                </div>
+
+                                {{-- [H] regime stability --}}
+                                <template x-if="regimeBars.length">
+                                    <div class="card card--flat overflow-hidden">
+                                        <x-ui.card-head icon="activity" title="Regime stability" :accent="true" tip="regime_stability">
+                                            <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="`worst ${(worstPass() * 100).toFixed(0)}% pass`"></span></x-slot:right>
+                                        </x-ui.card-head>
+                                        <div class="p-4">
+                                            <div class="flex items-end gap-1.5 h-[96px]">
+                                                <template x-for="(r, i) in regimeBars" :key="i">
+                                                    <div class="flex-1 flex flex-col items-center justify-end h-full group relative">
+                                                        <div class="w-full rounded-t-[3px] transition-all duration-base relative" :style="`height: ${r.pass * 100}%; min-height: 4px; background: ${regimeColor(r.pass)}; opacity: ${r.pass === worstPass() ? 1 : 0.8}; box-shadow: ${r.pass === worstPass() ? `0 0 0 2px color-mix(in srgb, ${regimeColor(r.pass)} 55%, transparent)` : 'none'}`"></div>
+                                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
+                                                            <div class="font-mono text-[10px] font-bold text-fg-1" x-text="`${r.from} – ${r.to}`"></div>
+                                                            <div class="font-mono text-[10px]" :style="`color: ${regimeColor(r.pass)}`" x-text="`${(r.pass * 100).toFixed(0)}% pass · ${r.stops} stops`"></div>
+                                                        </div>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                            <div class="flex items-center justify-between mt-2 pt-2 border-t border-line-soft">
+                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[0].from"></span>
+                                                <span class="font-mono text-[10px] text-fg-mute max-[520px]:hidden">Each bar = a time bucket · height = pass rate · worst highlighted</span>
+                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[regimeBars.length - 1].to"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+
+                                {{-- verdict bar + rung chart --}}
+                                <div class="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
+                                    {{-- verdict breakdown --}}
+                                    <div class="card card--flat overflow-hidden">
+                                        <x-ui.card-head icon="layers" title="Verdict breakdown" :accent="true" tip="verdict_breakdown">
+                                            <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="verdictTotal() + ' sims'"></span></x-slot:right>
+                                        </x-ui.card-head>
+                                        <div class="p-4">
+                                            <div class="flex h-[26px] rounded-control overflow-hidden border border-line">
+                                                <template x-for="v in verdictBars" :key="v.key">
+                                                    <div :title="`${v.label} · ${v.n}`" :style="`width: ${v.n / verdictTotal() * 100}%; background: ${v.striped ? `repeating-linear-gradient(45deg, color-mix(in srgb, ${v.color} 40%, transparent), color-mix(in srgb, ${v.color} 40%, transparent) 5px, transparent 5px, transparent 10px)` : v.color}`"></div>
+                                                </template>
+                                            </div>
+                                            <div class="grid grid-cols-2 gap-x-5 gap-y-2 mt-3.5 max-[420px]:grid-cols-1">
+                                                <template x-for="v in verdictBars" :key="v.key">
+                                                    <div class="flex items-center gap-2">
+                                                        <span class="w-[10px] h-[10px] rounded-r2 flex-shrink-0" :style="`background: ${v.color}; opacity: ${v.striped ? 0.6 : 1}`"></span>
+                                                        <span class="font-mono text-[11px] text-fg-2 truncate" x-text="v.label"></span>
+                                                        <span class="font-mono text-[11.5px] font-bold tabular-nums ml-auto" :style="`color: ${v.color}`" x-text="v.n"></span>
+                                                        <span class="font-mono text-[10px] tabular-nums text-fg-faint w-[38px] text-right" x-text="(v.n / verdictTotal() * 100).toFixed(0) + '%'"></span>
+                                                    </div>
+                                                </template>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {{-- rung distribution --}}
+                                    <div class="card card--flat overflow-hidden">
+                                        <x-ui.card-head icon="bar-chart-2" title="Rung distribution" :accent="true" hint="ladder depth reached" tip="rung_distribution"/>
+                                        <div class="p-4 flex flex-col gap-2.5">
+                                            <template x-for="r in rungBars" :key="r.rung">
+                                                <div class="flex items-center gap-3">
+                                                    <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-fg-mute w-[48px] flex-shrink-0" x-text="'Rung ' + r.rung"></span>
+                                                    <div class="flex-1 h-[16px] rounded-chip bg-surface-3 overflow-hidden">
+                                                        <div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${r.n / rungMax() * 100}%; background: ${rungColor(r.rung)}`"></div>
+                                                    </div>
+                                                    <span class="font-mono text-[11.5px] font-semibold tabular-nums text-fg-1 w-[36px] text-right" x-text="r.n"></span>
+                                                </div>
+                                            </template>
+                                            <span class="ui-hint mt-0.5">Deeper rungs = more averaging-down — the deepest rung's reach is the key risk signal.</span>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {{-- [J] AI insights --}}
                                 <div class="card card--flat overflow-hidden">
                                     <x-ui.card-head icon="zap" title="AI insights" :accent="true">
@@ -1080,36 +1164,11 @@
                             <x-feathericon-help-circle class="w-[16px] h-[16px]" stroke-width="1.75"/>
                         </span>
                         <h4 class="font-sans font-bold text-[15px] text-fg-1" x-text="(HELP_META[help] || {}).t"></h4>
-                        <button type="button" x-on:click="help = null" class="ml-auto w-[28px] h-[28px] rounded-control inline-flex items-center justify-center text-fg-mute hover:text-fg-1 hover:bg-hover transition-colors duration-fast cursor-pointer">
+                        <button type="button" x-on:click="help = null" class="appearance-none bg-transparent border-0 p-0 ml-auto w-[28px] h-[28px] rounded-control inline-flex items-center justify-center text-fg-mute hover:text-fg-1 hover:bg-hover transition-colors duration-fast cursor-pointer">
                             <x-feathericon-x class="w-4 h-4" stroke-width="2"/>
                         </button>
                     </div>
                     <div class="p-5 max-h-[60vh] overflow-y-auto" x-html="renderMd((HELP_META[help] || {}).b)"></div>
-                </div>
-            </div>
-        </template>
-
-        {{-- ===================== CONFIRM MODAL ===================== --}}
-        <template x-if="confirm">
-            <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 animate-dd-in" style="background: rgba(0,0,0,0.55)" x-on:mousedown="confirm = null">
-                <div class="w-[420px] max-w-full bg-surface border rounded-control shadow-3 p-5" :style="`border-color: color-mix(in srgb, ${confirm === 'approve' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 40%, var(--border))`" x-on:mousedown.stop>
-                    <div class="flex items-center gap-2.5 mb-2.5">
-                        <span class="w-[32px] h-[32px] rounded-control flex items-center justify-center flex-shrink-0" :style="`background: color-mix(in srgb, ${confirm === 'approve' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 15%, transparent); color: ${confirm === 'approve' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}`">
-                            <x-feathericon-check x-show="confirm === 'approve'" class="w-[17px] h-[17px]" stroke-width="2"/>
-                            <x-feathericon-alert-triangle x-show="confirm === 'reject'" class="w-[17px] h-[17px]" stroke-width="2"/>
-                        </span>
-                        <h4 class="font-sans font-bold text-[15px] text-fg-1"><span x-text="confirm === 'approve' ? 'Approve' : 'Reject'"></span> <span x-text="selected ? selected.token + ' ' + selected.quote : ''"></span>?</h4>
-                    </div>
-                    <p class="text-[12.5px] text-fg-3 leading-snug mb-4" x-show="confirm === 'approve'">Enables <span class="font-semibold text-fg-1" x-text="selected ? selected.token + '/' + selected.quote : ''"></span> for live trading and pushes the tested gap / TP / SL config to the engine — and to sibling exchanges.</p>
-                    <p class="text-[12.5px] text-fg-3 leading-snug mb-4" x-show="confirm === 'reject'">Flags <span class="font-semibold text-fg-1" x-text="selected ? selected.token + '/' + selected.quote : ''"></span> as rejected. No config is pushed; the live engine is untouched.</p>
-                    <div class="flex items-center gap-2 justify-end">
-                        <button type="button" x-on:click="confirm = null" class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-2 h-[36px] px-4 text-[13px] bg-transparent text-fg-1 border-line-strong hover:bg-hover transition-colors duration-fast">Cancel</button>
-                        <button type="button" x-on:click="onConfirm()" class="appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[36px] px-4 rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast" :style="`background: ${confirm === 'approve' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}`">
-                            <x-feathericon-check x-show="confirm === 'approve'" class="w-[15px] h-[15px]" stroke-width="2"/>
-                            <x-feathericon-power x-show="confirm === 'reject'" class="w-[15px] h-[15px]" stroke-width="2"/>
-                            <span x-text="confirm === 'approve' ? 'Approve & push' : 'Reject'"></span>
-                        </button>
-                    </div>
                 </div>
             </div>
         </template>

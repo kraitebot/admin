@@ -52,6 +52,14 @@ use Throwable;
  */
 final class BacktrackingController extends Controller
 {
+    /**
+     * A token is "approvable" when it hits its stop-loss fewer than this many
+     * times across the full backtest. Mirrors the UI's proposal rule
+     * (< 5 approve · 5–10 adjust · > 10 reject); used here as the target the
+     * smart-adjustment search tries to get a token back under.
+     */
+    private const APPROVE_STOPS_MAX = 5;
+
     public function index(): View
     {
         $symbols = $this->enabledSymbolGroups();
@@ -396,6 +404,112 @@ final class BacktrackingController extends Controller
                 'pair_name' => $symbol->symbol?->name,
                 'result' => $result,
                 'rows_truncated' => $truncated,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Smart configuration adjustment for the "adjust" band (5–10 bad endings).
+     *
+     * Tries small single-lever bumps — a wider limit gap, or a wider stop-loss —
+     * in +0.5% / +1.0% / +1.5% steps (no larger; small nudges only), re-runs the
+     * full backtest for each, and reports which (if any) brings the stop-loss-hit
+     * count back under the approve threshold. The smallest successful bump is
+     * surfaced as the recommended fix; a wider gap is preferred over a wider SL
+     * on a tie (it reduces deep fills at the source rather than just tolerating
+     * more bleed). Advisory only — nothing is persisted.
+     */
+    public function suggestAdjustment(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'tp_percent' => ['required', 'numeric', 'gt:0'],
+            'sl_percent' => ['required', 'numeric', 'gt:0'],
+            'gap_long_percent' => ['required', 'numeric', 'gt:0'],
+            'gap_short_percent' => ['required', 'numeric', 'gt:0'],
+        ]);
+
+        // Six full re-simulations; give the request room without hanging forever.
+        set_time_limit(120);
+
+        try {
+            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+            $timeframe = (string) $validated['timeframe'];
+            $tp = (string) $validated['tp_percent'];
+            $sl = (float) $validated['sl_percent'];
+            $gapLong = (float) $validated['gap_long_percent'];
+            $gapShort = (float) $validated['gap_short_percent'];
+
+            $simulator = new BacktestSimulator;
+            $stopsFor = function (float $gl, float $gs, float $slPct) use ($simulator, $symbol, $timeframe, $tp): int {
+                $res = $simulator->simulate(
+                    symbol: $symbol,
+                    timeframe: $timeframe,
+                    margin: '5000',
+                    leverage: 20,
+                    totalLimitOrders: 4,
+                    multipliers: ['2', '2', '2', '2'],
+                    tpPercent: $tp,
+                    gapLongPercent: (string) $gl,
+                    gapShortPercent: (string) $gs,
+                    slPercent: (string) $slPct,
+                    skipStopLoss: false,
+                    daysToIgnore: 0,
+                    limitHit: null,
+                    specificCandle: null,
+                    since: null,
+                );
+
+                return (int) ($res['totals']['stops'] ?? 0);
+            };
+
+            $candidates = [];
+            foreach ([0.5, 1.0, 1.5] as $delta) {
+                $gapStops = $stopsFor($gapLong + $delta, $gapShort + $delta, $sl);
+                $candidates[] = [
+                    'lever' => 'gap',
+                    'delta' => $delta,
+                    'gap_long' => round($gapLong + $delta, 2),
+                    'gap_short' => round($gapShort + $delta, 2),
+                    'stops' => $gapStops,
+                    'acceptable' => $gapStops < self::APPROVE_STOPS_MAX,
+                ];
+
+                $slStops = $stopsFor($gapLong, $gapShort, $sl + $delta);
+                $candidates[] = [
+                    'lever' => 'sl',
+                    'delta' => $delta,
+                    'sl' => round($sl + $delta, 2),
+                    'stops' => $slStops,
+                    'acceptable' => $slStops < self::APPROVE_STOPS_MAX,
+                ];
+            }
+
+            // Smallest delta that reaches acceptable; gap wins a tie.
+            $best = null;
+            foreach ($candidates as $candidate) {
+                if (! $candidate['acceptable']) {
+                    continue;
+                }
+                $beatsBest = $best === null
+                    || $candidate['delta'] < $best['delta']
+                    || ($candidate['delta'] === $best['delta'] && $candidate['lever'] === 'gap' && $best['lever'] === 'sl');
+                if ($beatsBest) {
+                    $best = $candidate;
+                }
+            }
+
+            return response()->json([
+                'ok' => true,
+                'acceptable_max' => self::APPROVE_STOPS_MAX,
+                'candidates' => $candidates,
+                'best' => $best,
             ]);
         } catch (Throwable $e) {
             return response()->json([

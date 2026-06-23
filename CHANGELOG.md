@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.10.0] — 2026-06-23
+
+### Features
+- **Backtesting decision is now stop-loss-driven.** The Decision proposal no longer keys off the abstract grade — it counts **stop-loss hits** across the full backtest: under 5 → *Recommend approve*, 5–10 → *Adjust configuration*, over 10 → *Recommend reject*. The reason line reads the count directly ("N stop-loss hits · approve under 5"). Pass rate stays visible but demoted — for a martingale ladder the failure rate is the signal, not the win rate.
+- **Smart configuration adjustment.** When a token lands in the 5–10 "adjust" band, a one-click **Find a safe adjustment** search tries small single-lever bumps — wider limit gap or wider stop-loss at +0.5% / +1.0% / +1.5% — re-runs the full backtest for each, and reports which (if any) gets the token under 5 stops, preferring a wider gap over a wider SL on a tie. The winning config shows a green **Apply config and backtest again** button that applies it and immediately re-runs in one click; if no small bump works it says so and leans reject. New `suggest-adjustment` endpoint.
+- **Per-label help affordance.** Every results metric (coverage cells, grade / overall / risk, the six scorecards, the analytic panels, config echo) carries a subtle `[?]` icon — hover shows a one-line tip, click opens a detailed explainer modal. Built as a single reusable `x-ui.help-dot` component plus an optional `tip` prop on `x-ui.card-head` (other card heads unaffected).
+
+### Improvements
+- **Results-panel legibility** — the dim micro-labels on the coverage strip, scorecards, regime band, rows-table headers, and config echo moved off the near-invisible `--fg-faint` onto the legible `--fg-3`, matching the earlier Config-card pass.
+- **Decision flow is one click** — Approve and Reject now act immediately (no confirmation modal); the Reject button is solid red to match Approve's solid green.
+- **Per-simulation rows moved up** — the rows table now sits directly under the scorecards (above config echo / regime stability / verdict breakdown), so the actual stopped trades are the first thing read after the headline numbers.
+
+### Changed
+- **Config card trimmed** — the Window (Since / Candles back), Limit-hit, and Max-rows inputs were removed; the server defaults already cover them (all-history window, all sims counted, a 500-row cap on the detail table). "Max rows" never capped the simulation sample anyway, so the field was misleading.
+
 ## [0.9.0] — 2026-06-22
 
 ### Features
