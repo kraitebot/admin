@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.11.1] — 2026-06-26
+
+### Changed
+- Dependency maintenance: bumped `guzzlehttp/guzzle` 7.12.1 → 7.12.3 and `guzzlehttp/psr7` to the matching 2.12.3 (transitive patch updates). No application code changes — release cut to ship the backtesting UI (v0.10.0–v0.11.0) to production on a clean, reproducible lockfile.
+
 ## [0.11.0] — 2026-06-23
 
 ### Changed
