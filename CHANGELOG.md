@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.12.0] — 2026-06-27
+
+### Changed
+- **Backtesting token dropdown now lists every Binance symbol, not just manually-enabled ones.** Previously the selector filtered on `is_manually_enabled = true`, so in production only the handful of already-enabled tokens (5) appeared — a chicken-and-egg gate, since approving a backtest is what sets that flag. The operator could only backtest tokens that were already live. The dropdown now offers all Binance `exchange_symbols` (568 in prod), so any token can be vetted before being promoted. Approval/enable state still drives the per-row badges; it no longer gates visibility.
+
 ## [0.11.1] — 2026-06-26
 
 ### Changed

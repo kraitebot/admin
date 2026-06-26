@@ -904,9 +904,11 @@ SYS;
     }
 
     /**
-     * Lookup enabled ExchangeSymbols grouped by exchange canonical, with
+     * Lookup all Binance ExchangeSymbols grouped by quote currency, with
      * token + quote and the stored defaults the UI will pre-fill into
-     * the form when the user changes selection.
+     * the form when the user changes selection. Every Binance symbol is
+     * backtestable regardless of enable/approval state so the operator can
+     * vet a token before promoting it.
      *
      * @return array<string, array<int, array<string, mixed>>>
      */
@@ -917,7 +919,6 @@ SYS;
             ->join('api_systems as ap', 'ap.id', '=', 'es.api_system_id')
             ->where('ap.canonical', 'binance')
             ->orderByRaw('UPPER(s.token) ASC')
-            ->where('es.is_manually_enabled', true)
             ->get([
                 'es.id',
                 's.token',
