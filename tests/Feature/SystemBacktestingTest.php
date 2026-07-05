@@ -143,6 +143,14 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('coverage-status', false);
     $response->assertSee('toggle-approval', false);
     $response->assertSee('ai-insights', false);
+    // The proposal evidence floor is wired in: a zero-resolved run must never
+    // read as "Recommend approve", thin samples fall back to manual review,
+    // and Approve locks on nothing-simulated runs.
+    $response->assertSee('Cannot recommend — nothing simulated', false);
+    $response->assertSee('Thin sample — review manually', false);
+    $response->assertSee('resolvedSims === 0', false);
+    // The SL-coverage tiers panel renders from totals.sl_coverage.
+    $response->assertSee('Stop-loss coverage', false);
 });
 
 it('no longer hard-blocks a backtest run on stale candle data (soft coverage gate)', function (): void {

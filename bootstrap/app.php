@@ -26,6 +26,15 @@ return Application::configure(basePath: dirname(__DIR__))
             SecurityHeaders::class,
         ]);
 
+        // Already-authenticated arrivals (session/remember cookie hitting `/`
+        // or /login) follow the same role-aware landing as a fresh form login
+        // (AuthenticatedSessionController::store): sysadmins land on the
+        // console, everyone else on the trader dashboard. Without this the
+        // framework default sends every authenticated user to `dashboard`.
+        $middleware->redirectUsersTo(fn ($request) => $request->user()?->is_admin
+            ? route('system.dashboard', absolute: false)
+            : route('dashboard', absolute: false));
+
         $middleware->alias([
             'admin' => EnsureAdmin::class,
         ]);

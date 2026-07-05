@@ -95,7 +95,9 @@
 
             // ================= static meta =================
             STATUS_META: {
-                tp_market_only: { label: 'TP off market', short: 'TP market', color: 'var(--pnl-up-fg)' },
+                // Key matches the simulator's row-level status string
+                // (`tp_hit_from_market_only`), not the totals counter name.
+                tp_hit_from_market_only: { label: 'TP off market', short: 'TP market', color: 'var(--pnl-up-fg)' },
                 reboundable:    { label: 'Reboundable',    short: 'Rebound',   color: '#15b8a6' },
                 stopped_out:    { label: 'Stopped out',    short: 'Stopped',   color: 'var(--pnl-down-fg)' },
                 inconclusive:   { label: 'Inconclusive',   short: 'Inconcl.',  color: 'var(--fg-mute)', striped: true },
@@ -125,8 +127,9 @@
                 avg_rung_depth: { t: 'Avg rung depth', s: 'Average ladder rung reached before close, out of 4.', b: "Average ladder rung reached across all sims, out of **4**. Higher means the strategy averaged-down deeper on average — more capital committed per trade and more exposure if price keeps running." },
                 avg_to_profit: { t: 'Avg → profit', s: 'Mean candles from entry to a profitable close.', b: "Average number of candles from entry to a profitable close. Lower is better: faster closes free capital sooner and compound the small edge more often." },
                 p95_to_profit: { t: 'P95 → profit', s: '95th-percentile candles to profit — the slow tail.', b: "The 95th-percentile candles-to-profit — **95% of winning trades closed within this many candles**. It exposes the slow tail the average hides: rare trades that lock capital for a long time." },
-                sample_size: { t: 'Sample size', s: 'Resolved sims behind these stats — below threshold means low confidence.', b: "Number of simulations the grade is built on. Below the threshold (~**180**) the result is statistically thin, the verdict is less trustworthy, and the simulator dampens its confidence." },
-                verdict_breakdown: { t: 'Verdict breakdown', s: 'How every resolved simulation closed, split by outcome class.', b: "How every resolved simulation ended:\n\n- **TP off market leg** — hit take-profit on the opening market leg alone, before any limit rung filled. The cleanest win.\n- **Reboundable (WAP)** — deeper rungs filled, then a weighted-average-price retrace closed it in profit. The martingale working as designed.\n- **Stopped out** — hit stop-loss after the deepest rung. A realised loss — the failure mode that matters for risk.\n- **Inconclusive** — ran out of forward data before TP or SL fired (usually very recent starts). Not actionable, excluded from pass rate." },
+                sample_size: { t: 'Sample size', s: 'Sims behind these stats — thin samples weaken the verdict.', b: "Number of simulations behind the stats. Every start candle simulates **both LONG and SHORT**, so sims ≈ 2× start candles.\n\nThe statistical threshold is **180 start candles** (~half a year of daily data): below it the grade takes a thinness penalty and the proposal falls back to *review manually* — the verdict simply doesn't have enough evidence yet." },
+                verdict_breakdown: { t: 'Verdict breakdown', s: 'How every simulation closed, split by outcome class.', b: "How every simulation ended:\n\n- **TP off market leg** — hit take-profit on the opening market leg alone, before any limit rung filled. The cleanest win.\n- **Reboundable (WAP)** — deeper rungs filled, then a weighted-average-price retrace closed it in profit. The martingale working as designed.\n- **Stopped out** — hit stop-loss after the deepest rung. A realised loss — the failure mode that matters for risk.\n- **Inconclusive** — ran out of forward data before TP or SL fired (usually very recent starts). Not actionable, excluded from pass rate.\n- **Skipped (sizing)** — the trade couldn't even be placed (order sizing rejected for this token's price/lot rules). Shown only when present: many skips mean the run tested less than it looks like." },
+                sl_coverage: { t: 'Stop-loss coverage', s: 'The SL width that would have absorbed each share of the stops.', b: "For each share of this run's **stopped trades** (25% / 50% / 75% / all), the stop-loss width that would have absorbed them — shown per direction, since a token often bleeds differently up vs down.\n\nRead it as a *price tag* on rescuing stops by widening SL:\n\n- **Small deltas** — most stops were near-misses; a slightly wider SL is a cheap fix.\n- **A huge \"All\" value** — some stops were deep trend events; no reasonable SL saves them, so attack severity (fewer rungs, less leverage) instead.\n\nRemember the loss math: a wider SL on a fully-filled ladder multiplies the realised loss per stop." },
                 rung_distribution: { t: 'Rung distribution', s: 'How deep into the 4-rung ladder sims went before resolving.', b: "How many sims reached each ladder rung — i.e. filled that limit order.\n\n**Rung 1** is shallow; **Rung 4** is the deepest level of averaging-down and carries the most liquidation risk. The reach rate of the **deepest** rung is the single most important risk signal — a config that often hits rung 4 is one bad trend away from a large loss." },
                 config_echo: { t: 'Tested config', s: 'The exact ladder parameters this run used.', b: "The exact parameters this run was graded on:\n\n- **TP** — take-profit %, recomputed off WAP after each rung fill\n- **SL** — stop-loss %, arms only after the deepest rung is touched\n- **Gap L / Gap S** — % spacing between ladder rungs for long / short\n- **Lev** — leverage on notional (fixed 20× for backtests; ~5% adverse ≈ liquidation)\n- **Mult** — per-rung quantity multipliers; **[2,2,2,2]** doubles each rung, so 1+2+4+8+16 = **31×** the market leg at full fill\n- **Window** — the history span and timeframe simulated" },
                 regime_stability: { t: 'Regime stability', s: 'Pass rate per time bucket — exposes weak market regimes.', b: "Pass rate computed **per time-bucket** instead of over the whole window. It shows whether the config wins consistently across market regimes or only in certain conditions.\n\nEach bar is one time bucket, its height is that bucket's pass rate, and the **worst** bucket is highlighted — a config that is great on average but collapses in one regime is a hidden risk." },
@@ -457,33 +460,52 @@
                 const r = this.resolvedSims;
                 return r > 0 ? ((t.tp_market_only || 0) + (t.reboundable || 0)) / r * 100 : 0;
             },
-            // System's own decision proposal, derived from the simulator grade:
-            // A/B → recommend approve, D/F → recommend reject, C → review (manual
-            // call). Drives the proposal banner + the suggested-button emphasis.
+            // System's own decision proposal. Stop-loss-hit driven (< 5 approve ·
+            // 5–10 adjust · > 10 reject) — but a recommendation needs evidence
+            // first: a run with zero resolved sims (no candles, every sim
+            // sizing-skipped, or all inconclusive) also has zero stops and must
+            // never read as "approve". Reachable for thin-history tokens since
+            // the dropdown opened to all Binance symbols (v0.12.0). Below the
+            // simulator's own statistical threshold (180 start candles — the
+            // same line its grade penalty ramps on) the proposal falls back to
+            // "review manually" instead of recommending. Reason text rides on
+            // the same object so banner + reason can never disagree.
             get proposal() {
                 if (! this.result) return null;
-                // Decision rule: stop-loss hits across the backtest.
-                // Under 5 → approve · 5–10 → adjust the config · over 10 → reject.
+                const resolved = this.resolvedSims;
+                if (resolved === 0) {
+                    const skipped = this.totals.skipped || 0;
+                    const inconclusive = this.totals.inconclusive || 0;
+                    const parts = [];
+                    if (skipped) parts.push(`${skipped} skipped (sizing rejected)`);
+                    if (inconclusive) parts.push(`${inconclusive} inconclusive`);
+                    return {
+                        action: 'none', verb: 'Cannot recommend — nothing simulated', color: 'var(--fg-mute)',
+                        reason: parts.length ? parts.join(' · ') + ' · 0 resolved' : 'No candles simulated',
+                    };
+                }
+                const starts = this.totals.candles || 0;
+                const threshold = this.totals.sample_size_threshold || 180;
+                if (starts < threshold) return { action: 'review', verb: 'Thin sample — review manually', color: 'var(--warn)', reason: `${starts} start candles · statistical threshold is ${threshold}` };
                 const stops = this.totals.stops ?? 0;
-                if (stops < 5) return { action: 'approve', verb: 'Recommend approve', color: 'var(--pnl-up-fg)' };
-                if (stops <= 10) return { action: 'adjust', verb: 'Adjust configuration', color: 'var(--warn)' };
-                return { action: 'reject', verb: 'Recommend reject', color: 'var(--pnl-down-fg)' };
+                const stopsReason = stops === 0 ? 'No stop-loss hits across the backtest' : `${stops} stop-loss ${stops === 1 ? 'hit' : 'hits'} · approve under 5`;
+                if (stops < 5) return { action: 'approve', verb: 'Recommend approve', color: 'var(--pnl-up-fg)', reason: stopsReason };
+                if (stops <= 10) return { action: 'adjust', verb: 'Adjust configuration', color: 'var(--warn)', reason: stopsReason };
+                return { action: 'reject', verb: 'Recommend reject', color: 'var(--pnl-down-fg)', reason: stopsReason };
             },
-            get proposalReason() {
-                if (! this.result) return '';
-                const stops = this.totals.stops ?? 0;
-                return stops === 0
-                    ? 'No stop-loss hits across the backtest'
-                    : `${stops} stop-loss ${stops === 1 ? 'hit' : 'hits'} · approve under 5`;
-            },
+            get proposalReason() { return this.proposal ? this.proposal.reason : ''; },
             get verdictBars() {
                 const t = this.totals;
-                return [
+                const bars = [
                     { key: 'tp_market_only', label: 'TP off market leg', n: t.tp_market_only || 0, color: 'var(--pnl-up-fg)' },
                     { key: 'reboundable',    label: 'Reboundable (WAP)', n: t.reboundable || 0,    color: '#15b8a6' },
                     { key: 'stopped_out',    label: 'Stopped out',       n: t.stops || 0,          color: 'var(--pnl-down-fg)' },
                     { key: 'inconclusive',   label: 'Inconclusive',      n: t.inconclusive || 0,   color: 'var(--fg-mute)', striped: true },
                 ];
+                // Sizing rejections — only shown when present so a run where
+                // sims silently skipped is visible instead of vanishing.
+                if (t.skipped) bars.push({ key: 'skipped', label: 'Skipped (sizing)', n: t.skipped, color: 'var(--fg-faint)', striped: true });
+                return bars;
             },
             verdictTotal() { return this.verdictBars.reduce((a, v) => a + v.n, 0) || 1; },
             get rungBars() {
@@ -501,6 +523,18 @@
             get regimeBars() {
                 const regimes = this.result ? (this.result.regimes || []) : [];
                 return regimes.map((r) => ({ from: r.from, to: r.to, pass: (r.pass_rate || 0) / 100, stops: r.stops || 0 }));
+            },
+            // SL coverage tiers — per direction, the SL width that would have
+            // absorbed 25/50/75/100% of the stopped trades. Only directions
+            // that actually stopped are shown; null when no stops at all.
+            SL_TIERS: [['p25', '25%'], ['p50', '50%'], ['p75', '75%'], ['p100', 'All']],
+            get slCoverage() {
+                const sc = this.totals.sl_coverage;
+                if (!sc) return null;
+                const dirs = ['LONG', 'SHORT']
+                    .map((d) => ({ dir: d, ...(sc[d] || {}) }))
+                    .filter((d) => (d.count || 0) > 0);
+                return dirs.length ? dirs : null;
             },
             worstPass() { const b = this.regimeBars; return b.length ? Math.min(...b.map((r) => r.pass)) : 0; },
             regimeColor(p) { return p >= 0.8 ? 'var(--pnl-up-fg)' : p >= 0.6 ? 'var(--warn)' : 'var(--pnl-down-fg)'; },
@@ -848,8 +882,11 @@
                                     </template>
                                 </div>
                             </template>
+                            {{-- Approve is disabled on zero-resolved runs: nothing was
+                                 tested, so there is no config to push live from here. --}}
+                            <span x-show="result && resolvedSims === 0" class="ui-hint">Approve is locked — this run resolved no simulations, so there's nothing tested to push live.</span>
                             <div class="flex gap-2">
-                                <button type="button" x-on:click="submitDecision(true)" :disabled="!result || status === 'approved'"
+                                <button type="button" x-on:click="submitDecision(true)" :disabled="!result || status === 'approved' || resolvedSims === 0"
                                         class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-up-fg)"
                                         :style="{ boxShadow: proposal && proposal.action === 'approve' ? '0 0 0 2px color-mix(in srgb, var(--pnl-up-fg) 50%, transparent)' : '' }">
                                     <x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/>Approve
@@ -1003,7 +1040,10 @@
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Avg rung depth<x-ui.help-dot topic="avg_rung_depth"/></span><span class="{{ $statVal }} text-fg-1" x-text="fmtFixed(totals.avg_rung_depth)"></span><span class="{{ $statSub }}">of 4 rungs</span></div>
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Avg → profit<x-ui.help-dot topic="avg_to_profit"/></span><span class="{{ $statVal }} text-fg-1" x-text="totals.avg_candles_to_profit == null ? '—' : totals.avg_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">p95 → profit<x-ui.help-dot topic="p95_to_profit"/></span><span class="{{ $statVal }} text-fg-1" x-text="totals.p95_candles_to_profit == null ? '—' : totals.p95_candles_to_profit + ' c'"></span><span class="{{ $statSub }}">candles</span></div>
-                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Sample size<x-ui.help-dot topic="sample_size"/></span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${sampleSize < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="sampleSize < (totals.sample_size_threshold || 180) ? 'below threshold' : 'sims'"></span></div>
+                                    {{-- Thin-sample warn keys on START CANDLES vs the simulator's
+                                         threshold (the grade penalty's own unit) — the headline
+                                         number stays in sims (each start = LONG + SHORT). --}}
+                                    <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Sample size<x-ui.help-dot topic="sample_size"/></span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${(totals.candles || 0) < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="(totals.candles || 0) < (totals.sample_size_threshold || 180) ? 'thin — ' + fmtNum(totals.candles) + ' starts' : 'sims · ' + fmtNum(totals.candles) + ' starts'"></span></div>
                                 </div>
 
                                 {{-- [I] rows table --}}
@@ -1017,9 +1057,10 @@
                                         <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Status</span>
                                         @php $chip = 'appearance-none cursor-pointer inline-flex items-center gap-1.5 h-[28px] px-2.5 rounded-chip border font-mono text-[10.5px] font-semibold tracking-[0.04em] whitespace-nowrap transition-colors duration-fast'; @endphp
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'all'" :style="statusFilter === 'all' ? 'color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">All</button>
+                                        {{-- The table lists failures only (wins emit no row by design),
+                                             so the status chips cover exactly what can appear: stopped + inconclusive. --}}
                                         <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'stopped_out'" :style="statusFilter === 'stopped_out' ? 'color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="1.75"/>Stopped · <span x-text="rowCounts().stopped_out || 0"></span></button>
-                                        <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'reboundable'" :style="statusFilter === 'reboundable' ? 'color: #15b8a6; border-color: color-mix(in srgb, #15b8a6 45%, transparent); background: color-mix(in srgb, #15b8a6 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Rebound · <span x-text="rowCounts().reboundable || 0"></span></button>
-                                        <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'tp_market_only'" :style="statusFilter === 'tp_market_only' ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">TP market · <span x-text="rowCounts().tp_market_only || 0"></span></button>
+                                        <button type="button" class="{{ $chip }}" x-on:click="statusFilter = 'inconclusive'" :style="statusFilter === 'inconclusive' ? 'color: var(--fg-mute); border-color: color-mix(in srgb, var(--fg-1) 30%, transparent); background: color-mix(in srgb, var(--fg-1) 8%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Inconclusive · <span x-text="rowCounts().inconclusive || 0"></span></button>
                                         <span class="w-px h-4 bg-line-soft mx-1.5"></span>
                                         <span class="font-mono text-[9px] font-bold tracking-[0.1em] uppercase text-fg-3 mr-1">Side</span>
                                         <button type="button" class="{{ $chip }}" x-on:click="dirFilter = 'all'" :style="dirFilter === 'all' ? 'color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); background: color-mix(in srgb, var(--accent) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Both</button>
@@ -1128,6 +1169,37 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                {{-- [I2] stop-loss coverage — what SL width would have absorbed
+                                     each share of the stopped trades, per direction. Only rendered
+                                     when at least one direction actually stopped. --}}
+                                <template x-if="slCoverage">
+                                    <div class="card card--flat overflow-hidden">
+                                        <x-ui.card-head icon="shield" title="Stop-loss coverage" :accent="true" hint="SL width that would have absorbed each share of stops" tip="sl_coverage"/>
+                                        <div class="grid grid-cols-2 gap-0 max-[640px]:grid-cols-1">
+                                            <template x-for="d in slCoverage" :key="d.dir">
+                                                <div class="p-4 border-r border-line-soft last:border-r-0 max-[640px]:border-r-0 max-[640px]:border-b max-[640px]:last:border-b-0">
+                                                    <div class="flex items-center gap-2 mb-2.5">
+                                                        <span class="font-mono text-[9.5px] font-bold tracking-[0.05em] py-[2px] px-[7px] rounded-chip" :style="`color: ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}; background: color-mix(in srgb, ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 13%, transparent)`" x-text="d.dir"></span>
+                                                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="d.count + (d.count === 1 ? ' stop' : ' stops')"></span>
+                                                    </div>
+                                                    <div class="flex flex-col gap-1.5">
+                                                        <template x-for="t in SL_TIERS" :key="t[0]">
+                                                            <div class="flex items-center gap-3">
+                                                                <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-fg-mute w-[34px] flex-shrink-0" x-text="t[1]"></span>
+                                                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1" x-text="d[t[0]] && d[t[0]].pct != null ? 'SL ' + d[t[0]].pct + '%' : '—'"></span>
+                                                                <span class="font-mono text-[10.5px] tabular-nums text-fg-mute" x-text="d[t[0]] && d[t[0]].delta != null ? (d[t[0]].delta > 0 ? '+' + d[t[0]].delta + '% wider' : 'at current SL') : ''"></span>
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                        <div class="py-2 px-4 border-t border-line-soft">
+                                            <span class="ui-hint">Each row: the stop-loss width that would have absorbed that share of this run's stopped trades. A huge "All" value means widening SL can't save this config.</span>
+                                        </div>
+                                    </div>
+                                </template>
 
                                 {{-- [J] AI insights --}}
                                 <div class="card card--flat overflow-hidden">

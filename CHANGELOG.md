@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.13.0] — 2026-07-06
+
+### Features
+- **Backtesting decision proposal now requires evidence before recommending approve.** A run that resolved zero simulations (no candle history, every sim rejected at sizing, or all inconclusive) also has zero stop-loss hits — and previously earned the same green "Recommend approve" banner as a genuinely clean run. Reachable in practice since v0.12.0 opened the token dropdown to all 568 Binance symbols, most with thin or no fetched history (e.g. the coverage fetch timing out on a busy fleet). Now: zero resolved sims → "Cannot recommend — nothing simulated" and the **Approve button locks** (nothing was tested, so there is no tested config to push live); below the simulator's own statistical threshold (180 start candles — the same line its grade penalty ramps on) → "Thin sample — review manually". The stop-count rules (<5 approve · 5–10 adjust · >10 reject) apply only above the threshold.
+- **Sizing-skipped simulations are now visible.** Sims whose order sizing was rejected (min-notional / lot-step on awkwardly-priced tokens) used to vanish from every counter. They now appear as a striped "Skipped (sizing)" segment in the Verdict breakdown (only when present), and the proposal reason calls them out on zero-resolved runs. Backed by `totals.skipped` from core v1.60.0.
+- **Stop-loss coverage panel.** The simulator always computed, per direction, the SL width that would have absorbed 25/50/75/100% of the run's stopped trades — the UI never showed it. New "Stop-loss coverage" card (with help explainer) renders the tiers per direction when stops exist: small deltas = near-misses a slightly wider SL rescues cheaply; a huge "All" tier = trend events no SL saves, attack severity instead.
+
+### Fixes
+- **Dead rows-table filter chips removed.** The per-simulation table lists failures only by design, so the "TP market · 0" and "Rebound · 0" chips could never match a row — replaced with an "Inconclusive" chip matching what the table actually holds. Also fixed the latent status-key mismatch (`tp_hit_from_market_only`) so winning rows would render green, not as grey "Skipped", if they ever appear.
+- **AI insights prompt no longer misstates two facts.** The per-failure "candles to deepest rung" field — the collapse-speed signal the structural-vs-noise classification keys on — was wired to always send nothing; it is now computed from the row timestamps. And the prompt claimed the run ignored the last 15 days when it actually ignores 0 (now read from the simulator's own metadata).
+- **Sample-size stat is honest about units.** The thinness warning now keys on start candles (the unit the simulator's 180 threshold actually uses) while the headline stays in sims, with the start count shown alongside; the help explainer spells out sims ≈ 2× starts.
+
+### Improvements
+- **Commands console degrades instead of erroring.** If the bridge to the trading server is missing or broken, the page renders an empty console and command details return a readable error — previously the whole page failed. (The production bridge itself was provisioned on 2026-07-05 — deploy-notes Entry 94.)
+- **Cookie auto-login lands by role.** Arriving already-authenticated (session/remember cookie) now follows the same rule as a fresh login: sysadmins land on the admin console, everyone else on the trader dashboard. Previously the generic framework rule sent everyone to the trader dashboard.
+
 ## [0.12.0] — 2026-06-27
 
 ### Changed

@@ -65,11 +65,27 @@ class CommandsController extends Controller
      *
      * @return array<int, array<string, string>>
      */
+    /**
+     * Page-render helper: run a command on ingestion, returning null instead
+     * of throwing/failing so the console degrades to an empty state rather
+     * than a 500 when the bridge is missing or broken.
+     */
+    private function tryRunOnIngestion(array $command): ?ProcessResult
+    {
+        try {
+            $result = $this->runOnIngestion($command);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $result->successful() ? $result : null;
+    }
+
     private function getSchedule(): array
     {
-        $result = $this->runOnIngestion(['php', 'artisan', 'schedule:list', '--no-ansi']);
+        $result = $this->tryRunOnIngestion(['php', 'artisan', 'schedule:list', '--no-ansi']);
 
-        if (! $result->successful()) {
+        if ($result === null) {
             return [];
         }
 
@@ -152,7 +168,11 @@ class CommandsController extends Controller
             return response()->json(['error' => 'Only kraite commands are available.'], 422);
         }
 
-        $result = $this->runOnIngestion(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
+        try {
+            $result = $this->runOnIngestion(['php', 'artisan', $commandName, '--help', '--format=json', '--no-ansi']);
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
 
         if (! $result->successful()) {
             return response()->json(['error' => 'Command not found.'], 404);
@@ -252,9 +272,9 @@ class CommandsController extends Controller
 
     private function getCommandList(): array
     {
-        $result = $this->runOnIngestion(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
+        $result = $this->tryRunOnIngestion(['php', 'artisan', 'list', '--format=json', '--no-ansi']);
 
-        if (! $result->successful()) {
+        if ($result === null) {
             return [];
         }
 

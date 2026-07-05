@@ -30,21 +30,22 @@ use Throwable;
 /**
  * BacktrackingController
  *
- * Admin-only console for per-token ladder backtesting. Three actions
- * backing three buttons in the UI:
+ * Admin-only console for per-token ladder backtesting. Endpoint map:
  *
- *   POST /system/backtesting/fetch-candles   — pulls historical OHLCV from
- *       Binance Vision (bulk) + TAAPI (recency top-up) into the `candles`
- *       table for the selected symbol + timeframe. Safe to re-run — both
- *       fetchers are idempotent.
- *
- *   POST /system/backtesting/verify-coverage — audits what's present in
- *       the candles table for a symbol + timeframe: earliest / latest /
- *       hole count / contiguity %. Feeds the UI's coverage pill.
- *
- *   POST /system/backtesting/run             — runs BacktestSimulator
- *       with the caller's overrides. Returns per-direction outcome
- *       aggregates + a paginated rows list.
+ *   POST fetch-candles       — manual three-tier pull (Vision → REST →
+ *       TAAPI) into the `candles` table. Idempotent.
+ *   POST verify-coverage     — coverage audit (earliest / latest / holes /
+ *       contiguity) feeding the UI's coverage pill.
+ *   POST ensure-coverage     — dispatcher-orchestrated coverage block on
+ *       the worker fleet; GET coverage-status polls it to completion.
+ *   POST run                 — BacktestSimulator with operator overrides;
+ *       grades on whatever candles are present, attaches a coverage
+ *       warning when the data is imperfect (advisory, not blocking).
+ *   POST suggest-adjustment  — smart single-lever search for the 5–10
+ *       stop-loss "adjust" band.
+ *   POST toggle-approval     — the real-money gate: approve persists the
+ *       tested config onto exchange_symbols and enables the token.
+ *   POST ai-insights         — LLM read of a finished run. Advisory.
  *
  * Results are ephemeral by design (no persistence this release). If we
  * want the per-customer selection UI later, we'll add a
@@ -517,12 +518,6 @@ final class BacktrackingController extends Controller
     }
 
     /**
-     * Interpret a backtest result via LLM. Accepts the result + config
-     * payload the UI just received from POST /run, builds a prompt, calls
-     * the `backtest-insights` AI connection, returns the raw text answer.
-     * No config changes are applied — advisory only.
-     */
-    /**
      * Approve or revoke approval for a backtested symbol. On approve, also
      * persist the gap_long / gap_short used in the form so the live trader
      * picks them up. ExchangeSymbolObserver fans both `was_backtesting_approved`
@@ -589,6 +584,12 @@ final class BacktrackingController extends Controller
         ]);
     }
 
+    /**
+     * Interpret a backtest result via LLM. Accepts the result + config
+     * payload the UI just received from POST /run, builds a prompt, calls
+     * the `backtest-insights` AI connection, returns the raw text answer.
+     * No config changes are applied — advisory only.
+     */
     public function aiInsights(Request $request, ChatManager $chat): JsonResponse
     {
         // Prism + streaming response parsing can push past FPM's 128M default
@@ -701,7 +702,7 @@ You are a senior quantitative analyst tuning the Kraite martingale ladder strate
 
 Before proposing any suggestion, classify what's actually going wrong by inspecting the FAILURE ROWS provided in the user message:
 
-- **Structural (pure-trend) stops** — rows cluster in time (2-3 stops within a few days), all in the same direction, each reaching rung N within 1-5 candles of its start. These are trend events (20-40% directional moves without reversal). **No ladder config eliminates these.** Don't try. Attack SEVERITY via the tunable levers: reduce `total_limit_orders` (drops cumulative qty by halving at each step: N=4 → 31×, N=3 → 15×, N=2 → 7×), reduce leverage, or reduce `margin_percentage_long/short`.
+- **Structural (pure-trend) stops** — rows cluster in time (2-3 stops within a few days), all in the same direction, each reaching rung N within 0-5 candles of its start (0 = the entry candle's own wick swept the whole ladder — the most structural signature of all). These are trend events (20-40% directional moves without reversal). **No ladder config eliminates these.** Don't try. Attack SEVERITY via the tunable levers: reduce `total_limit_orders` (drops cumulative qty by halving at each step: N=4 → 31×, N=3 → 15×, N=2 → 7×), reduce leverage, or reduce `margin_percentage_long/short`.
 - **Avoidable (noise) stops** — rows are spread out, mixed directions, reach rung N slowly (many candles between touches). These are tight-config false positives. Attack FREQUENCY — widen TP, widen gap, reduce N.
 - **Mixed** — if both patterns present, pick the dominant one first.
 
@@ -762,7 +763,7 @@ If the config is already on the Pareto frontier (grade A, Max MAE low, rung-N re
 SYS;
 
         $user = sprintf(
-            "TOKEN: %s on %s\nTIMEFRAME: %s\nWINDOW: start=%s, end_cutoff_days=%d\n\n".
+            "TOKEN: %s on %s\nTIMEFRAME: %s\nWINDOW: start=%s, trailing_days_ignored=%d\n\n".
             "ACCOUNT-LEVEL PORTFOLIO (live settings):\n".
             "  total_positions_long=%s  total_positions_short=%s  (all share one margin pool)\n".
             "  position_leverage_long=%sx  position_leverage_short=%sx\n".
@@ -782,7 +783,7 @@ SYS;
             $symbol->apiSystem->canonical ?? 'unknown',
             $meta['timeframe'] ?? 'unknown',
             $meta['window_since'] ?? 'full history',
-            (int) ($meta['end_cutoff_days'] ?? 15),
+            (int) ($meta['days_to_ignore'] ?? 0),
             $account?->total_positions_long ?? 'n/a',
             $account?->total_positions_short ?? 'n/a',
             $account?->position_leverage_long ?? 'n/a',
@@ -811,7 +812,7 @@ SYS;
             json_encode($regimes, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
             empty($rows)
                 ? '(no failure rows — every sim resolved as TP or rebound)'
-                : json_encode($this->compactFailureRows($rows), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+                : json_encode($this->compactFailureRows($rows, (string) ($meta['timeframe'] ?? '1d')), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
         );
 
         return [
@@ -857,24 +858,36 @@ SYS;
      * the verbose human-readable `message` field since the structured
      * fields carry the same information in a cheaper form.
      *
+     * `candles_to_rung_n` — candles between the sim's entry and its
+     * deepest-rung touch. This is the collapse-speed signal the prompt's
+     * structural-vs-avoidable classification keys on (0–5 candles = trend
+     * event, 0 = same-candle collapse, slow reaches = noise stops).
+     *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<int, array<string, mixed>>
      */
-    private function compactFailureRows(array $rows): array
+    private function compactFailureRows(array $rows, string $timeframe): array
     {
-        return array_slice(array_map(static fn ($r) => [
-            'direction' => $r['direction'] ?? null,
-            'start' => $r['start_candle'] ?? null,
-            'entry' => $r['entry_ref_price'] ?? null,
-            'last_rung' => $r['last_rung'] ?? null,
-            'last_touch' => $r['last_touch_candle'] ?? null,
-            'tp' => $r['tp_price'] ?? null,
-            'candles_to_rung_n' => isset($r['start_candle'], $r['last_touch_candle'])
-                ? null
-                : null,
-            'status' => $r['status'] ?? null,
-            'mae_pct' => $r['mae_pct'] ?? null,
-        ], $rows), 0, 50);
+        $intervalSeconds = CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe] ?? 86400;
+
+        return array_slice(array_map(static function ($r) use ($intervalSeconds) {
+            $start = isset($r['start_candle']) ? strtotime((string) $r['start_candle']) : false;
+            $touch = isset($r['last_touch_candle']) ? strtotime((string) $r['last_touch_candle']) : false;
+
+            return [
+                'direction' => $r['direction'] ?? null,
+                'start' => $r['start_candle'] ?? null,
+                'entry' => $r['entry_ref_price'] ?? null,
+                'last_rung' => $r['last_rung'] ?? null,
+                'last_touch' => $r['last_touch_candle'] ?? null,
+                'tp' => $r['tp_price'] ?? null,
+                'candles_to_rung_n' => ($start !== false && $touch !== false && $touch >= $start)
+                    ? intdiv($touch - $start, $intervalSeconds)
+                    : null,
+                'status' => $r['status'] ?? null,
+                'mae_pct' => $r['mae_pct'] ?? null,
+            ];
+        }, $rows), 0, 50);
     }
 
     /**

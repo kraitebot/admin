@@ -32,6 +32,24 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_already_authenticated_admins_visiting_login_land_on_the_console(): void
+    {
+        $admin = User::factory()->create(['is_admin' => true]);
+
+        $response = $this->actingAs($admin)->get(route('login'));
+
+        $response->assertRedirect(route('system.dashboard', absolute: false));
+    }
+
+    public function test_already_authenticated_users_visiting_login_land_on_the_dashboard(): void
+    {
+        $user = User::factory()->create(['is_admin' => false]);
+
+        $response = $this->actingAs($user)->get(route('login'));
+
+        $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
     public function test_users_can_logout(): void
     {
         $user = User::factory()->create();
