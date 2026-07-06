@@ -76,15 +76,13 @@
             busy: null,                          // 'fetch' | 'verify' | 'run'
             result: null,                        // raw server result { rows, totals, regimes, meta }
             pair: null,
-            rowsTruncated: false,
-            maxRowsCap: 500,
             reviews: {},                         // id -> status override
             ai: { loading: false, text: null, model: null },
             coverageWarning: null,               // data-not-ready alert (blocks the grade)
             coverageProgress: null,              // live "Fetching history… N/M" during the ensure-coverage block
             adjust: { loading: false, done: false, candidates: null, best: null }, // smart-adjustment search (5–10 bad band)
 
-            // ---- rows table filters ----
+            // ---- SL-coverage card chips (status = failure counts, side = panel filter) ----
             statusFilter: 'all',
             dirFilter: 'all',
 
@@ -94,15 +92,6 @@
             _toastTimer: null,
 
             // ================= static meta =================
-            STATUS_META: {
-                // Key matches the simulator's row-level status string
-                // (`tp_hit_from_market_only`), not the totals counter name.
-                tp_hit_from_market_only: { label: 'TP off market', short: 'TP market', color: 'var(--pnl-up-fg)' },
-                reboundable:    { label: 'Reboundable',    short: 'Rebound',   color: '#15b8a6' },
-                stopped_out:    { label: 'Stopped out',    short: 'Stopped',   color: 'var(--pnl-down-fg)' },
-                inconclusive:   { label: 'Inconclusive',   short: 'Inconcl.',  color: 'var(--fg-mute)', striped: true },
-                skipped:        { label: 'Skipped',        short: 'Skipped',   color: 'var(--fg-faint)' },
-            },
             REVIEW_META: {
                 approved: { label: 'Approved',     color: 'var(--pnl-up-fg)' },
                 rejected: { label: 'Rejected',     color: 'var(--pnl-down-fg)' },
@@ -119,7 +108,7 @@
                 cov_latest: { t: 'Latest candle', s: 'Most recent stored candle — Fetch pulls forward to now.', b: "Newest candle present. The risk gate requires this to be the **last closed candle** (fresh). If the data is stale, grading and approval are **blocked** — a real-money decision is never made on outdated prices." },
                 cov_candles: { t: 'Candles', s: 'Total candles available across the window.', b: "Total OHLCV candles in the window. Each candle is a possible simulated entry, so more candles means a statistically stronger grade. Thin history is penalised by the sample-size guard." },
                 cov_contiguity: { t: 'Contiguity', s: 'Share of the window with no gaps — gaps weaken the grade.', b: "Percentage of expected candles actually present, with no gaps.\n\n- **100%** — an unbroken series\n- **Below 100%** — missing candles that could bias the result\n\nThe gate requires **≥ 99%** before it will grade." },
-                grade_verdict: { t: 'Grade · verdict', s: 'Letter grade and a one-line read on this config.', b: "The simulator's letter grade (**A–F**) for this exact config, plus a one-line plain-English verdict.\n\n- **A / B** — system proposes *approve*\n- **C** — borderline, review manually\n- **D / F** — proposes *reject*\n\nThe grade blends win rate, risk, ladder depth and speed into one call." },
+                grade_verdict: { t: 'Grade · verdict', s: 'Letter grade and a one-line read on this config.', b: "The simulator's letter grade (**A–F**) for this exact config, plus a one-line plain-English verdict.\n\n- **A / B** — system proposes *approve*\n- **C** — borderline, review manually\n- **D / F** — proposes *reject*\n\nThe grade blends win rate, risk, ladder depth and speed into one call — **capped by the stop-loss decision rule** so it can never contradict the proposal: more than 10 stop-loss hits grades at best **D**, 5–10 at best **C**." },
                 overall_score: { t: 'Overall score', s: 'Composite 0–100 score across pass rate, risk and regime stability.', b: "Composite score from **0–100** behind the grade. It blends pass rate, risk (Max MAE), average rung depth and throughput. Higher is better — the single headline number for the config." },
                 risk_score: { t: 'Risk score', s: '0–100 risk score — higher means more drawdown / liquidation exposure.', b: "Risk sub-score from **0–100** — **lower is better**. Driven mainly by Max MAE and how often the ladder reaches its deepest rung, i.e. how close the config flirts with liquidation. A high pass rate with a high risk score is still a dangerous config." },
                 pass_rate: { t: 'Pass rate', s: 'Resolved sims that closed in profit — TP hit or WAP rebound.', b: "Share of **resolved** simulations that closed in profit — a take-profit on the market leg, or a weighted-average-price rebound. Inconclusive sims are excluded. This is the core *does this config win?* number." },
@@ -132,11 +121,28 @@
                 sl_coverage: { t: 'Stop-loss coverage', s: 'The SL width that would have absorbed each share of the stops.', b: "For each share of this run's **stopped trades** (25% / 50% / 75% / all), the stop-loss width that would have absorbed them — shown per direction, since a token often bleeds differently up vs down.\n\nRead it as a *price tag* on rescuing stops by widening SL:\n\n- **Small deltas** — most stops were near-misses; a slightly wider SL is a cheap fix.\n- **A huge \"All\" value** — some stops were deep trend events; no reasonable SL saves them, so attack severity (fewer rungs, less leverage) instead.\n\nRemember the loss math: a wider SL on a fully-filled ladder multiplies the realised loss per stop." },
                 rung_distribution: { t: 'Rung distribution', s: 'How deep into the 4-rung ladder sims went before resolving.', b: "How many sims reached each ladder rung — i.e. filled that limit order.\n\n**Rung 1** is shallow; **Rung 4** is the deepest level of averaging-down and carries the most liquidation risk. The reach rate of the **deepest** rung is the single most important risk signal — a config that often hits rung 4 is one bad trend away from a large loss." },
                 config_echo: { t: 'Tested config', s: 'The exact ladder parameters this run used.', b: "The exact parameters this run was graded on:\n\n- **TP** — take-profit %, recomputed off WAP after each rung fill\n- **SL** — stop-loss %, arms only after the deepest rung is touched\n- **Gap L / Gap S** — % spacing between ladder rungs for long / short\n- **Lev** — leverage on notional (fixed 20× for backtests; ~5% adverse ≈ liquidation)\n- **Mult** — per-rung quantity multipliers; **[2,2,2,2]** doubles each rung, so 1+2+4+8+16 = **31×** the market leg at full fill\n- **Window** — the history span and timeframe simulated" },
-                regime_stability: { t: 'Regime stability', s: 'Pass rate per time bucket — exposes weak market regimes.', b: "Pass rate computed **per time-bucket** instead of over the whole window. It shows whether the config wins consistently across market regimes or only in certain conditions.\n\nEach bar is one time bucket, its height is that bucket's pass rate, and the **worst** bucket is highlighted — a config that is great on average but collapses in one regime is a hidden risk." },
+            },
+
+            // Watch the universe filters: if the chosen token drops out of the
+            // filtered set, hand selection to the first token that survives
+            // (full selectToken reset), or clear it when nothing matches.
+            // Search typing (`query`) deliberately does NOT re-select.
+            init() {
+                this.$watch('filters', () => {
+                    if (this.selId === null || this.tokenLocked) return;
+                    if (this.filteredSymbols.some((s) => s.id === this.selId)) return;
+                    const first = this.filteredSymbols[0];
+                    if (first) { this.selectToken(first); } else { this.selId = null; }
+                });
             },
 
             // ================= derived =================
             get selected() { return this.symbols.find((s) => s.id === this.selId) || null; },
+            // Token switching is locked while any server op runs against the
+            // current selection — a mid-run swap would show one token's results
+            // under another token's header (and applyAdjustment would push the
+            // wrong config).
+            get tokenLocked() { return !!this.busy || this.adjust.loading; },
             get status() {
                 if (!this.selected) return null;
                 return this.reviews[this.selected.id] !== undefined ? this.reviews[this.selected.id] : this.selected.status;
@@ -175,6 +181,7 @@
 
             // ================= selection =================
             selectToken(s) {
+                if (this.tokenLocked) return;
                 this.selId = s.id;
                 this.selOpen = false;
                 this.query = '';
@@ -351,8 +358,6 @@
                 if (data.coverage) this.cov = this.mapCov(data.coverage);
                 if (data.coverage_warning) this.coverageWarning = data.coverage_warning;
                 this.pair = data.pair;
-                this.rowsTruncated = !!data.rows_truncated;
-                this.maxRowsCap = this.cfg.max_rows ? Number(this.cfg.max_rows) : 500;
             },
 
             async doAI() {
@@ -434,8 +439,45 @@
                     sl_percent: approve && this.cfg.sl ? Number(this.cfg.sl) : null,
                 } });
                 if (!ok) { this.flashToast(data.error || 'Could not save decision', 'error'); return; }
-                this.reviews[this.selected.id] = data.backtesting_review_status;
+                // The server fans the decision out to every listing of the same
+                // token (other quotes, other exchanges — ExchangeSymbolObserver,
+                // linked by canonical symbol_id). Mirror that client-side so the
+                // dropdown dots and filter counts of sibling quote rows update
+                // without a reload: dropdown rows + counts read `s.status`,
+                // the Decision chip reads the `reviews` override.
+                const decidedToken = this.selected.token;
+                this.symbols.forEach((s) => {
+                    if (s.token !== decidedToken) return;
+                    s.status = data.backtesting_review_status;
+                    this.reviews[s.id] = data.backtesting_review_status;
+                });
                 this.flashToast(approve ? 'Approved — config live' : 'Rejected — no config pushed', approve ? 'ok' : 'reject');
+                // Advance landed on a fresh token (config already reset by
+                // selectToken) → fire its backtest immediately, so the review
+                // loop is decide → results appear → decide, hands-free.
+                if (this.advanceToNextToken(decidedToken)) {
+                    await this.doRun();
+                }
+            },
+
+            // After a decision, hand selection to the next token in the
+            // dropdown's VISUAL order (quote groups flattened), wrapping past
+            // the end back to the items before the current one. Every quote
+            // variant of the just-decided token is skipped — the decision
+            // already concluded them all. Nothing left to review → keep the
+            // decided token selected so its badge stays on screen. Returns
+            // whether the selection actually moved.
+            advanceToNextToken(decidedToken) {
+                const order = this.quoteGroups.flatMap((g) => g.items);
+                const idx = order.findIndex((s) => s.id === this.selId);
+                const rotated = idx === -1 ? order : [...order.slice(idx + 1), ...order.slice(0, idx)];
+                const next = rotated.find((s) => s.token !== decidedToken);
+                if (! next) return false;
+                this.selectToken(next);
+                // selectToken silently refuses while tokenLocked — report the
+                // ACTUAL selection change, or the caller would re-run the
+                // just-decided token.
+                return this.selId === next.id;
             },
 
             // ================= toast =================
@@ -520,10 +562,6 @@
                 const depth = this.rungBars.length;
                 return rung === depth ? 'var(--pnl-down-fg)' : rung === depth - 1 ? 'var(--warn)' : 'var(--accent)';
             },
-            get regimeBars() {
-                const regimes = this.result ? (this.result.regimes || []) : [];
-                return regimes.map((r) => ({ from: r.from, to: r.to, pass: (r.pass_rate || 0) / 100, stops: r.stops || 0 }));
-            },
             // SL coverage tiers — per direction, the SL width that would have
             // absorbed 25/50/75/100% of the stopped trades. Only directions
             // that actually stopped are shown; null when no stops at all.
@@ -536,8 +574,12 @@
                     .filter((d) => (d.count || 0) > 0);
                 return dirs.length ? dirs : null;
             },
-            worstPass() { const b = this.regimeBars; return b.length ? Math.min(...b.map((r) => r.pass)) : 0; },
-            regimeColor(p) { return p >= 0.8 ? 'var(--pnl-up-fg)' : p >= 0.6 ? 'var(--warn)' : 'var(--pnl-down-fg)'; },
+            // Direction panels the card actually renders — the Side chips
+            // (Both / Long / Short) narrow the coverage view.
+            get slCoverageView() {
+                const dirs = (this.slCoverage || []).filter((d) => this.dirFilter === 'all' || d.dir === this.dirFilter);
+                return dirs.length ? dirs : null;
+            },
 
             // ---- config echo (meta from the run) ----
             get configEcho() {
@@ -554,17 +596,10 @@
                 ];
             },
 
-            // ---- rows table ----
+            // ---- failure counts (chips strip on the SL-coverage card) ----
             rowCounts() {
                 return (this.result.rows || []).reduce((a, r) => { a[r.status] = (a[r.status] || 0) + 1; return a; }, {});
             },
-            get viewRows() {
-                return (this.result.rows || []).filter((r) =>
-                    (this.statusFilter === 'all' || r.status === this.statusFilter) &&
-                    (this.dirFilter === 'all' || r.direction === this.dirFilter));
-            },
-            maeColor(m) { m = Number(m); return m >= 12 ? 'var(--pnl-down-fg)' : m >= 7 ? 'var(--warn)' : 'var(--fg-2)'; },
-            rungCellColor(r) { return r >= 4 ? 'var(--pnl-down-fg)' : r === 3 ? 'var(--warn)' : 'var(--fg-2)'; },
             fmtNum(v) { return v == null ? '—' : Number(v).toLocaleString(); },
             fmtFixed(v, d = 1) { return v == null ? '—' : Number(v).toFixed(d); },
 
@@ -627,8 +662,9 @@
                     <div class="p-4 flex flex-col gap-3">
                         {{-- token selector --}}
                         <div class="relative" x-on:click.outside="selOpen = false">
-                            <button type="button" x-on:click="selOpen = !selOpen"
-                                    class="w-full flex items-center gap-2.5 h-[40px] px-3 bg-surface-2 border border-line rounded-control cursor-pointer hover:border-line-strong transition-colors duration-fast text-left">
+                            <button type="button" x-on:click="selOpen = !selOpen" :disabled="tokenLocked"
+                                    :title="tokenLocked ? 'Locked while the backtest is running' : ''"
+                                    class="w-full flex items-center gap-2.5 h-[40px] px-3 bg-surface-2 border border-line rounded-control cursor-pointer hover:border-line-strong transition-colors duration-fast text-left disabled:opacity-45 disabled:cursor-not-allowed">
                                 <template x-if="selected">
                                     <span class="flex items-center gap-2.5">
                                         <template x-if="selected.img">
@@ -692,10 +728,13 @@
                                 ['key' => 'approved', 'label' => 'Only approved', 'count' => 'countApproved'],
                                 ['key' => 'notConcluded', 'label' => 'Not concluded', 'count' => 'countNotConcluded'],
                             ] as $f)
-                                <label class="flex items-center gap-2 cursor-pointer select-none group">
+                                {{-- Filters are locked with the selector while a run is in
+                                     flight — a filter flip can auto-switch the selected token. --}}
+                                <label class="flex items-center gap-2 cursor-pointer select-none group"
+                                       :class="tokenLocked && 'opacity-45 pointer-events-none'">
                                     <span class="relative flex items-center justify-center w-[16px] h-[16px] rounded-[4px] border transition-colors duration-fast flex-shrink-0"
                                           :style="filters.{{ $f['key'] }} ? 'background: var(--accent); border-color: var(--accent)' : 'background: var(--bg-elev-2); border-color: var(--border-strong)'">
-                                        <input type="checkbox" x-model="filters.{{ $f['key'] }}" class="sr-only"/>
+                                        <input type="checkbox" x-model="filters.{{ $f['key'] }}" :disabled="tokenLocked" class="sr-only"/>
                                         <x-feathericon-check x-show="filters.{{ $f['key'] }}" x-cloak class="w-[11px] h-[11px]" style="color: var(--on-accent)" stroke-width="3"/>
                                     </span>
                                     <span class="text-[12px] font-medium text-fg-2 group-hover:text-fg-1 transition-colors whitespace-nowrap">{{ $f['label'] }}</span>
@@ -867,12 +906,18 @@
                                                 </div>
                                             </template>
                                             <div class="flex flex-col gap-0.5 mt-0.5 pt-1.5 border-t border-line-soft">
+                                                {{-- Every candidate is one click from a re-test — the leading
+                                                     apply button sets that row's config and re-runs the backtest
+                                                     (same path as the green best-candidate button), so the
+                                                     operator can try ANY bump, not just the system's pick. --}}
                                                 <template x-for="c in adjust.candidates" :key="c.lever + c.delta">
                                                     <div class="flex items-center gap-2 py-[3px]">
-                                                        <span class="flex w-[13px] flex-shrink-0" :style="`color: ${c.acceptable ? 'var(--pnl-up-fg)' : 'var(--fg-faint)'}`">
-                                                            <x-feathericon-check x-show="c.acceptable" class="w-[12px] h-[12px]" stroke-width="2.5"/>
-                                                            <x-feathericon-x x-show="!c.acceptable" class="w-[12px] h-[12px]" stroke-width="2"/>
-                                                        </span>
+                                                        <button type="button" x-on:click="applyAdjustment(c)" :disabled="busy"
+                                                                title="Apply this config and backtest again"
+                                                                class="appearance-none cursor-pointer inline-flex items-center justify-center w-[20px] h-[20px] rounded-control border bg-transparent flex-shrink-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed"
+                                                                :style="`color: ${c.acceptable ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}; border-color: ${c.acceptable ? 'color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : 'var(--border)'}`">
+                                                            <x-feathericon-play class="w-[10px] h-[10px]" stroke-width="2.5"/>
+                                                        </button>
                                                         <span class="font-mono text-[10.5px] text-fg-2 flex-1 truncate" x-text="adjustLabel(c)"></span>
                                                         <span class="font-mono text-[10.5px] font-semibold tabular-nums flex-shrink-0" :style="`color: ${c.acceptable ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`" x-text="c.stops + ' stops'"></span>
                                                     </div>
@@ -886,12 +931,14 @@
                                  tested, so there is no config to push live from here. --}}
                             <span x-show="result && resolvedSims === 0" class="ui-hint">Approve is locked — this run resolved no simulations, so there's nothing tested to push live.</span>
                             <div class="flex gap-2">
-                                <button type="button" x-on:click="submitDecision(true)" :disabled="!result || status === 'approved' || resolvedSims === 0"
+                                {{-- tokenLocked: deciding mid-fetch/verify/adjust-search would
+                                     race the in-flight op and misfire the auto-advance chain. --}}
+                                <button type="button" x-on:click="submitDecision(true)" :disabled="!result || status === 'approved' || resolvedSims === 0 || tokenLocked"
                                         class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-up-fg)"
                                         :style="{ boxShadow: proposal && proposal.action === 'approve' ? '0 0 0 2px color-mix(in srgb, var(--pnl-up-fg) 50%, transparent)' : '' }">
                                     <x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/>Approve
                                 </button>
-                                <button type="button" x-on:click="submitDecision(false)" :disabled="!result || status === 'rejected'"
+                                <button type="button" x-on:click="submitDecision(false)" :disabled="!result || status === 'rejected' || tokenLocked"
                                         class="flex-1 appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[38px] rounded-control font-sans text-[13px] font-bold text-white border-0 transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed" style="background: var(--pnl-down-fg)"
                                         :style="{ boxShadow: proposal && proposal.action === 'reject' ? '0 0 0 2px color-mix(in srgb, var(--pnl-down-fg) 45%, transparent)' : '' }">
                                     <x-feathericon-power class="w-[15px] h-[15px]" stroke-width="2"/>Reject
@@ -982,7 +1029,7 @@
                     <div class="card card--flat flex flex-col items-center justify-center text-center py-16 px-6">
                         <span class="w-[52px] h-[52px] rounded-control bg-surface-3 flex items-center justify-center mb-4"><x-feathericon-bar-chart-2 class="w-6 h-6 text-fg-mute" stroke-width="1.5"/></span>
                         <h4 class="font-sans font-semibold text-[15px] text-fg-1 mb-1.5" x-text="selected ? 'Run a backtest to see results' : 'Select a token to begin'"></h4>
-                        <p class="text-[12.5px] text-fg-mute max-w-[340px] leading-snug" x-show="selected">Fetch history, then <span class="font-semibold text-fg-2">Run backtest</span> — grade, pass rate, regime stability, and per-trade rows appear here.</p>
+                        <p class="text-[12.5px] text-fg-mute max-w-[340px] leading-snug" x-show="selected">Fetch history, then <span class="font-semibold text-fg-2">Run backtest</span> — grade, pass rate, and per-trade rows appear here.</p>
                         <p class="text-[12.5px] text-fg-mute max-w-[340px] leading-snug" x-show="!selected">Pick a symbol from the left rail. Its config pre-fills and the actions unlock.</p>
                     </div>
                 </template>
@@ -1021,12 +1068,6 @@
                                     </div>
                                 </div>
 
-                                {{-- truncated notice --}}
-                                <div x-show="rowsTruncated" class="card card--flat flex items-center gap-2.5 py-2.5 px-4" style="background: color-mix(in srgb, var(--info) 7%, transparent); border-color: color-mix(in srgb, var(--info) 28%, var(--border))">
-                                    <x-feathericon-alert-circle class="w-[14px] h-[14px]" style="color: var(--info)" stroke-width="1.75"/>
-                                    <span class="text-[12px] text-fg-2">Showing first <span x-text="maxRowsCap"></span> rows of a larger set.</span>
-                                </div>
-
                                 {{-- scorecards --}}
                                 <div class="grid grid-cols-3 gap-3 max-[640px]:grid-cols-2">
                                     @php
@@ -1046,11 +1087,11 @@
                                     <div class="{{ $statCard }}"><span class="{{ $statLabel }} inline-flex items-center gap-[5px]">Sample size<x-ui.help-dot topic="sample_size"/></span><span class="{{ $statVal }} text-fg-1" x-text="sampleSize.toLocaleString()"></span><span class="{{ $statSub }}" :style="`color: ${(totals.candles || 0) < (totals.sample_size_threshold || 180) ? 'var(--warn)' : 'var(--fg-3)'}`" x-text="(totals.candles || 0) < (totals.sample_size_threshold || 180) ? 'thin — ' + fmtNum(totals.candles) + ' starts' : 'sims · ' + fmtNum(totals.candles) + ' starts'"></span></div>
                                 </div>
 
-                                {{-- [I] rows table --}}
+                                {{-- [I] stop-loss coverage (chips strip kept from the old rows
+                                     table: status chips carry the failure counts, side chips
+                                     filter the direction panels below) --}}
                                 <div class="card card--flat overflow-hidden">
-                                    <x-ui.card-head icon="database" title="Per-simulation rows" :accent="true">
-                                        <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="`${viewRows.length} of ${(result.rows || []).length}`"></span></x-slot:right>
-                                    </x-ui.card-head>
+                                    <x-ui.card-head icon="shield" title="Stop-loss coverage" :accent="true" hint="SL width that would have absorbed each share of stops" tip="sl_coverage"/>
 
                                     {{-- filter chips --}}
                                     <div class="flex items-center gap-1.5 flex-wrap py-2.5 px-4 border-b border-line-soft" style="background: color-mix(in srgb, var(--bg-elev-2) 40%, transparent)">
@@ -1068,27 +1109,34 @@
                                         <button type="button" class="{{ $chip }}" x-on:click="dirFilter = 'SHORT'" :style="dirFilter === 'SHORT' ? 'color: var(--pnl-down-fg); border-color: color-mix(in srgb, var(--pnl-down-fg) 45%, transparent); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)' : 'color: var(--fg-mute); border-color: var(--border); background: transparent'">Short</button>
                                     </div>
 
-                                    {{-- header --}}
-                                    <div class="hidden lg:grid grid-cols-[64px_136px_1fr_56px_136px_1fr_64px_112px] gap-2 py-2 px-4 border-b border-line-soft bg-surface-2 font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-3">
-                                        <span>Side</span><span>Start candle</span><span>Entry ref</span><span>Rung</span><span>Last touch</span><span>TP price</span><span>MAE %</span><span>Status</span>
-                                    </div>
-
-                                    {{-- rows --}}
-                                    <div class="max-h-[420px] overflow-y-auto">
-                                        <template x-for="(r, i) in viewRows" :key="i">
-                                            <div class="grid grid-cols-[64px_136px_1fr_56px_136px_1fr_64px_112px] gap-2 items-center py-2.5 px-4 border-b border-line-soft last:border-b-0 max-lg:grid-cols-2 max-lg:gap-y-1.5">
-                                                <span class="flex"><span class="font-mono text-[9.5px] font-bold tracking-[0.05em] py-[2px] px-[7px] rounded-chip" :style="`color: ${r.direction === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}; background: color-mix(in srgb, ${r.direction === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 13%, transparent)`" x-text="r.direction"></span></span>
-                                                <span class="font-mono text-[11px] tabular-nums text-fg-2" x-text="r.start_candle"></span>
-                                                <span class="font-mono text-[11.5px] tabular-nums text-fg-1" x-text="r.entry_ref_price"></span>
-                                                <span class="font-mono text-[11.5px] font-semibold tabular-nums" :style="`color: ${rungCellColor(r.last_rung)}`" x-text="r.last_rung"></span>
-                                                <span class="font-mono text-[11px] tabular-nums text-fg-mute" x-text="r.last_touch_candle || '—'"></span>
-                                                <span class="font-mono text-[11.5px] tabular-nums text-fg-2" x-text="r.tp_price"></span>
-                                                <span class="font-mono text-[11.5px] font-semibold tabular-nums" :style="`color: ${maeColor(r.mae_pct)}`" x-text="fmtFixed(r.mae_pct)"></span>
-                                                <span class="flex"><span class="inline-flex items-center gap-1.5 font-mono text-[9.5px] font-bold tracking-[0.04em] uppercase" :style="`color: ${(STATUS_META[r.status] || STATUS_META.skipped).color}`"><span class="w-[6px] h-[6px] rounded-r2" :style="`background: ${(STATUS_META[r.status] || STATUS_META.skipped).color}; opacity: ${(STATUS_META[r.status] || {}).striped ? 0.6 : 1}`"></span><span x-text="(STATUS_META[r.status] || STATUS_META.skipped).short"></span></span></span>
+                                    {{-- direction panels — filtered by the Side chips --}}
+                                    <template x-if="slCoverageView">
+                                        <div>
+                                            <div class="grid gap-0 max-[640px]:grid-cols-1" :class="slCoverageView.length > 1 ? 'grid-cols-2' : 'grid-cols-1'">
+                                                <template x-for="d in slCoverageView" :key="d.dir">
+                                                    <div class="p-4 border-r border-line-soft last:border-r-0 max-[640px]:border-r-0 max-[640px]:border-b max-[640px]:last:border-b-0">
+                                                        <div class="flex items-center gap-2 mb-2.5">
+                                                            <span class="font-mono text-[9.5px] font-bold tracking-[0.05em] py-[2px] px-[7px] rounded-chip" :style="`color: ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}; background: color-mix(in srgb, ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 13%, transparent)`" x-text="d.dir"></span>
+                                                            <span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="d.count + (d.count === 1 ? ' stop' : ' stops')"></span>
+                                                        </div>
+                                                        <div class="flex flex-col gap-1.5">
+                                                            <template x-for="t in SL_TIERS" :key="t[0]">
+                                                                <div class="flex items-center gap-3">
+                                                                    <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-fg-mute w-[34px] flex-shrink-0" x-text="t[1]"></span>
+                                                                    <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1" x-text="d[t[0]] && d[t[0]].pct != null ? 'SL ' + d[t[0]].pct + '%' : '—'"></span>
+                                                                    <span class="font-mono text-[10.5px] tabular-nums text-fg-mute" x-text="d[t[0]] && d[t[0]].delta != null ? (d[t[0]].delta > 0 ? '+' + d[t[0]].delta + '% wider' : 'at current SL') : ''"></span>
+                                                                </div>
+                                                            </template>
+                                                        </div>
+                                                    </div>
+                                                </template>
                                             </div>
-                                        </template>
-                                        <div x-show="!viewRows.length" class="py-8 text-center text-[12px] text-fg-mute">No rows match this filter.</div>
-                                    </div>
+                                            <div class="py-2 px-4 border-t border-line-soft">
+                                                <span class="ui-hint">Each row: the stop-loss width that would have absorbed that share of this run's stopped trades. A huge "All" value means widening SL can't save this config.</span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div x-show="!slCoverageView" class="py-8 text-center text-[12px] text-fg-mute">No stopped trades for this side — nothing for a stop-loss to absorb.</div>
                                 </div>
 
                                 {{-- config echo --}}
@@ -1098,33 +1146,6 @@
                                         <span class="font-mono text-[10.5px] text-fg-mute"><span class="text-fg-3" x-text="kv[0]"></span> <span class="font-semibold text-fg-2 tabular-nums" x-text="kv[1]"></span></span>
                                     </template>
                                 </div>
-
-                                {{-- [H] regime stability --}}
-                                <template x-if="regimeBars.length">
-                                    <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="activity" title="Regime stability" :accent="true" tip="regime_stability">
-                                            <x-slot:right><span class="font-mono text-[10.5px] text-fg-mute" x-text="`worst ${(worstPass() * 100).toFixed(0)}% pass`"></span></x-slot:right>
-                                        </x-ui.card-head>
-                                        <div class="p-4">
-                                            <div class="flex items-end gap-1.5 h-[96px]">
-                                                <template x-for="(r, i) in regimeBars" :key="i">
-                                                    <div class="flex-1 flex flex-col items-center justify-end h-full group relative">
-                                                        <div class="w-full rounded-t-[3px] transition-all duration-base relative" :style="`height: ${r.pass * 100}%; min-height: 4px; background: ${regimeColor(r.pass)}; opacity: ${r.pass === worstPass() ? 1 : 0.8}; box-shadow: ${r.pass === worstPass() ? `0 0 0 2px color-mix(in srgb, ${regimeColor(r.pass)} 55%, transparent)` : 'none'}`"></div>
-                                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
-                                                            <div class="font-mono text-[10px] font-bold text-fg-1" x-text="`${r.from} – ${r.to}`"></div>
-                                                            <div class="font-mono text-[10px]" :style="`color: ${regimeColor(r.pass)}`" x-text="`${(r.pass * 100).toFixed(0)}% pass · ${r.stops} stops`"></div>
-                                                        </div>
-                                                    </div>
-                                                </template>
-                                            </div>
-                                            <div class="flex items-center justify-between mt-2 pt-2 border-t border-line-soft">
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[0].from"></span>
-                                                <span class="font-mono text-[10px] text-fg-mute max-[520px]:hidden">Each bar = a time bucket · height = pass rate · worst highlighted</span>
-                                                <span class="font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-3" x-text="regimeBars[regimeBars.length - 1].to"></span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </template>
 
                                 {{-- verdict bar + rung chart --}}
                                 <div class="grid grid-cols-2 gap-4 max-[760px]:grid-cols-1">
@@ -1169,37 +1190,6 @@
                                         </div>
                                     </div>
                                 </div>
-
-                                {{-- [I2] stop-loss coverage — what SL width would have absorbed
-                                     each share of the stopped trades, per direction. Only rendered
-                                     when at least one direction actually stopped. --}}
-                                <template x-if="slCoverage">
-                                    <div class="card card--flat overflow-hidden">
-                                        <x-ui.card-head icon="shield" title="Stop-loss coverage" :accent="true" hint="SL width that would have absorbed each share of stops" tip="sl_coverage"/>
-                                        <div class="grid grid-cols-2 gap-0 max-[640px]:grid-cols-1">
-                                            <template x-for="d in slCoverage" :key="d.dir">
-                                                <div class="p-4 border-r border-line-soft last:border-r-0 max-[640px]:border-r-0 max-[640px]:border-b max-[640px]:last:border-b-0">
-                                                    <div class="flex items-center gap-2 mb-2.5">
-                                                        <span class="font-mono text-[9.5px] font-bold tracking-[0.05em] py-[2px] px-[7px] rounded-chip" :style="`color: ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}; background: color-mix(in srgb, ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 13%, transparent)`" x-text="d.dir"></span>
-                                                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="d.count + (d.count === 1 ? ' stop' : ' stops')"></span>
-                                                    </div>
-                                                    <div class="flex flex-col gap-1.5">
-                                                        <template x-for="t in SL_TIERS" :key="t[0]">
-                                                            <div class="flex items-center gap-3">
-                                                                <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-fg-mute w-[34px] flex-shrink-0" x-text="t[1]"></span>
-                                                                <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1" x-text="d[t[0]] && d[t[0]].pct != null ? 'SL ' + d[t[0]].pct + '%' : '—'"></span>
-                                                                <span class="font-mono text-[10.5px] tabular-nums text-fg-mute" x-text="d[t[0]] && d[t[0]].delta != null ? (d[t[0]].delta > 0 ? '+' + d[t[0]].delta + '% wider' : 'at current SL') : ''"></span>
-                                                            </div>
-                                                        </template>
-                                                    </div>
-                                                </div>
-                                            </template>
-                                        </div>
-                                        <div class="py-2 px-4 border-t border-line-soft">
-                                            <span class="ui-hint">Each row: the stop-loss width that would have absorbed that share of this run's stopped trades. A huge "All" value means widening SL can't save this config.</span>
-                                        </div>
-                                    </div>
-                                </template>
 
                                 {{-- [J] AI insights --}}
                                 <div class="card card--flat overflow-hidden">

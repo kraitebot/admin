@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.13.1] — 2026-07-06
+
+### Fixes
+- **Grade and proposal can no longer contradict each other.** A large sample diluted absolute failures in the score — 16 stop-loss hits over ~1400 sims still graded "B — mostly fine to run" while the proposal correctly said "Recommend reject". The grade is now capped by the same decision rule the proposal uses (core v1.61.0): more than 10 stops → at best D, 5–10 → at best C. The help explainer states the cap.
+
+### Changed
+- **Per-simulation rows grid replaced by the Stop-loss coverage tiers.** The raw failure rows (long unrounded decimals, one row per stopped sim) read poorly and duplicated what the counts already said. The card keeps its filter strip — Status chips carry the Stopped/Inconclusive counts, Side chips now narrow the coverage panels to Long/Short/Both — and the body shows the per-direction SL-coverage tiers that used to live in their own card further down. Failure rows still feed the AI adviser unchanged.
+- **Regime stability panel removed.** The per-time-bucket pass-rate bars read as a wall of green and didn't inform the decision. The regime buckets still feed the AI adviser and the grade's worst-bucket deduction — only the visual panel is gone.
+
+### Improvements
+- **Deciding a token auto-advances to the next one and runs its backtest.** After Approve/Reject the selector moves to the next token in the dropdown's visual order — wrapping around to the items before the current one when the decided token was last in the list — skips the decided token's other quote variants (they were concluded together), resets the config to the new token's stored values, and immediately fires its backtest. The review loop becomes decide → results appear → decide, fully hands-free; when nothing is left to review, the decided token stays selected.
+- **A decision concludes the token everywhere, and the UI now shows it.** Approving/rejecting was already fanned out server-side to every listing of the same token — other quotes (USDT → USDC/USD1) and other exchanges, linked by the canonical symbol identity (so exchange-specific token names are covered). The dropdown status dots and filter counts of those sibling rows now update instantly on decision instead of waiting for a page reload.
+- **Token switching locks while a run is in flight.** The token selector and the universe filter checkboxes disable during fetch / verify / run / adjustment-search — a mid-run swap would show one token's results under another token's header, and the adjustment search would push the wrong token's config on apply.
+- **Filter flips keep the selection valid.** Unchecking/checking the universe filters (Top 100 / Only approved / Not concluded) while the chosen token falls outside the new filter now auto-selects the first token of the filtered list (or clears the selection when nothing matches) instead of leaving a hidden token silently selected. Typing in the search box deliberately never re-selects.
+- **Every adjustment candidate is one click from a re-test.** The smart-adjustment result list used to mark each tried bump with a passive ✓/✗ icon and only the system's winning pick got an apply button. Each row now leads with a small play button that applies that candidate's config and immediately re-runs the backtest — so when no bump clears the bar (or the operator disagrees with the tie-break), any of the six candidates can be tested live without retyping the config.
+
 ## [0.13.0] — 2026-07-06
 
 ### Features
