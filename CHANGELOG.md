@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.13.2] — 2026-07-07
+
+### Improvements
+- **Deciding scrolls back to the top.** The Approve/Reject buttons sit at the bottom of the page; when the decision auto-advances to the next token and fires its backtest, the page now smooth-scrolls back up so the new token's header, coverage and run progress are immediately in view.
+
 ## [0.13.1] — 2026-07-06
 
 ### Fixes

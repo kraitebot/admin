@@ -456,6 +456,11 @@
                 // selectToken) → fire its backtest immediately, so the review
                 // loop is decide → results appear → decide, hands-free.
                 if (this.advanceToNextToken(decidedToken)) {
+                    // The decision buttons live at the bottom — bring the
+                    // viewport back up so the next token's header and run
+                    // progress are in view. `.content` is the app layout's
+                    // scroll container (the window never scrolls).
+                    (this.$root.closest('.content') || window).scrollTo({ top: 0, behavior: 'smooth' });
                     await this.doRun();
                 }
             },
