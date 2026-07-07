@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.14.0] — 2026-07-07
+
+### Features
+- **Fleet-overview dashboard is fully live — every tile now shows real platform data.** The mock numbers from the design phase are gone; the whole page re-polls one payload every 15 seconds and both Sync buttons force a refresh. Tile by tile: **Active traders** (real active-user count + 24h signups, delta badge only when someone actually signed up), **Step dispatcher** (success rate of terminal step outcomes across both fleets + real steps/min), **Capital under mgmt** (latest exchange-reported balance per actively managed account with a true 24h delta), **Engine throughput** (orders/min over the last hour with a real trend line), **Open positions** (live platform-wide count).
+- **Market regime panel reflects the real BSCS engine.** Score 0–100 across the four real bands (Calm / Elevated / Fragile / Critical — the mock's five-band scale never existed in the engine), with a posture line stating what the band does to trading. The **Override regime button now works**: reason + hours engage the real trading-engine override; while active the card shows the audit reason with a one-click Clear.
+- **Deploy panel shows real rollout drift.** Every server's heartbeat now reports the core build it runs (core v1.62.0); the card shows the newest version, how many nodes run it, which lag behind, and an in-sync / drift chip. Boxes that haven't reported a version yet are stated honestly instead of invented.
+- **Exchange connectivity is the real venue table.** The four actual exchanges (Binance / Bybit / KuCoin / BitGet — fake OKX/Deribit/Kraken/Coinbase removed) with true average latency, error rate, connected-account count and a last-12-calls latency trend from the API request log. Status derives from the trailing-hour error rate; venues with no traffic read "Idle" instead of pretending health.
+- **Incidents & events feed is real.** Latest occurrence of each platform notification (health alerts, rate limits, blacklistings, recoveries…), severity-coloured with true ages.
+- **Revenue today panel is real.** MRR from paying unpaused subscribers, today's confirmed top-ups from the wallet ledger, and the float held across all user wallets.
+
+### Improvements
+- **The overview degrades gracefully.** Any section whose data source is missing (dev database without core tables, mid-deploy outage) renders its placeholder instead of taking the page down, and the failure is logged rather than swallowed.
+
+### Dependencies
+- Composer lock refresh (guzzle transitive bumps) carried from the previous session.
+
 ## [0.13.2] — 2026-07-07
 
 ### Improvements
