@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.15.1] — 2026-07-09
+
+### Features
+- **Engine failures: "Mark all as resolved" master button.** First tap arms it (red, auto-disarms in 3 s), second tap sweeps every unresolved failure across live + archive tables of both fleets — no time window, so the failures gauge clears with the list.
+- **Engine fleet tabs: "Only processing" switcher.** Filters each fleet pivot to leaf classes with steps actually Running — parents and waiting work excluded, same definition as the Total Processing tile. Class counter follows the filter.
+
+### Fixes
+- **Error toasts state the real reason.** Framework failures that carry only a `message` (503 maintenance window, 419 expired session, 429 throttle) now surface it — a deploy's maintenance window had 503'd four backtesting Reject clicks and the toast said only "Could not save decision".
+- **Resolving failures busts the server caches** so resolved rows can't flicker back on the next poll.
+
 ## [0.15.0] — 2026-07-09
 
 ### Features

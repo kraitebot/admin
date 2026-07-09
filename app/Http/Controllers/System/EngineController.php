@@ -103,6 +103,28 @@ class EngineController extends Controller
     }
 
     /**
+     * Resolve EVERY unresolved failure across the board — the "clean the
+     * slate" master action. No time window on purpose: the failures gauge
+     * reads the live tables unwindowed, so a windowed sweep would leave the
+     * gauge red after the list went empty.
+     */
+    public function resolveAll(): JsonResponse
+    {
+        $resolved = 0;
+        foreach ($this->stepTables() as $table) {
+            $resolved += DB::table($table)
+                ->where('state', self::FAILED)
+                ->where('exception_analysed', 0)
+                ->update(['exception_analysed' => 1]);
+        }
+
+        Cache::forget('system.engine.failures');
+        Cache::forget('system.engine.gauges');
+
+        return response()->json(['ok' => true, 'resolved' => $resolved]);
+    }
+
+    /**
      * Resolve EVERY unresolved failure of a step class in one action — same
      * class means same root cause, so the operator analyses the newest and
      * clears the group. Sweeps live + archive tables of both fleets.
@@ -121,6 +143,11 @@ class EngineController extends Controller
                 ->where('exception_analysed', 0)
                 ->update(['exception_analysed' => 1]);
         }
+
+        // The next poll lands inside the list/gauge cache windows — without
+        // the bust, resolved rows would resurrect for up to 15s.
+        Cache::forget('system.engine.failures');
+        Cache::forget('system.engine.gauges');
 
         return response()->json(['ok' => true, 'resolved' => $resolved]);
     }

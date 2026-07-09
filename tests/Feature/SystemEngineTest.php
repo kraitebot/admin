@@ -147,6 +147,32 @@ it('persists the AI verdict on the newest unresolved occurrence only', function 
         ->and(DB::table('steps')->where('id', $oldId)->value('exception_verdict'))->toBeNull();
 });
 
+it('resolve-all sweeps every unresolved failure across all tables and nothing else', function (): void {
+    stubStepTables();
+    $admin = User::factory()->create(['is_admin' => true, 'email' => 'eng-resall@kraite.test']);
+
+    DB::table('steps')->insert(['class' => 'App\\Jobs\\A', 'state' => FAILED_STATE, 'created_at' => now()]);
+    DB::table('steps_archive')->insert(['class' => 'App\\Jobs\\B', 'state' => FAILED_STATE, 'created_at' => now()->subDays(20)]);
+    DB::table('trading_steps')->insert(['class' => 'App\\Jobs\\C', 'state' => FAILED_STATE, 'created_at' => now()]);
+    DB::table('trading_steps_archive')->insert(['class' => 'App\\Jobs\\D', 'state' => FAILED_STATE, 'created_at' => now()]);
+    // Untouched: already analysed, and a non-failed step.
+    DB::table('steps')->insert(['class' => 'App\\Jobs\\A', 'state' => FAILED_STATE, 'exception_analysed' => 1, 'created_at' => now()]);
+    DB::table('steps')->insert(['class' => 'App\\Jobs\\E', 'state' => COMPLETED_STATE, 'created_at' => now()]);
+
+    $this->actingAs($admin)
+        ->post('https://admin.kraite.test/system/engine/failures/resolve-all')
+        ->assertSuccessful()
+        ->assertJsonPath('ok', true)
+        ->assertJsonPath('resolved', 4);
+
+    // Every failed row analysed (incl. the 20-day-old archive one — no window),
+    // the completed row untouched.
+    expect(DB::table('steps')->where('state', FAILED_STATE)->where('exception_analysed', 0)->count())->toBe(0)
+        ->and((int) DB::table('steps_archive')->value('exception_analysed'))->toBe(1)
+        ->and((int) DB::table('trading_steps_archive')->value('exception_analysed'))->toBe(1)
+        ->and((int) DB::table('steps')->where('state', COMPLETED_STATE)->value('exception_analysed'))->toBe(0);
+});
+
 // NOTE: the "total processing" count (running leaf steps — own
 // child_block_uuid null; parents + waiting steps excluded) lives inside
 // gauges() next to MySQL-only DATE_SUB/DATE_FORMAT windows that throw on

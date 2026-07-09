@@ -189,6 +189,14 @@ window.hubUiFetch = async (url, options = {}) => {
         if (data.status === undefined) {
             data.status = res.status;
         }
+        // Framework error responses (503 maintenance, 419 session expired,
+        // 429 throttle) carry `message`, not `error` — mirror it so callers'
+        // `data.error || 'generic text'` fallbacks show the real reason.
+        // (2026-07-09: a deploy's maintenance window 503'd four Reject
+        // clicks and the toast said only "Could not save decision".)
+        if (!res.ok && data.error === undefined && typeof data.message === 'string' && data.message !== '') {
+            data.error = data.message;
+        }
 
         if (!res.ok && toastOnError && typeof window.showToast === 'function') {
             window.showToast(data.error || `Request failed (${res.status})`, 'error');

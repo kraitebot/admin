@@ -13,9 +13,12 @@
             failuresLoading: false,
             busyClass: null,                   // class currently being AI-triaged
             verdictFor: null,                  // failure row shown in the verdict popup
+            onlyProcessing: false,             // fleet tabs: show only classes with running leaf work
+            resolveAllArmed: false,            // master resolve needs a second tap
             toast: null,
             _timer: null,
             _toastTimer: null,
+            _armTimer: null,
 
             STATES: ['Pending', 'Throttled', 'Dispatched', 'Running', 'Completed', 'Skipped', 'NotRunnable', 'Failed', 'Cancelled', 'Stopped'],
 
@@ -85,6 +88,34 @@
                     this.flash(res.data.error || 'Resolve failed', 'error');
                 }
             },
+            // Master resolve: first tap arms (3s), second tap sweeps every
+            // unresolved failure across all tables.
+            async resolveAll() {
+                if (!this.resolveAllArmed) {
+                    this.resolveAllArmed = true;
+                    if (this._armTimer) clearTimeout(this._armTimer);
+                    this._armTimer = setTimeout(() => { this.resolveAllArmed = false; }, 3000);
+                    return;
+                }
+                this.resolveAllArmed = false;
+                if (this._armTimer) clearTimeout(this._armTimer);
+                const res = await hubUiFetch(urls.resolveAll, { body: {} });
+                if (res.ok) {
+                    this.failures = [];
+                    this.verdictFor = null;
+                    this.flash(`Resolved ${res.data.resolved} occurrence${res.data.resolved === 1 ? '' : 's'} — slate clean`, 'ok');
+                    this.tick();
+                } else {
+                    this.flash(res.data.error || 'Resolve-all failed', 'error');
+                }
+            },
+            fleetRows(prefix) {
+                const rows = this.fleet[prefix]?.rows || [];
+                if (!this.onlyProcessing) return rows;
+                // Leaf classes with work genuinely running: parents excluded,
+                // and at least one step in the Running state.
+                return rows.filter((r) => !r.is_parent && (r.states.Running ?? 0) > 0);
+            },
             flash(text, kind) {
                 this.toast = { text, kind };
                 if (this._toastTimer) clearTimeout(this._toastTimer);
@@ -120,6 +151,7 @@
             'failures' => route('system.engine.failures'),
             'troubleshoot' => route('system.engine.troubleshoot'),
             'resolve' => route('system.engine.resolve'),
+            'resolveAll' => route('system.engine.resolve-all'),
             'fleet' => [
                 'default' => route('system.steps.data', 'default'),
                 'trading' => route('system.steps.data', 'trading'),
@@ -232,8 +264,21 @@
                         <x-feathericon-git-branch class="w-4 h-4 text-accent" stroke-width="1.75"/>
                         <span x-text="prefix === 'default' ? 'Calculation fleet' : 'Trading fleet'"></span>
                     </h4>
-                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
-                          x-text="fleet[prefix] ? `${fleet[prefix].rows.length} classes` : 'loading…'"></span>
+                    <div class="flex items-center gap-3.5">
+                        {{-- only-processing switcher: leaf classes with running work --}}
+                        <button type="button" @click="onlyProcessing = !onlyProcessing"
+                                class="appearance-none bg-transparent border-0 cursor-pointer inline-flex items-center gap-2 p-0">
+                            <span class="w-[30px] h-[17px] rounded-chip relative transition-colors duration-fast"
+                                  :style="`background: ${onlyProcessing ? 'var(--accent)' : 'var(--bg-elev-3)'}`">
+                                <span class="absolute top-[2px] w-[13px] h-[13px] rounded-chip bg-white transition-all duration-fast"
+                                      :style="onlyProcessing ? 'left: 15px' : 'left: 2px'"></span>
+                            </span>
+                            <span class="font-mono text-[10px] font-semibold tracking-[0.06em] uppercase"
+                                  :class="onlyProcessing ? 'text-fg-1' : 'text-fg-mute'">Only processing</span>
+                        </button>
+                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
+                              x-text="fleet[prefix] ? `${fleetRows(prefix).length} classes` : 'loading…'"></span>
+                    </div>
                 </div>
                 <div x-show="!fleet[prefix]" class="py-10 text-center font-mono text-[11px] text-fg-mute">Loading fleet…</div>
                 <div x-show="fleet[prefix]" class="overflow-x-auto">
@@ -248,7 +293,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                            <template x-for="row in (fleet[prefix]?.rows || [])" :key="row.class">
+                            <tr x-show="fleet[prefix] && fleetRows(prefix).length === 0">
+                                <td :colspan="STATES.length + 2" class="py-8 text-center font-mono text-[11px] text-fg-mute"
+                                    x-text="onlyProcessing ? 'Nothing processing right now.' : 'No steps.'"></td>
+                            </tr>
+                            <template x-for="row in fleetRows(prefix)" :key="row.class">
                                 <tr class="border-b border-line-soft align-middle hover:bg-hover transition-colors duration-fast">
                                     <td class="py-2 px-4">
                                         <span class="font-mono text-[11.5px] font-semibold text-fg-1 whitespace-nowrap" x-text="row.short_name"></span>
@@ -286,8 +335,18 @@
         <div x-show="tab === 'failures'" class="card card--flat overflow-hidden">
             <x-ui.card-head icon="alert-triangle" title="Failures — last 2 weeks" :accent="true">
                 <x-slot:right>
-                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
-                          x-text="`${failures.length} class${failures.length === 1 ? '' : 'es'} · grouped · non-recovered`"></span>
+                    <span class="inline-flex items-center gap-3">
+                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums max-[640px]:hidden"
+                              x-text="`${failures.length} class${failures.length === 1 ? '' : 'es'} · grouped · non-recovered`"></span>
+                        {{-- master resolve: tap once to arm, again to sweep everything --}}
+                        <button type="button" x-show="failures.length > 0" @click="resolveAll()"
+                                class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[6px] whitespace-nowrap transition-colors duration-fast ease-out h-[30px] px-2.5 text-[11.5px]"
+                                :class="resolveAllArmed ? 'text-white border-transparent' : 'bg-transparent text-fg-1 border-line-strong hover:bg-hover'"
+                                :style="resolveAllArmed ? 'background: var(--danger)' : ''">
+                            <x-feathericon-check-circle class="w-[13px] h-[13px]" stroke-width="1.75"/>
+                            <span x-text="resolveAllArmed ? 'Tap again to resolve ALL' : 'Mark all as resolved'"></span>
+                        </button>
+                    </span>
                 </x-slot:right>
             </x-ui.card-head>
 

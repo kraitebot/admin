@@ -48,6 +48,7 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
         ->middleware('throttle:10,1')
         ->name('system.engine.troubleshoot');
     Route::post('/engine/failures/resolve', [EngineController::class, 'resolve'])->name('system.engine.resolve');
+    Route::post('/engine/failures/resolve-all', [EngineController::class, 'resolveAll'])->name('system.engine.resolve-all');
     Route::get('/infra', [InfraController::class, 'index'])->name('system.infra');
     Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
     Route::view('/revenue', 'system.revenue')->name('system.revenue');
