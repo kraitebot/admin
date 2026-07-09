@@ -34,7 +34,7 @@
         <x-rail :active="$active"/>
     </div>
 
-    <div class="flex flex-col min-w-0 h-screen bg-[#07090b] max-[640px]:pb-[62px] max-[420px]:pb-[56px]"
+    <div class="flex flex-col min-w-0 h-screen bg-[#07090b]"
          x-data="{ contentDark: localStorage.getItem('kraite-content-theme') !== 'light' }"
          x-init="$watch('contentDark', v => localStorage.setItem('kraite-content-theme', v ? 'dark' : 'light'))">
 

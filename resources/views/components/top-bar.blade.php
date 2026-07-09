@@ -18,6 +18,13 @@
 <header class="h-14 flex-shrink-0 bg-[#07090b] flex items-center gap-4 px-5 z-20 max-[640px]:px-3 max-[640px]:gap-2"
         x-data="{ now: '' , tick() { const d = new Date(); const pad = n => String(n).padStart(2,'0'); this.now = pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds()); } }"
         x-init="tick(); setInterval(() => tick(), 1000)">
+    {{-- Phone-only hamburger — opens the nav drawer (the vertical rail is
+         hidden ≤640px). --}}
+    <button type="button" title="Menu"
+            @click="$store.rail.drawerOpen = true"
+            class="hidden max-[640px]:inline-flex appearance-none bg-transparent border border-transparent rounded-control text-ink-7 cursor-pointer w-[38px] h-[38px] items-center justify-center transition-colors duration-fast ease-out hover:text-ink-9 hover:bg-ink-1 -ml-1">
+        <x-feathericon-menu class="w-[20px] h-[20px]" stroke-width="1.75"/>
+    </button>
     <div class="flex items-center gap-[10px] whitespace-nowrap">
         <span class="font-sans font-bold text-[15px] tracking-[-0.01em] text-ink-9 max-[640px]:text-[14px]">Kraite</span>
         @if($console)

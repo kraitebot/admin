@@ -212,3 +212,7 @@ body { background: var(--black); overflow: hidden; }
     min-height: 44px;
   }
 }
+
+/* Alpine x-cloak — global, so drawer/nav markup never flashes pre-init.
+   (Pages that carried their own copy keep working; this is the canonical one.) */
+[x-cloak] { display: none !important; }

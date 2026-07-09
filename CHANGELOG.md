@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.14.3] — 2026-07-09
+
+### Improvements
+- **Phone navigation is a slide-in drawer.** The fixed bottom bar couldn't hold ten labeled items between 421–640px — labels collided into an unusable strip. On phone widths the vertical rail now hides entirely and a hamburger in the top-bar opens a left drawer: logo header, one 48px labeled row per destination, active-page highlight, dimmed backdrop. Closes on backdrop tap, Escape, or any navigation. Desktop rail unchanged. Verified by touch at 540px and 390px (open, navigate, close — zero errors).
+
 ## [0.14.2] — 2026-07-09
 
 ### Improvements

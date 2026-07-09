@@ -13,7 +13,7 @@ window.Alpine = Alpine;
 // closures; instance state desyncs (the source of the vanishing-link bugs).
 // A store + functions defined once here are immune to re-init counts.
 // ---------------------------------------------------------------------------
-Alpine.store('rail', { activeId: null, hl: null });
+Alpine.store('rail', { activeId: null, hl: null, drawerOpen: false });
 
 const railNav = () => document.querySelector('nav[data-rail]');
 
@@ -37,6 +37,9 @@ const railSyncFromUrl = () => {
 
 window.railGo = (id, el) => {
     const store = Alpine.store('rail');
+    // Navigating from the mobile drawer always closes it, even when the
+    // tapped item is already active.
+    store.drawerOpen = false;
     if (store.activeId === id) {
         return;
     }
