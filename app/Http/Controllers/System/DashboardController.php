@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
+use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\MarketRegimeSnapshot;
 use Kraite\Core\Support\Fleet\FleetMetricsRepository;
@@ -89,18 +90,15 @@ class DashboardController extends Controller
                 'signups_24h' => 0,
                 'delta_pct' => null,
             ]),
-            'dispatcher' => $this->section(fn () => $this->dispatcherKpi(), [
-                'health_pct' => null,
-                'per_min' => null,
-            ]),
+            'tradeable' => $this->section(
+                fn () => Cache::remember('system.dashboard.kpi.tradeable', 60, fn () => $this->tradeableKpi()),
+                ['total' => null, 'longs' => null, 'shorts' => null, 'exchanges' => []],
+            ),
             'capital' => $this->section(
                 fn () => Cache::remember('system.dashboard.kpi.capital', 60, fn () => $this->capitalKpi()),
                 ['aum' => null, 'delta_pct' => null, 'accounts' => 0],
             ),
-            'orders' => $this->section(
-                fn () => Cache::remember('system.dashboard.kpi.orders', 15, fn () => $this->ordersKpi()),
-                ['per_min' => null, 'spark' => []],
-            ),
+            'throughput' => $this->section(fn () => $this->throughputKpi(), ['fleets' => []]),
             'open_positions' => $this->section(
                 fn () => (int) DB::table('positions')->where('is_open', 1)->count(),
                 null,
@@ -130,55 +128,78 @@ class DashboardController extends Controller
     }
 
     /**
-     * Dispatch health = terminal-outcome success rate across both fleets
-     * (steps churn is archived daily, so this reads as "today"). Throughput
-     * is steps completed in the last 5 minutes, per minute — the 5-minute
-     * window smooths the burst-then-idle dispatch pattern.
+     * Total tradeable tokens per exchange, split by direction. Delegated to
+     * the ExchangeSymbol::tradeable() scope so the tile always matches the
+     * live trader's exact tradeable definition.
      *
-     * @return array{health_pct: float|null, per_min: int}
+     * @return array<string, mixed>
      */
-    private function dispatcherKpi(): array
+    private function tradeableKpi(): array
     {
-        return Cache::remember('system.dashboard.kpi.dispatcher', 15, function (): array {
-            $completed = 0;
-            $failed = 0;
-            $recent = 0;
-            $sourcesSeen = 0;
+        $rows = ExchangeSymbol::query()
+            ->tradeable()
+            ->join('api_systems', 'api_systems.id', '=', 'exchange_symbols.api_system_id')
+            ->where('api_systems.is_exchange', true)
+            ->select(
+                'api_systems.name as exchange',
+                'exchange_symbols.direction',
+                DB::raw('COUNT(*) as total'),
+            )
+            ->groupBy('api_systems.name', 'exchange_symbols.direction')
+            ->get();
 
-            foreach (['steps', 'trading_steps'] as $table) {
+        $monograms = ['Binance' => 'B', 'Bybit' => 'BY', 'KuCoin' => 'KU', 'BitGet' => 'BG'];
+        $exchanges = [];
+        foreach ($rows as $row) {
+            $name = (string) $row->exchange;
+            $exchanges[$name] ??= ['name' => $name, 'mono' => $monograms[$name] ?? strtoupper(substr($name, 0, 2)), 'longs' => 0, 'shorts' => 0];
+            if ($row->direction === 'LONG') {
+                $exchanges[$name]['longs'] += (int) $row->total;
+            } elseif ($row->direction === 'SHORT') {
+                $exchanges[$name]['shorts'] += (int) $row->total;
+            }
+        }
+
+        $longs = array_sum(array_column($exchanges, 'longs'));
+        $shorts = array_sum(array_column($exchanges, 'shorts'));
+
+        return [
+            'total' => $longs + $shorts,
+            'longs' => $longs,
+            'shorts' => $shorts,
+            'exchanges' => array_values($exchanges),
+        ];
+    }
+
+    /**
+     * Dispatcher throughput per fleet: steps genuinely processing (Running
+     * leaf steps — orchestrator rows excluded) against the pending backlog.
+     * Same definitions as the Engine page's tiles.
+     *
+     * @return array{fleets: array<string, array{processing: int, pending: int}>}
+     */
+    private function throughputKpi(): array
+    {
+        return Cache::remember('system.dashboard.kpi.throughput', 10, function (): array {
+            $fleets = [];
+
+            foreach (['default' => 'steps', 'trading' => 'trading_steps'] as $fleet => $table) {
                 if (! Schema::hasTable($table)) {
                     continue;
                 }
-                $sourcesSeen++;
 
-                // GROUP BY state rides the state-leading index; the basename
-                // classification happens in PHP so the index stays usable.
-                $states = DB::table($table)
-                    ->select('state', DB::raw('COUNT(*) as total'))
-                    ->groupBy('state')
-                    ->get();
-
-                foreach ($states as $row) {
-                    $name = class_basename($row->state);
-                    if ($name === 'Completed') {
-                        $completed += (int) $row->total;
-                    } elseif ($name === 'Failed') {
-                        $failed += (int) $row->total;
-                    }
-                }
-
-                $recent += (int) DB::table($table)
-                    ->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)')
-                    ->count();
+                $fleets[$fleet] = [
+                    'processing' => (int) DB::table($table)
+                        ->where('state', 'StepDispatcher\\States\\Running')
+                        ->whereNull('child_block_uuid')
+                        ->count(),
+                    'pending' => (int) DB::table($table)
+                        ->where('state', 'StepDispatcher\\States\\Pending')
+                        ->count(),
+                ];
             }
 
-            $terminal = $completed + $failed;
-
-            return [
-                'health_pct' => $terminal > 0 ? round(($completed / $terminal) * 100, 1) : null,
-                // No fleet tables at all = unknown, not "0/min".
-                'per_min' => $sourcesSeen > 0 ? (int) round($recent / 5) : null,
-            ];
+            return ['fleets' => $fleets];
         });
     }
 
@@ -220,33 +241,6 @@ class DashboardController extends Controller
             ->sum('abh.total_wallet_balance');
 
         return $sum === null ? null : (float) $sum;
-    }
-
-    /**
-     * Order flow over the last hour: per-minute rate plus a 12-bucket
-     * (5-minute) sparkline, oldest first.
-     *
-     * @return array{per_min: float, spark: array<int, int>}
-     */
-    private function ordersKpi(): array
-    {
-        $rows = DB::table('orders')
-            ->selectRaw('FLOOR(TIMESTAMPDIFF(MINUTE, created_at, NOW()) / 5) as bucket, COUNT(*) as total')
-            ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)')
-            ->groupBy('bucket')
-            ->get()
-            ->keyBy('bucket');
-
-        // Bucket 0 = the most recent 5 minutes; render oldest → newest.
-        $spark = [];
-        for ($bucket = 11; $bucket >= 0; $bucket--) {
-            $spark[] = (int) ($rows->get($bucket)->total ?? 0);
-        }
-
-        return [
-            'per_min' => round(array_sum($spark) / 60, 1),
-            'spark' => $spark,
-        ];
     }
 
     /**

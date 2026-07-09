@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.15.2] — 2026-07-09
+
+### Improvements
+- **Auto-sync everywhere it polls.** Engine and Fleet overview both refresh every 10 seconds; the manual Sync buttons became a passive "Auto-sync · 10s" indicator whose icon spins while a refresh is in flight (with a short grace so fast responses still visibly register). The fleet card's redundant Sync button is gone.
+- **Tradeable tokens tile replaces the step-dispatcher gauge on the overview.** A mini table — one row per exchange, Long (green) / Short (red) columns — delegating to the live trader's exact tradeable definition. No headline number; the split per venue is the signal.
+- **Engine throughput tile is per fleet.** Calculation and Trading each show steps genuinely processing (running leaf steps, orchestrators excluded) against their pending backlog, with a fill bar per fleet. Replaces the orders/min sparkline.
+- **KPI tiles keep one shared baseline.** Labels are single-line with ellipsis; the direction chip that wrapped and pushed a tile's value off the row's baseline was redesigned away.
+
 ## [0.15.1] — 2026-07-09
 
 ### Features

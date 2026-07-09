@@ -54,11 +54,11 @@ it('serves real trader counts and degrades every core-owned section to its place
 
     // Every core-owned source is absent in this suite — each section must
     // land on its placeholder instead of taking the payload down.
-    $response->assertJsonPath('kpis.dispatcher.health_pct', null)
-        ->assertJsonPath('kpis.dispatcher.per_min', null)
+    $response->assertJsonPath('kpis.tradeable.total', null)
+        ->assertJsonPath('kpis.tradeable.exchanges', [])
         ->assertJsonPath('kpis.capital.aum', null)
         ->assertJsonPath('kpis.capital.accounts', 0)
-        ->assertJsonPath('kpis.orders.per_min', null)
+        ->assertJsonPath('kpis.throughput.fleets', [])
         ->assertJsonPath('kpis.open_positions', null)
         ->assertJsonPath('regime.band', null)
         ->assertJsonPath('regime.posture', 'No signal yet')

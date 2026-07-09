@@ -15,6 +15,7 @@
             verdictFor: null,                  // failure row shown in the verdict popup
             onlyProcessing: false,             // fleet tabs: show only classes with running leaf work
             resolveAllArmed: false,            // master resolve needs a second tap
+            syncing: false,                    // header indicator spins while a refresh is in flight
             toast: null,
             _timer: null,
             _toastTimer: null,
@@ -30,10 +31,18 @@
                 if (this._timer) { clearInterval(this._timer); this._timer = null; }
             },
             async tick() {
-                const res = await hubUiFetch(urls.data);
-                if (res.ok) this.gauges = res.data.gauges;
-                if (this.tab === 'failures') this.loadFailures();
-                else this.loadFleet(this.tab);
+                if (this.syncing) return;
+                this.syncing = true;
+                try {
+                    await Promise.all([
+                        hubUiFetch(urls.data).then((res) => { if (res.ok) this.gauges = res.data.gauges; }),
+                        this.tab === 'failures' ? this.loadFailures() : this.loadFleet(this.tab),
+                    ]);
+                } finally {
+                    // Grace so the spin registers even on a fast response —
+                    // a 60ms flicker reads as broken, not as activity.
+                    setTimeout(() => { this.syncing = false; }, 450);
+                }
             },
 
             switchTab(tab) {
@@ -167,10 +176,12 @@
                 <h1 class="font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leading-[1.1] max-[640px]:text-[24px]">Engine</h1>
                 <div class="text-[13px] text-fg-3 mt-1.5">Step-dispatcher performance — backlog, throughput, and failure triage across both fleets.</div>
             </div>
-            <button type="button" @click="tick()"
-                    class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out h-[36px] px-3.5 text-[13px] bg-transparent text-fg-1 border-line-strong hover:bg-hover flex-shrink-0">
-                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/>Sync
-            </button>
+            {{-- passive auto-sync indicator — the page refreshes itself every
+                 10s; the icon spins while a refresh is in flight. --}}
+            <div class="inline-flex items-center gap-[7px] rounded-control border border-line whitespace-nowrap h-[36px] px-3.5 text-[13px] font-sans font-semibold text-fg-3 flex-shrink-0 cursor-default select-none">
+                <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="syncing && 'animate-spin'"/>
+                <span>Auto-sync · 10s</span>
+            </div>
         </div>
 
         {{-- ===================== HEALTH STRIP ===================== --}}

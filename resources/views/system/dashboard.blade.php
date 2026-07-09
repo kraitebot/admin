@@ -18,7 +18,7 @@
             overrideError: '',
 
             init() {
-                this._timer = setInterval(() => this.refresh(), 15000);
+                this._timer = setInterval(() => this.refresh(), 10000);
             },
             destroy() {
                 if (this._timer) { clearInterval(this._timer); this._timer = null; }
@@ -30,7 +30,8 @@
                     const res = await window.hubUiFetch(dataUrl);
                     if (res.ok) this.ov = res.data;
                 } finally {
-                    this.loading = false;
+                    // Grace so the header spin registers on fast responses.
+                    setTimeout(() => { this.loading = false; }, 450);
                 }
             },
 
@@ -49,6 +50,11 @@
             fmtDelta(v) {
                 return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
             },
+            throughputPct(f) {
+                if (!f) return 0;
+                const total = f.processing + f.pending;
+                return total > 0 ? Math.round((f.processing / total) * 100) : 0;
+            },
             sparkPath(data, w, h) {
                 if (!Array.isArray(data) || data.length < 2) return '';
                 const min = Math.min(...data);
@@ -59,19 +65,6 @@
                 ).join(' L ');
             },
 
-            // ---------- KPI: dispatcher gauge ----------
-            gauge(pct) {
-                const c = 2 * Math.PI * 27;
-                const v = Math.max(0, Math.min(100, pct ?? 0));
-                return {
-                    dash: c,
-                    offset: c * (1 - v / 100),
-                    color: pct === null || pct === undefined
-                        ? 'var(--fg-mute)'
-                        : (v >= 80 ? 'var(--pnl-up-fg)' : (v >= 60 ? 'var(--warn)' : 'var(--pnl-down-fg)')),
-                    label: pct === null || pct === undefined ? '—' : Math.round(v) + '',
-                };
-            },
 
             // ---------- market regime ----------
             regimeBands: ['calm', 'elevated', 'fragile', 'critical'],
@@ -194,10 +187,12 @@
                     <span class="opacity-70 ml-0.5" x-text="ov.regime?.score ?? '—'"></span>
                 </span>
                 <div class="w-px h-[22px] bg-line"></div>
-                <button type="button" @click="refresh()" :disabled="loading"
-                        class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out h-[36px] px-3.5 text-[13px] bg-transparent text-fg-1 border-line-strong hover:bg-hover disabled:opacity-50">
-                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>Sync
-                </button>
+                {{-- passive auto-sync indicator — the page refreshes itself
+                     every 10s; the icon spins while a refresh is in flight. --}}
+                <div class="inline-flex items-center gap-[7px] rounded-control border border-line whitespace-nowrap h-[36px] px-3.5 text-[13px] font-sans font-semibold text-fg-3 flex-shrink-0 cursor-default select-none">
+                    <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>
+                    <span>Auto-sync · 10s</span>
+                </div>
             </div>
         </div>
 
@@ -208,7 +203,7 @@
             {{-- active traders --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]">
+                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
                         <x-feathericon-users class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Active traders
                     </span>
                     <template x-if="ov.kpis.traders.delta_pct !== null">
@@ -223,36 +218,35 @@
                 <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`24H · +${ov.kpis.traders.signups_24h} SIGNUPS`"></span>
             </div>
 
-            {{-- step dispatcher --}}
+            {{-- total tradeable tokens --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]">
-                        <x-feathericon-git-branch class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Step dispatcher
+                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap overflow-hidden text-ellipsis">
+                        <x-feathericon-check-circle class="w-3.5 h-3.5 text-fg-3 flex-shrink-0" stroke-width="1.75"/>Tradeable tokens
                     </span>
                 </div>
-                <div class="min-h-[60px] flex items-center justify-between gap-3">
-                    <div class="relative inline-flex items-center justify-center flex-shrink-0" style="width: 60px; height: 60px">
-                        <svg width="60" height="60" class="-rotate-90">
-                            <circle cx="30" cy="30" r="27" fill="none" stroke="var(--border)" stroke-width="6"/>
-                            <circle cx="30" cy="30" r="27" fill="none" stroke-width="6" stroke-linecap="round"
-                                    :stroke="gauge(ov.kpis.dispatcher.health_pct).color"
-                                    :stroke-dasharray="gauge(ov.kpis.dispatcher.health_pct).dash"
-                                    :stroke-dashoffset="gauge(ov.kpis.dispatcher.health_pct).offset"
-                                    style="transition: stroke-dashoffset .6s cubic-bezier(.22, 1, .36, 1)"/>
-                        </svg>
-                        <span class="absolute font-mono font-bold tabular-nums leading-none" style="font-size: 15px"
-                              :style="`color: ${gauge(ov.kpis.dispatcher.health_pct).color}`">
-                            <span x-text="gauge(ov.kpis.dispatcher.health_pct).label"></span><span style="font-size: 9px" x-show="ov.kpis.dispatcher.health_pct !== null">%</span>
-                        </span>
+                {{-- mini table: one row per exchange, Long / Short columns --}}
+                <div class="flex-1 flex flex-col justify-center gap-[3px]">
+                    <div class="flex items-center gap-2">
+                        <span class="flex-1"></span>
+                        <span class="w-9 text-right font-mono text-[8.5px] font-semibold tracking-[0.08em] uppercase text-fg-mute">Long</span>
+                        <span class="w-9 text-right font-mono text-[8.5px] font-semibold tracking-[0.08em] uppercase text-fg-mute">Short</span>
                     </div>
+                    <template x-for="ex in (ov.kpis.tradeable.exchanges || [])" :key="ex.name">
+                        <div class="flex items-center gap-2 leading-none">
+                            <span class="flex-1 font-mono text-[10px] text-fg-3 whitespace-nowrap overflow-hidden text-ellipsis" x-text="ex.name"></span>
+                            <span class="w-9 text-right font-mono text-[11px] font-bold tabular-nums text-pnlup" x-text="fmtInt(ex.longs)"></span>
+                            <span class="w-9 text-right font-mono text-[11px] font-bold tabular-nums text-pnldown" x-text="fmtInt(ex.shorts)"></span>
+                        </div>
+                    </template>
+                    <span x-show="!(ov.kpis.tradeable.exchanges || []).length" class="font-mono text-[11px] text-fg-mute">—</span>
                 </div>
-                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`DISPATCH · ${fmtInt(ov.kpis.dispatcher.per_min)} STEPS/MIN`"></span>
             </div>
 
             {{-- capital under mgmt --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]">
+                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
                         <x-feathericon-database class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Capital under mgmt
                     </span>
                     <template x-if="ov.kpis.capital.delta_pct !== null">
@@ -267,28 +261,35 @@
                 <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`AUM · ${ov.kpis.capital.accounts} ACCOUNT${ov.kpis.capital.accounts === 1 ? '' : 'S'}`"></span>
             </div>
 
-            {{-- engine throughput --}}
+            {{-- engine throughput — per fleet: processing vs pending --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]">
+                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
                         <x-feathericon-activity class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Engine throughput
                     </span>
                 </div>
-                <div class="min-h-[60px] flex items-center justify-between gap-3">
-                    <span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none" x-text="fmtInt(ov.kpis.orders.per_min)"></span>
-                    <div class="w-[100px] h-[26px] flex-shrink-0 self-center">
-                        <svg viewBox="0 0 100 26" preserveAspectRatio="none" class="w-full h-full">
-                            <path :d="sparkPath(ov.kpis.orders.spark, 100, 26)" fill="none" stroke="var(--pnl-up-fg)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
-                        </svg>
-                    </div>
+                <div class="min-h-[60px] flex flex-col justify-center gap-2.5">
+                    <template x-for="f in [['default','CALC'],['trading','TRADING']]" :key="f[0]">
+                        <div class="flex flex-col gap-1">
+                            <div class="flex items-center justify-between gap-2">
+                                <span class="font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-mute" x-text="f[1]"></span>
+                                <span class="font-mono text-[11px] font-bold tabular-nums text-fg-1"
+                                      x-text="ov.kpis.throughput.fleets?.[f[0]] ? `${fmtInt(ov.kpis.throughput.fleets[f[0]].processing)} / ${fmtInt(ov.kpis.throughput.fleets[f[0]].pending)}` : '—'"></span>
+                            </div>
+                            <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden">
+                                <div class="h-full rounded-chip transition-[width] duration-base"
+                                     :style="`width: ${throughputPct(ov.kpis.throughput.fleets?.[f[0]])}%; background: var(--pnl-up-fg)`"></div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
-                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Orders / min · last hour</span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Processing / pending · per fleet</span>
             </div>
 
             {{-- open positions --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px] relative transition-colors duration-fast">
                 <div class="flex items-center justify-between gap-2">
-                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]">
+                    <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px] whitespace-nowrap">
                         <x-feathericon-layers class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Open positions
                     </span>
                 </div>
@@ -305,14 +306,9 @@
             <div class="card card--flat overflow-hidden">
                 <x-ui.card-head icon="server" title="Worker fleet" :accent="true">
                     <x-slot:right>
-                        <div class="flex items-center gap-3">
-                            <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
-                                  x-text="`${fleetCounts().online} online · ${fleetCounts().stale} stale · ${fleetCounts().missing} missing`"></span>
-                            <button type="button" @click="refresh()" :disabled="loading"
-                                    class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out bg-transparent text-fg-3 hover:bg-hover hover:text-fg-1 h-[30px] px-2.5 text-[12px] disabled:opacity-50">
-                                <x-feathericon-refresh-cw class="w-[13px] h-[13px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>Sync
-                            </button>
-                        </div>
+                        {{-- the header auto-sync drives this card too --}}
+                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
+                              x-text="`${fleetCounts().online} online · ${fleetCounts().stale} stale · ${fleetCounts().missing} missing`"></span>
                     </x-slot:right>
                 </x-ui.card-head>
                 <div class="hidden md:grid grid-cols-[minmax(150px,1.4fr)_104px_1fr_1fr_1fr_64px_minmax(96px,1fr)] items-center gap-4 py-2 px-5 border-b border-line-soft font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
