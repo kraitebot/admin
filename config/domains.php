@@ -7,20 +7,20 @@ declare(strict_types=1);
 | Surface domains
 |--------------------------------------------------------------------------
 |
-| One Laravel project serves two surfaces split by host:
+| One Laravel project serves two surfaces split by route group, both on
+| the admin host:
 |
-|  - admin   → the trader (client) product: dashboard, positions,
-|              projections, BSCS, accounts, billing.
-|  - console → the sysadmin product: system dashboard, users, commands,
-|              step dispatcher, backtesting, billing management, SQL.
+|  - trader  → the client product: dashboard, positions, projections,
+|              BSCS, accounts, billing (routes/web.php).
+|  - sysadmin → `/system/*`: system dashboard, users, commands, step
+|              dispatcher, backtesting, billing management, SQL
+|              (routes/console-web.php, `is_admin`-gated).
 |
-| Both share the UI component library, the Vite bundle, and the user
-| pool (`is_admin` gates the console). Route groups bind to these hosts
-| in routes/web.php and routes/console-web.php.
+| The standalone console.kraite.com app was retired and wiped on
+| 2026-07-09 (deploy-notes Entry 97) — the sysadmin surface lives here.
 |
 */
 
 return [
     'admin' => env('ADMIN_DOMAIN', 'admin.kraite.test'),
-    'console' => env('CONSOLE_DOMAIN', 'console.kraite.test'),
 ];

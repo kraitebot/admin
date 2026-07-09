@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.14.2] — 2026-07-09
+
+### Improvements
+- **Phone-first backtesting.** Verified end-to-end on a real 390px phone viewport with a live ETH run: token picker, filters, timeframe buttons, config editing, run progress, results (grade, KPI tiles, stop-loss coverage tiers, verdict breakdown, rung distribution) and the Approve/Reject buttons all render and operate cleanly by touch, with zero horizontal overflow and zero JS errors.
+- **Form fields no longer trigger iOS auto-zoom.** On phone widths every real form field (inputs, selects, textareas) renders at 16px with a 44px minimum height — Safari zooms the whole page when a focused field is under 16px, and 44px is the Apple tap-target floor. Icon buttons and hidden checkbox proxies are untouched.
+- **Footer shows the real deployed version.** The badge now reads the release version from the changelog instead of a design-mock build string; the placeholder footer links that pointed nowhere are gone until those pages exist.
+
 ## [0.14.1] — 2026-07-09
 
 ### Fixes

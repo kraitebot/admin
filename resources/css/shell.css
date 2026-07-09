@@ -195,3 +195,20 @@ body { background: var(--black); overflow: hidden; }
   line-height: 1.375;
   color: var(--fg-3);
 }
+
+/* ---------------------------------------------------------------------------
+   Mobile form ergonomics (phone-first backtesting).
+   iOS Safari auto-zooms the whole page when a focused field's font-size is
+   under 16px, and Apple's tap-target floor is 44px. Blanket-override real
+   form fields inside the content area on phone widths; sr-only checkbox
+   proxies and icon buttons are deliberately untouched. !important is needed
+   to outrank arbitrary-value utilities (text-[12.5px]) at equal layer.
+--------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  .content input:not([type="checkbox"]):not([type="radio"]):not(.sr-only),
+  .content select,
+  .content textarea {
+    font-size: 16px !important;
+    min-height: 44px;
+  }
+}
