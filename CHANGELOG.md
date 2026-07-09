@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.15.0] — 2026-07-09
+
+### Features
+- **Engine page is real — step-dispatcher performance in five seconds.** The placeholder gave way to a live console with a 10-second auto-sync (only the active tab polls):
+  - **Health strip**: *Total processing* (leaf steps genuinely running right now — orchestrator steps and anything waiting excluded), *Chew rate* (steps/min with a **peak steps/min over the last hour** chip, so a quiet minute next to a strong peak reads "idle", not "sick"), *Backlog* (pending count with a growing/draining trend chip over a 10-minute inflow-vs-outflow window — accumulation is the alarm, not size), *Failures* (non-recovered only: workflow-rescued cases excluded everywhere).
+  - **Calculation / Trading tabs**: per-fleet pivot of step class × all ten states × totals, parent block classes badged, table scrolls inside its own lane on the phone.
+  - **Failures tab**: last 2 weeks across live + archive tables of both fleets, one row per step class with an occurrence count, newest first. *Troubleshoot with AI* analyses the newest occurrence and persists the verdict on it (reopen any time via the Verdict popup); *Resolve* clears every occurrence of the class in one action — from the row or the popup. Backed by step-dispatcher v1.16.1's triage columns.
+- **AI connection `step-triage`** (model swappable via `STEP_TRIAGE_MODEL`; defaults to the dated Haiku id — the undated Sonnet alias bounces off the provider chain).
+
 ## [0.14.4] — 2026-07-09
 
 ### Fixes

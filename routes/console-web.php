@@ -6,6 +6,7 @@ use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsCont
 use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\DashboardController as SystemDashboardController;
+use App\Http\Controllers\System\EngineController;
 use App\Http\Controllers\System\InfraController;
 use App\Http\Controllers\System\LifecycleController;
 use App\Http\Controllers\System\SqlQueryController;
@@ -37,7 +38,16 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     // real page in a later phase. (Dispatch → system.steps and SQL →
     // system.sql-query already have real pages below.)
     Route::view('/positions', 'system.positions')->name('system.positions');
-    Route::view('/engine', 'system.engine')->name('system.engine');
+
+    // Engine — dispatcher performance: health gauges, per-fleet pivots
+    // (reuses system.steps.{prefix}.data), failures triage with AI verdicts.
+    Route::get('/engine', [EngineController::class, 'index'])->name('system.engine');
+    Route::get('/engine/data', [EngineController::class, 'data'])->name('system.engine.data');
+    Route::get('/engine/failures', [EngineController::class, 'failures'])->name('system.engine.failures');
+    Route::post('/engine/failures/troubleshoot', [EngineController::class, 'troubleshoot'])
+        ->middleware('throttle:10,1')
+        ->name('system.engine.troubleshoot');
+    Route::post('/engine/failures/resolve', [EngineController::class, 'resolve'])->name('system.engine.resolve');
     Route::get('/infra', [InfraController::class, 'index'])->name('system.infra');
     Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
     Route::view('/revenue', 'system.revenue')->name('system.revenue');

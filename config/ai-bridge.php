@@ -19,6 +19,12 @@ return [
             // "read structured numbers, return structured suggestions" well.
             // Swap via BACKTEST_INSIGHTS_MODEL env without touching code.
             'backtest-insights' => env('BACKTEST_INSIGHTS_MODEL', 'anthropic:claude-haiku-4-5-20251001'),
+
+            // Failed-step triage verdicts (Engine page). Haiku's dated id is
+            // the one proven through this provider chain (the undated sonnet
+            // alias bounces off it as a provider error). Swap via
+            // STEP_TRIAGE_MODEL without touching code.
+            'step-triage' => env('STEP_TRIAGE_MODEL', 'anthropic:claude-haiku-4-5-20251001'),
         ],
         'fallbacks' => [],
         'default' => env('AI_BRIDGE_DEFAULT', 'anthropic:claude-haiku-4-5-20251001'),
