@@ -79,21 +79,48 @@
 
 {{-- Phone nav drawer (≤640px). Opened by the top-bar hamburger via
      $store.rail.drawerOpen; closes on backdrop tap, Escape, or any
-     navigation (railGo). Rows are 48px — comfortably tappable. --}}
-<div x-data x-show="$store.rail.drawerOpen" x-cloak
+     navigation (railGo).
+
+     Animation anatomy — the wrapper stays mounted (a parent x-show would
+     cut the children's leave transitions dead), so it click-blocks only
+     while open via the pointer-events binding. Backdrop fades; the panel
+     slides on the app's signature curve (same cubic-bezier as the rail
+     pill) — brisk in, faster out. Items cascade in with a slight stagger
+     (drawer-item-in keyframes, per-row delay). --}}
+<div x-data
      @keydown.escape.window="$store.rail.drawerOpen = false"
+     {{-- pointer-events via :style, not classes — a static utility class
+          can't be stripped by a class binding, and two competing
+          pointer-events utilities resolve by stylesheet order, not intent. --}}
+     style="pointer-events: none"
+     :style="$store.rail.drawerOpen ? 'pointer-events: auto' : 'pointer-events: none'"
      class="fixed inset-0 z-[80] min-[641px]:hidden">
-    <div class="absolute inset-0 bg-black/60" @click="$store.rail.drawerOpen = false"></div>
-    <aside class="absolute inset-y-0 left-0 w-[270px] max-w-[80vw] bg-[#07090b] border-r border-ink-3 flex flex-col pt-4 pb-6 overflow-y-auto"
-           x-transition:enter="transition-transform duration-200 ease-out"
+    <div x-show="$store.rail.drawerOpen" x-cloak
+         x-transition:enter="transition-opacity duration-[260ms] ease-out"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="transition-opacity duration-[190ms] ease-in"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         @click="$store.rail.drawerOpen = false"
+         @touchmove.prevent
+         class="absolute inset-0 bg-black/60 backdrop-blur-[2px]"></div>
+    <aside x-show="$store.rail.drawerOpen" x-cloak
+           x-transition:enter="transition-transform duration-[300ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
            x-transition:enter-start="-translate-x-full"
            x-transition:enter-end="translate-x-0"
-           x-transition:leave="transition-transform duration-150 ease-in"
+           x-transition:leave="transition-transform duration-[210ms] ease-[cubic-bezier(0.55,0,0.85,0.36)]"
            x-transition:leave-start="translate-x-0"
-           x-transition:leave-end="-translate-x-full">
+           x-transition:leave-end="-translate-x-full"
+           class="absolute inset-y-0 left-0 w-[270px] max-w-[80vw] bg-[#07090b] border-r border-ink-3 shadow-3 flex flex-col pt-4 overflow-y-auto overscroll-contain will-change-transform
+                  pb-[calc(env(safe-area-inset-bottom)+24px)]">
         <div class="flex items-center gap-3 px-5 mb-4">
             <img src="{{ asset('svg/snake-green.svg') }}" alt="Kraite" class="block w-[26px] h-[26px]"/>
             <span class="font-sans font-bold text-[15px] tracking-[-0.01em] text-ink-9">Kraite</span>
+            @if($console)
+                <span class="font-mono text-[9px] font-bold tracking-[0.12em] uppercase py-[2px] px-1.5 rounded-chip text-accent"
+                      style="background: color-mix(in srgb, var(--accent) 16%, transparent)">Sysadmin</span>
+            @endif
         </div>
         <div class="flex flex-col gap-1 px-3">
             @foreach($items as $item)
@@ -102,6 +129,7 @@
                    wire:navigate
                    wire:current.ignore
                    @click="window.railGo('{{ $item['id'] }}', null)"
+                   x-bind:style="$store.rail.drawerOpen && 'animation: drawer-item-in 240ms cubic-bezier(0.16,1,0.3,1) both; animation-delay: {{ 40 + $loop->index * 22 }}ms'"
                    :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'bg-accent text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
                    class="flex items-center gap-3.5 h-12 px-4 rounded-control font-mono text-[12px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
                     <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[20px] h-[20px] flex-shrink-0" stroke-width="1.75"/>

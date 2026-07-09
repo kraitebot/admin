@@ -216,3 +216,11 @@ body { background: var(--black); overflow: hidden; }
 /* Alpine x-cloak — global, so drawer/nav markup never flashes pre-init.
    (Pages that carried their own copy keep working; this is the canonical one.) */
 [x-cloak] { display: none !important; }
+
+/* Phone drawer item cascade — each row slips in from the left with a small
+   per-row delay (set inline per item). `both` fill keeps rows invisible
+   until their delay elapses, so the cascade reads as one motion. */
+@keyframes drawer-item-in {
+  from { opacity: 0; transform: translateX(-10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}

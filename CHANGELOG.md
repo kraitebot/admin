@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.14.4] — 2026-07-09
+
+### Fixes
+- **The phone drawer actually animates now.** v0.14.3's transition directives sat on an element without its own show-toggle, so the drawer popped in and out instantly. The panel now slides in on the app's signature easing curve (300ms in, a snappier 210ms out), the backdrop fades with a subtle blur, and the menu rows cascade in with a 22ms stagger. Detail fixes along the way: the overlay no longer swallows or leaks taps (backdrop-tap close works, taps pass through when closed), the panel casts a proper edge shadow, background content can't rubber-band while the drawer is open, and the drawer bottom respects the iPhone home-indicator safe area.
+
 ## [0.14.3] — 2026-07-09
 
 ### Improvements
