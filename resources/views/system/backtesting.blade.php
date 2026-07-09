@@ -452,15 +452,17 @@
                     this.reviews[s.id] = data.backtesting_review_status;
                 });
                 this.flashToast(approve ? 'Approved — config live' : 'Rejected — no config pushed', approve ? 'ok' : 'reject');
+                // The decision buttons live at the bottom — jump the viewport
+                // back up on EVERY decision (not only when auto-advance moves).
+                // Instant, not smooth: Safari aborts a smooth animation when
+                // the results grid collapses for the next run, stranding the
+                // viewport mid-page. `.content` is the app layout's scroll
+                // container (the window never scrolls).
+                (this.$root.closest('.content') || window).scrollTo({ top: 0 });
                 // Advance landed on a fresh token (config already reset by
                 // selectToken) → fire its backtest immediately, so the review
                 // loop is decide → results appear → decide, hands-free.
                 if (this.advanceToNextToken(decidedToken)) {
-                    // The decision buttons live at the bottom — bring the
-                    // viewport back up so the next token's header and run
-                    // progress are in view. `.content` is the app layout's
-                    // scroll container (the window never scrolls).
-                    (this.$root.closest('.content') || window).scrollTo({ top: 0, behavior: 'smooth' });
                     await this.doRun();
                 }
             },
@@ -816,7 +818,9 @@
                                 {{-- fixed envelope --}}
                                 <div class="flex flex-col gap-2 pt-3 border-t border-line-soft">
                                     <span class="ui-eyebrow mb-0.5">Fixed envelope</span>
-                                    @foreach(['Margin' => '5,000', 'Leverage' => '20×', 'Limit orders' => '4', 'Multipliers' => '[2,2,2,2]'] as $k => $v)
+                                    {{-- Leverage deliberately not shown: live leverage is the
+                                         account's per-direction setting, not the sim's envelope. --}}
+                                    @foreach(['Margin' => '5,000', 'Limit orders' => '4', 'Multipliers' => '[2,2,2,2]'] as $k => $v)
                                         <div class="flex items-center justify-between gap-3 py-[7px] border-b border-line-soft last:border-b-0">
                                             <span class="font-mono text-[10px] font-semibold tracking-[0.08em] uppercase text-fg-mute">{{ $k }}</span>
                                             <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-2">{{ $v }}</span>

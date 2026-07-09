@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.14.1] — 2026-07-09
+
+### Fixes
+- **Backtesting: deciding really scrolls back to the top now.** The v0.13.2 scroll was a smooth animation fired as the next token's auto-run collapsed the results grid — Safari aborts smooth scrolling when the page reshapes mid-flight, stranding the viewport mid-page — and it only fired when auto-advance actually moved, so deciding the last token never scrolled at all. Now it's an instant jump on every approve/reject.
+
+### Improvements
+- **Fleet-overview KPI tiles align side by side.** All five tiles share one skeleton: header on top, the big value centered in a fixed band matching the dispatcher gauge's height, sub-label pinned to the tile's bottom edge. The throughput sparkline moved beside its number so it no longer pushes that tile's label out of line.
+- **Backtesting config panel no longer shows the sim's 20× leverage.** Live leverage is the account's per-direction setting (capped by exchange brackets and the regime ramp) — the fixed envelope figure only ever applied to the simulation's sizing and read as if it would be pushed live on approval.
+
 ## [0.14.0] — 2026-07-07
 
 ### Features

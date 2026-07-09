@@ -217,10 +217,10 @@
                               x-text="fmtDelta(ov.kpis.traders.delta_pct)"></span>
                     </template>
                 </div>
-                <div class="flex items-end justify-between gap-3">
+                <div class="min-h-[60px] flex items-center justify-between gap-3">
                     <span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none" x-text="fmtInt(ov.kpis.traders.count)"></span>
                 </div>
-                <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`24H · +${ov.kpis.traders.signups_24h} SIGNUPS`"></span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`24H · +${ov.kpis.traders.signups_24h} SIGNUPS`"></span>
             </div>
 
             {{-- step dispatcher --}}
@@ -230,7 +230,7 @@
                         <x-feathericon-git-branch class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Step dispatcher
                     </span>
                 </div>
-                <div class="flex items-end justify-between gap-3">
+                <div class="min-h-[60px] flex items-center justify-between gap-3">
                     <div class="relative inline-flex items-center justify-center flex-shrink-0" style="width: 60px; height: 60px">
                         <svg width="60" height="60" class="-rotate-90">
                             <circle cx="30" cy="30" r="27" fill="none" stroke="var(--border)" stroke-width="6"/>
@@ -246,7 +246,7 @@
                         </span>
                     </div>
                 </div>
-                <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`DISPATCH · ${fmtInt(ov.kpis.dispatcher.per_min)} STEPS/MIN`"></span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`DISPATCH · ${fmtInt(ov.kpis.dispatcher.per_min)} STEPS/MIN`"></span>
             </div>
 
             {{-- capital under mgmt --}}
@@ -261,10 +261,10 @@
                               x-text="fmtDelta(ov.kpis.capital.delta_pct)"></span>
                     </template>
                 </div>
-                <div class="flex items-end justify-between gap-3">
+                <div class="min-h-[60px] flex items-center justify-between gap-3">
                     <span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none" x-text="fmtMoney(ov.kpis.capital.aum)"></span>
                 </div>
-                <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`AUM · ${ov.kpis.capital.accounts} ACCOUNT${ov.kpis.capital.accounts === 1 ? '' : 'S'}`"></span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute" x-text="`AUM · ${ov.kpis.capital.accounts} ACCOUNT${ov.kpis.capital.accounts === 1 ? '' : 'S'}`"></span>
             </div>
 
             {{-- engine throughput --}}
@@ -274,15 +274,15 @@
                         <x-feathericon-activity class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Engine throughput
                     </span>
                 </div>
-                <div class="flex items-end justify-between gap-3">
+                <div class="min-h-[60px] flex items-center justify-between gap-3">
                     <span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none" x-text="fmtInt(ov.kpis.orders.per_min)"></span>
+                    <div class="w-[100px] h-[26px] flex-shrink-0 self-center">
+                        <svg viewBox="0 0 100 26" preserveAspectRatio="none" class="w-full h-full">
+                            <path :d="sparkPath(ov.kpis.orders.spark, 100, 26)" fill="none" stroke="var(--pnl-up-fg)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+                        </svg>
+                    </div>
                 </div>
-                <div class="h-[26px] -mb-1">
-                    <svg viewBox="0 0 100 26" preserveAspectRatio="none" class="w-full h-full">
-                        <path :d="sparkPath(ov.kpis.orders.spark, 100, 26)" fill="none" stroke="var(--pnl-up-fg)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
-                    </svg>
-                </div>
-                <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Orders / min · last hour</span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Orders / min · last hour</span>
             </div>
 
             {{-- open positions --}}
@@ -292,10 +292,10 @@
                         <x-feathericon-layers class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Open positions
                     </span>
                 </div>
-                <div class="flex items-end justify-between gap-3">
+                <div class="min-h-[60px] flex items-center justify-between gap-3">
                     <span class="font-mono text-[26px] font-bold tabular-nums tracking-[-0.01em] text-fg-1 leading-none" x-text="fmtInt(ov.kpis.open_positions)"></span>
                 </div>
-                <span class="font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Platform-wide</span>
+                <span class="mt-auto font-mono text-[9.5px] tracking-[0.08em] uppercase text-fg-mute">Platform-wide</span>
             </div>
         </div>
 
