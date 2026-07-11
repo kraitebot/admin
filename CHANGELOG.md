@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.0] — 2026-07-11
+
+### Added
+- **Positions page** (`/system/positions`): dedicated live-positions console — dedicated controller replacing the dashboard-embedded view, per-position drill-down with order ladder, TP/SL state and drift verdicts. Feature test suite included (`SystemPositionsTest`).
+
 ## [0.15.2] — 2026-07-09
 
 ### Improvements

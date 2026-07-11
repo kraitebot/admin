@@ -214,11 +214,15 @@ class DashboardController extends Controller
         $aum = $this->balanceSumAt(null);
         $dayAgo = $this->balanceSumAt('DATE_SUB(NOW(), INTERVAL 24 HOUR)');
 
+        $deltaPct = ($dayAgo !== null && $dayAgo > 0 && $aum !== null)
+            ? round((($aum - $dayAgo) / $dayAgo) * 100, 1)
+            : null;
+
         return [
             'aum' => $aum,
-            'delta_pct' => ($dayAgo !== null && $dayAgo > 0 && $aum !== null)
-                ? round((($aum - $dayAgo) / $dayAgo) * 100, 1)
-                : null,
+            // A flat day renders no badge rather than a noisy "+0.0%" —
+            // same convention as the traders tile.
+            'delta_pct' => $deltaPct === 0.0 ? null : $deltaPct,
             'accounts' => (int) DB::table('accounts')
                 ->where('is_active', true)
                 ->whereNull('deleted_at')

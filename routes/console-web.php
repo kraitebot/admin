@@ -9,6 +9,7 @@ use App\Http\Controllers\System\DashboardController as SystemDashboardController
 use App\Http\Controllers\System\EngineController;
 use App\Http\Controllers\System\InfraController;
 use App\Http\Controllers\System\LifecycleController;
+use App\Http\Controllers\System\PositionsController as SystemPositionsController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
@@ -37,7 +38,12 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     // placeholders keep the design's nav fully navigable; each gets its
     // real page in a later phase. (Dispatch → system.steps and SQL →
     // system.sql-query already have real pages below.)
-    Route::view('/positions', 'system.positions')->name('system.positions');
+    // Positions — fleet-wide per-account position picture. Collapsed
+    // account rows poll globally; each expanded account fetches its own
+    // longs/shorts on demand (sync scoped to what's visible).
+    Route::get('/positions', [SystemPositionsController::class, 'index'])->name('system.positions');
+    Route::get('/positions/data', [SystemPositionsController::class, 'data'])->name('system.positions.data');
+    Route::get('/positions/{account}/positions', [SystemPositionsController::class, 'positions'])->name('system.positions.account');
 
     // Engine — dispatcher performance: health gauges, per-fleet pivots
     // (reuses system.steps.{prefix}.data), failures triage with AI verdicts.
