@@ -8,6 +8,7 @@
             accounts: initial.accounts,
             expanded: {},                       // account id -> { tab, data, loading }
             loading: false,
+            lastSync: null,                     // wall-clock proof the tick landed
             _timer: null,
 
             init() {
@@ -20,13 +21,17 @@
                 if (this.loading) return;
                 this.loading = true;
                 try {
-                    const jobs = [hubUiFetch(urls.data).then((res) => {
+                    // 8s cap per request: one stalled response must never
+                    // wedge `loading` and silently kill every future tick.
+                    const opts = { signal: AbortSignal.timeout(8000) };
+                    const jobs = [hubUiFetch(urls.data, opts).then((res) => {
                         if (res.ok) this.accounts = res.data.accounts;
                     })];
                     for (const id of Object.keys(this.expanded)) {
-                        jobs.push(this.loadAccount(id));
+                        jobs.push(this.loadAccount(id, opts));
                     }
                     await Promise.all(jobs);
+                    this.lastSync = new Date().toLocaleTimeString('en-GB');
                 } finally {
                     setTimeout(() => { this.loading = false; }, 450);
                 }
@@ -40,10 +45,10 @@
                 this.expanded[acc.id] = { tab: 'shorts', data: null, loading: true };
                 this.loadAccount(acc.id);
             },
-            async loadAccount(id) {
+            async loadAccount(id, opts = {}) {
                 const slot = this.expanded[id];
                 if (!slot) return;
-                const res = await hubUiFetch(urls.account.replace('__ID__', id));
+                const res = await hubUiFetch(urls.account.replace('__ID__', id), opts);
                 if (this.expanded[id] && res.ok) {
                     this.expanded[id].data = res.data;
                     this.expanded[id].loading = false;
@@ -100,7 +105,7 @@
             </div>
             <div class="inline-flex items-center gap-[7px] rounded-control border border-line whitespace-nowrap h-[36px] px-3.5 text-[13px] font-sans font-semibold text-fg-3 flex-shrink-0 cursor-default select-none">
                 <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>
-                <span>Auto-sync · 10s</span>
+                <span x-text="lastSync ? `Auto-sync · ${lastSync}` : 'Auto-sync · 10s'">Auto-sync · 10s</span>
             </div>
         </div>
 

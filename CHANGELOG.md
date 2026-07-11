@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.6] — 2026-07-11
+
+### Fixes
+- **Auto-sync can no longer silently die.** Every 10-second refresh (account ribbon + whatever's expanded) now caps each request at 8 seconds — before, a single stalled response wedged the refresh loop permanently and the page froze on old numbers with no sign anything was wrong. The Auto-sync badge now shows the wall-clock time of the last completed refresh, so it's always visible that the numbers on screen are fresh even when the values themselves barely move between ticks. Sync scope unchanged: collapsed accounts refresh only the ribbon; expanded accounts also refresh their tiles.
+
 ## [0.16.5] — 2026-07-11
 
 ### Fixes
