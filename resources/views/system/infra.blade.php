@@ -26,9 +26,12 @@
                 if (this.loading) return;
                 this.loading = true;
                 try {
+                    // 8s cap per request: one stalled response must never
+                    // wedge `loading` and silently kill every future tick.
+                    const signal = AbortSignal.timeout(8000);
                     const [dataRes, healthRes] = await Promise.allSettled([
-                        fetch(dataUrl, { headers: { Accept: 'application/json' } }),
-                        fetch(healthUrl, { headers: { Accept: 'application/json' } }),
+                        fetch(dataUrl, { headers: { Accept: 'application/json' }, signal }),
+                        fetch(healthUrl, { headers: { Accept: 'application/json' }, signal }),
                     ]);
                     if (dataRes.status === 'fulfilled' && dataRes.value.ok) {
                         const d = await dataRes.value.json();
@@ -61,7 +64,9 @@
             },
             ageHuman(s) {
                 if (s === null || s === undefined) return '—';
-                return s < 60 ? s + 's' : Math.floor(s / 60) + 'm';
+                if (s < 60) return s + 's';
+                if (s < 3600) return Math.floor(s / 60) + 'm';
+                return Math.floor(s / 3600) + 'h';
             },
             unitList(units) {
                 return Object.entries(units || {}).map(([name, state]) => ({ name, state }));
@@ -84,17 +89,12 @@
                 if (!s || !s.hdd_total_gb) return null;
                 return Math.round((s.hdd_used_gb / s.hdd_total_gb) * 100);
             },
-            tickAgo(iso) {
-                if (!iso) return '—';
-                const secs = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 1000));
-                if (secs < 60) return secs + 's ago';
-                if (secs < 3600) return Math.floor(secs / 60) + 'm ago';
-                return Math.floor(secs / 3600) + 'h ago';
-            },
         });
     </script>
 
-    <div x-data="infraPage(@js(route('system.dashboard.data')), @js(route('system.dashboard.health')))" x-init="init()">
+    {{-- no x-init: Alpine auto-runs the component's init(); a second call
+         would stack a duplicate 15s poll timer and leak the first one --}}
+    <div x-data="infraPage(@js(route('system.dashboard.data')), @js(route('system.dashboard.health')))">
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
             <div>
@@ -219,7 +219,7 @@
                     <div class="flex items-center justify-between gap-3 py-3 border-t border-line-soft">
                         <span class="flex items-center gap-2.5 text-[12.5px] text-fg-3"><x-feathericon-git-branch class="w-3.5 h-3.5 text-fg-mute" stroke-width="1.75"/>Step dispatcher</span>
                         <span class="flex items-center gap-2.5">
-                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em]" x-text="control?.step_dispatcher?.last_tick ? 'tick ' + tickAgo(control.step_dispatcher.last_tick) : 'no tick'"></span>
+                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em]" x-text="control?.step_dispatcher?.last_tick_age_seconds != null ? 'tick ' + ageHuman(control.step_dispatcher.last_tick_age_seconds) + ' ago' : 'no tick'"></span>
                             <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" :style="`color: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`">
                                 <span class="w-[6px] h-[6px] rounded-chip" :class="control?.step_dispatcher?.running && 'animate-pulse'" :style="`background: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
                                 <span x-text="control?.step_dispatcher?.running ? 'Running' : 'Stalled'"></span>

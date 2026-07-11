@@ -549,10 +549,22 @@ class DashboardController extends Controller
      */
     public function health(): JsonResponse
     {
+        // Each section degrades independently (same policy as data()):
+        // a missing table on one probe must not blank the whole panel.
         return response()->json([
-            'server' => $this->serverMetrics(),
-            'step_dispatcher' => $this->stepDispatcherSummary(),
-            'slow_queries' => $this->slowQueries(),
+            'server' => $this->section(fn (): array => $this->serverMetrics(), [
+                'hostname' => null,
+                'cpu_percent' => null,
+                'ram_used_mb' => null,
+                'ram_total_mb' => null,
+                'hdd_used_gb' => null,
+                'hdd_total_gb' => null,
+            ]),
+            'step_dispatcher' => $this->section(fn (): array => $this->stepDispatcherSummary(), [
+                'running' => false,
+                'last_tick_age_seconds' => null,
+            ]),
+            'slow_queries' => $this->section(fn (): array => $this->slowQueries(), ['last_hour_count' => 0]),
         ]);
     }
 
@@ -623,77 +635,53 @@ class DashboardController extends Controller
         return $count > 0 ? $count : null;
     }
 
+    /**
+     * Dispatcher pulse across BOTH step fleets — calculation
+     * (`steps_dispatcher`) and trading (`trading_steps_dispatcher`).
+     * Running only when EVERY fleet ticked inside the last 2 minutes; a
+     * green pulse with the trading fleet stalled would be the most
+     * expensive kind of false comfort.
+     *
+     * Both the running check and the tick age are computed at the DB
+     * level against MySQL's NOW(): ingestion writes last_tick_completed
+     * in its own app timezone, so any PHP- or browser-side diff drifts
+     * by the timezone delta.
+     *
+     * @return array{running: bool, last_tick_age_seconds: int|null}
+     */
     private function stepDispatcherSummary(): array
     {
-        $dispatchers = DB::table('steps_dispatcher')->get();
+        $running = true;
+        $ages = [];
 
-        // Admin runs in UTC while ingestion writes last_tick_completed in
-        // its app timezone, so a PHP-side diff drifts by the timezone delta.
-        // Compare at the DB level using MySQL's NOW() to stay in the same
-        // frame as the writer.
-        $running = DB::table('steps_dispatcher')
-            ->where('can_dispatch', true)
-            ->whereNotNull('last_tick_completed')
-            ->whereRaw('last_tick_completed >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)')
-            ->exists();
+        foreach (['steps_dispatcher', 'trading_steps_dispatcher'] as $table) {
+            $running = $running && DB::table($table)
+                ->where('can_dispatch', true)
+                ->whereNotNull('last_tick_completed')
+                ->whereRaw('last_tick_completed >= DATE_SUB(NOW(), INTERVAL 2 MINUTE)')
+                ->exists();
 
-        $total = (int) DB::table('steps')->count();
+            $age = DB::table($table)
+                ->selectRaw('GREATEST(TIMESTAMPDIFF(SECOND, MAX(last_tick_completed), NOW()), 0) as age')
+                ->value('age');
 
-        // Cached per-(class,state) aggregate. `GROUP BY class, state` matches
-        // the existing index prefix exactly so it loose-index-scans instead
-        // of falling into a temp-table aggregation. Heartbeat is observability,
-        // not real-time — 30s of staleness is fine and the cache absorbs the
-        // 5s poll cadence into ~2 DB hits per minute.
-        $byState = Cache::remember('system.dashboard.health.by-state', 30, static function () {
-            $parentClasses = array_flip(DB::table('steps')
-                ->whereNotNull('child_block_uuid')
-                ->distinct()
-                ->pluck('class')
-                ->all());
-
-            $rows = DB::table('steps')
-                ->select('class', 'state', DB::raw('COUNT(*) as total'))
-                ->groupBy('class', 'state')
-                ->get();
-
-            $totals = [];
-            foreach ($rows as $row) {
-                if (isset($parentClasses[$row->class])) {
-                    continue;
-                }
-                $stateName = class_basename($row->state);
-                $totals[$stateName] = ($totals[$stateName] ?? 0) + (int) $row->total;
+            if ($age !== null) {
+                $ages[] = (int) $age;
             }
-
-            return $totals;
-        });
-
-        $lastTick = $dispatchers->max('last_tick_completed');
+        }
 
         return [
             'running' => $running,
-            'total' => $total,
-            'by_state' => $byState,
-            'last_tick' => $lastTick,
+            'last_tick_age_seconds' => $ages === [] ? null : min($ages),
         ];
     }
 
     private function slowQueries(): array
     {
-        $lastHourCount = DB::table('slow_queries')
-            ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)')
-            ->count();
-
-        $recent = DB::table('slow_queries')
-            ->select('id', 'time_ms', 'sql', 'connection', 'created_at')
-            ->orderByDesc('created_at')
-            ->limit(10)
-            ->get()
-            ->toArray();
-
         return [
-            'last_hour_count' => $lastHourCount,
-            'recent' => $recent,
+            'last_hour_count' => DB::table('slow_queries')
+                ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)')
+                ->count(),
         ];
     }
 }

@@ -66,6 +66,21 @@ it('renders the infra workspace for admins with the live feeds wired', function 
     $response->assertSee('dashboard\/health', false);
 });
 
+it('serves the control-plane health feed with sections degrading independently', function (): void {
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    // SQLite has neither the dispatcher tables nor slow_queries, and can't
+    // parse the MySQL date functions — every DB-backed section must fall
+    // back to its honest default instead of 500-ing the whole payload.
+    $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/dashboard/health')
+        ->assertSuccessful()
+        ->assertJsonPath('step_dispatcher.running', false)
+        ->assertJsonPath('step_dispatcher.last_tick_age_seconds', null)
+        ->assertJsonPath('slow_queries.last_hour_count', 0)
+        ->assertJsonStructure(['server' => ['hostname', 'cpu_percent', 'ram_used_mb', 'ram_total_mb', 'hdd_used_gb', 'hdd_total_gb']]);
+});
+
 it('server-renders only the real apiable-host egress IPs from the fleet roster', function (): void {
     $admin = User::factory()->create(['is_admin' => true]);
 

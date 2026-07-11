@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.8] — 2026-07-11
+
+### Fixes
+- **Infra page second pass — four bugs found and fixed ahead of testing.**
+  - The page was starting its refresh loop twice, stacking duplicate 15-second polls (and the extra timer survived leaving the page). One loop now.
+  - A single stalled response could freeze the refresh loop permanently, leaving stale vitals with no visible sign — every request is now capped at 8 seconds, same guard as the positions page.
+  - "Step dispatcher: tick Xs ago" was computed in the browser's clock against a server timestamp written in another timezone — off by the timezone gap (an hour in summer). The age now comes computed from the database's own clock.
+  - The dispatcher pulse only watched the calculation fleet — the trading fleet could stall while the panel stayed green. Running now means BOTH fleets ticked in the last 2 minutes.
+- **Control-plane feed hardened**: each section (host vitals / dispatcher pulse / slow queries) degrades to an honest empty value on failure instead of blanking the whole panel; the slow-query feed no longer ships raw SQL text to the browser it never displayed.
+
 ## [0.16.7] — 2026-07-11
 
 ### Improvements
