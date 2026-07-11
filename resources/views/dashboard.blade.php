@@ -273,10 +273,10 @@
                     <span x-text="bandMeta().label"></span><span class="opacity-70 ml-0.5" x-text="scoreDisplay()"></span>
                 </span>
                 <div class="w-px h-[22px] bg-line"></div>
-                <button type="button" @click="refresh()"
-                        class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover">
-                    <span class="inline-flex" :class="spinning ? 'animate-spin' : ''"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/></span>Sync
-                </button>
+                {{-- passive indicator — the page self-syncs every 10s; the icon spins while a refresh is in flight --}}
+                <div class="inline-flex items-center gap-[7px] rounded-control border border-line whitespace-nowrap h-[34px] px-3 text-[12px] font-sans font-semibold text-fg-3 cursor-default select-none">
+                    <span class="inline-flex" :class="spinning ? 'animate-spin' : ''"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/></span>Auto-sync · 10s
+                </div>
                 <a href="{{ route('projections') }}" wire:navigate
                    class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[34px] px-3 text-[12px] border-transparent bg-accent text-accent-on hover:bg-accent-hover no-underline">
                     <x-feathericon-trending-up class="w-[15px] h-[15px]" stroke-width="1.75"/>View projections

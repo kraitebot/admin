@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.11] — 2026-07-11
+
+### Improvements
+- **Trader dashboard Sync button became the passive "Auto-sync · 10s" indicator** — the page already refreshed itself every 10 seconds; the icon spins while a refresh is in flight, same pattern as the rest of the panel.
+
 ## [0.16.10] — 2026-07-11
 
 ### Fixes
