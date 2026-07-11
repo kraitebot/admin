@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.9] — 2026-07-11
+
+### Improvements
+- **Infra page redesigned around one tile per server.** The three separate cards (egress allowlist / control plane / node reachability) merged into a single fleet grid — each box gets a tile with hostname + role, reachability status, its IP with an Allowlisted mark and copy button (API-calling hosts only), CPU / memory / disk bars, supervisor service dots with hover detail, uptime and last heartbeat age. "Copy egress IPs" sits on the card head for the exchange-side allowlist. The two platform-wide signals that aren't per-server — dispatcher pulse (both fleets) and slow queries — moved to a slim strip above the grid.
+
 ## [0.16.8] — 2026-07-11
 
 ### Fixes

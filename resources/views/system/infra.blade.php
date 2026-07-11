@@ -1,18 +1,20 @@
 <x-app-layout active="infra" :title="'Kraite — Infrastructure'">
     <script>
         // Infra page — SERVER layer only (exchange connectivity lives on its own
-        // page). Two live feeds, both already built:
-        //   • system.dashboard.data  → the fleet roster (kraite.fleet.servers ⋈
-        //     Redis heartbeat), here rendered as a reachability/heartbeat lens —
-        //     the full per-host vitals card stays on the Overview page.
-        //   • system.dashboard.health → the console host's own vitals + the
-        //     step-dispatcher pulse + slow-query count (the "control plane").
-        window.infraPage = (dataUrl, healthUrl) => ({
+        // page). One tile per server merging what used to be three cards:
+        // reachability + vitals (kraite.fleet heartbeat via system.dashboard.data)
+        // and the egress-IP allowlist (server-rendered apiable roster, passed in
+        // as `egress` = { hostname: ip }). The dispatcher pulse + slow queries
+        // (system.dashboard.health) are platform-wide, not per-server, so they
+        // live in a slim strip above the tiles.
+        window.infraPage = (dataUrl, healthUrl, egress) => ({
             fleet: [],
             control: null,
             loaded: false,
             loadedHealth: false,
             loading: false,
+            copied: null,
+            copiedAll: false,
             _timer: null,
 
             init() {
@@ -47,7 +49,7 @@
                 }
             },
 
-            // ---- fleet (reachability lens) ----
+            // ---- fleet ----
             counts() {
                 const c = { online: 0, stale: 0, missing: 0 };
                 this.fleet.forEach((f) => { c[f.status] = (c[f.status] || 0) + 1; });
@@ -68,33 +70,45 @@
                 if (s < 3600) return Math.floor(s / 60) + 'm';
                 return Math.floor(s / 3600) + 'h';
             },
+            uptimeHuman(s) {
+                if (s === null || s === undefined) return '—';
+                if (s < 3600) return Math.floor(s / 60) + 'm';
+                if (s < 86400) return Math.floor(s / 3600) + 'h';
+                return Math.floor(s / 86400) + 'd';
+            },
             unitList(units) {
                 return Object.entries(units || {}).map(([name, state]) => ({ name, state }));
             },
             unitOk(state) {
                 return state === 'RUNNING';
             },
-
-            // ---- control plane (console host) ----
             barColor(pct) {
                 return pct >= 90 ? 'var(--danger)' : (pct >= 75 ? 'var(--warn)' : 'var(--pnl-up-fg)');
             },
-            ramPct() {
-                const s = this.control?.server;
-                if (!s || !s.ram_total_mb) return null;
-                return Math.round((s.ram_used_mb / s.ram_total_mb) * 100);
+
+            // ---- egress allowlist (server-rendered apiable roster) ----
+            isAllowlisted(node) {
+                return Object.prototype.hasOwnProperty.call(egress, node.hostname);
             },
-            diskPct() {
-                const s = this.control?.server;
-                if (!s || !s.hdd_total_gb) return null;
-                return Math.round((s.hdd_used_gb / s.hdd_total_gb) * 100);
+            egressCount() {
+                return Object.keys(egress).length;
+            },
+            copyIp(node) {
+                navigator.clipboard?.writeText(node.ip_address ?? '');
+                this.copied = node.hostname;
+                setTimeout(() => { this.copied = null; }, 1400);
+            },
+            copyAllEgress() {
+                navigator.clipboard?.writeText(Object.values(egress).join('\n'));
+                this.copiedAll = true;
+                setTimeout(() => { this.copiedAll = false; }, 1400);
             },
         });
     </script>
 
     {{-- no x-init: Alpine auto-runs the component's init(); a second call
          would stack a duplicate 15s poll timer and leak the first one --}}
-    <div x-data="infraPage(@js(route('system.dashboard.data')), @js(route('system.dashboard.health')))">
+    <div x-data="infraPage(@js(route('system.dashboard.data')), @js(route('system.dashboard.health')), @js(collect($egressIps)->pluck('ip', 'id')))">
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
             <div>
@@ -102,7 +116,7 @@
                     <x-feathericon-server class="w-[13px] h-[13px]" stroke-width="1.75"/>INFRASTRUCTURE
                 </div>
                 <h1 class="font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leading-[1.1] max-[640px]:text-[24px]">Infrastructure</h1>
-                <div class="text-[13px] text-fg-3 mt-1.5">The server layer beneath the fleet — egress-IP allowlist, node reachability, and the console control plane.</div>
+                <div class="text-[13px] text-fg-3 mt-1.5">Every server in the fleet — health, vitals, services and its egress IP, one tile per box.</div>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0">
                 <button type="button" @click="refresh()" :disabled="loading"
@@ -113,7 +127,7 @@
         </div>
 
         {{-- ===================== KPI STRIP ===================== --}}
-        <div class="grid grid-cols-4 gap-3 mb-6 max-[760px]:grid-cols-2">
+        <div class="grid grid-cols-4 gap-3 mb-5 max-[760px]:grid-cols-2">
             {{-- nodes monitored --}}
             <div class="tile kpi-invert overflow-hidden bg-surface border border-line rounded-control py-[13px] px-[15px] flex flex-col gap-[9px]">
                 <span class="font-mono text-[10px] font-semibold tracking-[0.1em] uppercase text-fg-mute flex items-center gap-[7px]"><x-feathericon-server class="w-3.5 h-3.5 text-fg-3" stroke-width="1.75"/>Fleet nodes</span>
@@ -136,163 +150,118 @@
             <x-ui.stat-tile icon="shield" label="Egress IPs" value="{{ count($egressIps) }}" sub="ALLOWLISTED"/>
         </div>
 
-        {{-- ===================== EGRESS IPs + CONTROL PLANE ===================== --}}
-        <div class="grid grid-cols-[1.2fr_1fr] gap-5 mb-5 max-[900px]:grid-cols-1">
-            {{-- egress IP allowlist — REAL (kraite.fleet.servers apiable hosts) --}}
-            <div class="card card--flat overflow-hidden" x-data="{ copiedAll: false, copied: null }">
-                <x-ui.card-head icon="shield" title="Egress IP allowlist" :accent="true">
-                    <x-slot:right>
-                        <button type="button"
-                                @click="navigator.clipboard?.writeText(@js(collect($egressIps)->pluck('ip')->implode("\n"))); copiedAll = true; setTimeout(() => copiedAll = false, 1400)"
+        {{-- ===================== PLATFORM PULSE STRIP ===================== --}}
+        {{-- not per-server signals: dispatcher fleets + DB slow queries --}}
+        <div class="card card--flat overflow-hidden mb-5">
+            <div class="flex items-center gap-8 py-3 px-5 flex-wrap max-[640px]:px-4 max-[640px]:gap-4">
+                <span class="flex items-center gap-2.5 text-[12.5px] text-fg-3"><x-feathericon-git-branch class="w-3.5 h-3.5 text-fg-mute" stroke-width="1.75"/>Step dispatcher</span>
+                <span class="flex items-center gap-2.5">
+                    <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em]" x-text="control?.step_dispatcher?.last_tick_age_seconds != null ? 'tick ' + ageHuman(control.step_dispatcher.last_tick_age_seconds) + ' ago' : 'no tick'"></span>
+                    <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" :style="`color: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`">
+                        <span class="w-[6px] h-[6px] rounded-chip" :class="control?.step_dispatcher?.running && 'animate-pulse'" :style="`background: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
+                        <span x-text="loadedHealth ? (control?.step_dispatcher?.running ? 'Running' : 'Stalled') : '…'"></span>
+                    </span>
+                </span>
+                <span class="w-px h-[18px] bg-line-soft max-[640px]:hidden"></span>
+                <span class="flex items-center gap-2.5 text-[12.5px] text-fg-3"><x-feathericon-database class="w-3.5 h-3.5 text-fg-mute" stroke-width="1.75"/>Slow queries</span>
+                <span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip"
+                      :style="(control?.slow_queries?.last_hour_count ?? 0) > 0 ? 'color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)' : 'color: var(--fg-2)'">
+                    <span x-text="control?.slow_queries?.last_hour_count ?? 0"></span><span class="text-fg-mute ml-0.5">/ 1h</span>
+                </span>
+            </div>
+        </div>
+
+        {{-- ===================== FLEET SERVERS — ONE TILE PER BOX ===================== --}}
+        <div class="card card--flat overflow-hidden">
+            <x-ui.card-head icon="server" title="Fleet servers" :accent="true" hint="heartbeat · 15s">
+                <x-slot:right>
+                    <span class="flex items-center gap-3">
+                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
+                              x-text="loaded ? `${counts().online} reachable · ${attention()} need attention` : 'loading…'"></span>
+                        <button type="button" @click="copyAllEgress()"
                                 :style="copiedAll ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
                                 class="appearance-none cursor-pointer inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[30px] px-3">
                             <span x-show="!copiedAll"><x-feathericon-copy class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
                             <span x-show="copiedAll" x-cloak><x-feathericon-check class="w-[13px] h-[13px]" stroke-width="2"/></span>
-                            <span x-text="copiedAll ? 'Copied' : 'Copy all'"></span>
+                            <span x-text="copiedAll ? 'Copied' : 'Copy egress IPs'"></span>
                         </button>
-                    </x-slot:right>
-                </x-ui.card-head>
-                <p class="text-[12px] text-fg-3 leading-snug px-5 py-3 border-b border-line-soft max-[640px]:px-4">The canonical outbound addresses traders allowlist on the exchange side — every API-calling host in the fleet. Rotating any of these needs a coordinated announcement.</p>
-                @forelse($egressIps as $ip)
-                    <div class="flex items-center gap-3 py-2.5 px-5 border-b border-line-soft last:border-b-0 max-[640px]:px-4">
-                        <span class="w-[8px] h-[8px] rounded-chip bg-pnlup flex-shrink-0"></span>
-                        <span class="font-mono text-[12.5px] font-semibold tabular-nums text-fg-1 tracking-[0.02em]">{{ $ip['ip'] }}</span>
-                        <span class="font-mono text-[10px] tracking-[0.07em] uppercase text-fg-mute">{{ $ip['id'] }}</span>
-                        @if($ip['type'])
-                            <span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-faint">{{ $ip['type'] }}</span>
-                        @endif
-                        <span class="ml-auto font-mono text-[9.5px] font-bold tracking-[0.06em] uppercase text-pnlup max-[480px]:hidden">Allowlisted</span>
-                        <button type="button"
-                                @click="navigator.clipboard?.writeText('{{ $ip['ip'] }}'); copied = '{{ $ip['id'] }}'; setTimeout(() => copied = null, 1400)"
-                                :style="copied === '{{ $ip['id'] }}' ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
-                                class="ml-2 appearance-none cursor-pointer inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[26px] px-2.5">
-                            <span x-show="copied !== '{{ $ip['id'] }}'"><x-feathericon-copy class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
-                            <span x-show="copied === '{{ $ip['id'] }}'" x-cloak><x-feathericon-check class="w-[13px] h-[13px]" stroke-width="2"/></span>
-                            <span x-text="copied === '{{ $ip['id'] }}' ? 'Copied' : 'Copy'"></span>
-                        </button>
-                    </div>
-                @empty
-                    <div class="py-8 text-center font-mono text-[11px] text-fg-mute">No apiable hosts in the fleet roster.</div>
-                @endforelse
-            </div>
-
-            {{-- control plane — LIVE (system.dashboard.health: console host + dispatcher) --}}
-            <div class="card card--flat overflow-hidden">
-                <x-ui.card-head icon="cpu" title="Control plane" :accent="true">
-                    <x-slot:right>
-                        <span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="control?.server?.hostname ?? 'console host'"></span>
-                    </x-slot:right>
-                </x-ui.card-head>
-
-                <div x-show="!loadedHealth" class="py-8 text-center font-mono text-[11px] text-fg-mute">Reading host vitals…</div>
-
-                <div x-show="loadedHealth" x-cloak class="p-5 flex flex-col gap-4">
-                    {{-- host vitals --}}
-                    <div class="grid grid-cols-3 gap-4">
-                        {{-- cpu --}}
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">CPU</span>
-                                <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${control?.server?.cpu_percent >= 75 ? barColor(control.server.cpu_percent) : 'var(--fg-2)'}`" x-text="control?.server?.cpu_percent !== null && control?.server?.cpu_percent !== undefined ? control.server.cpu_percent + '%' : '—'"></span>
-                            </div>
-                            <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${control?.server?.cpu_percent ?? 0}%; background: ${barColor(control?.server?.cpu_percent ?? 0)}`"></div></div>
-                        </div>
-                        {{-- ram --}}
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">MEM</span>
-                                <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${ramPct() >= 75 ? barColor(ramPct()) : 'var(--fg-2)'}`" x-text="ramPct() !== null ? ramPct() + '%' : '—'"></span>
-                            </div>
-                            <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${ramPct() ?? 0}%; background: ${barColor(ramPct() ?? 0)}`"></div></div>
-                        </div>
-                        {{-- disk --}}
-                        <div class="flex flex-col gap-1">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute">DISK</span>
-                                <span class="font-mono text-[11px] font-semibold tabular-nums" :style="`color: ${diskPct() >= 75 ? barColor(diskPct()) : 'var(--fg-2)'}`" x-text="diskPct() !== null ? diskPct() + '%' : '—'"></span>
-                            </div>
-                            <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${diskPct() ?? 0}%; background: ${barColor(diskPct() ?? 0)}`"></div></div>
-                        </div>
-                    </div>
-
-                    {{-- step dispatcher pulse --}}
-                    <div class="flex items-center justify-between gap-3 py-3 border-t border-line-soft">
-                        <span class="flex items-center gap-2.5 text-[12.5px] text-fg-3"><x-feathericon-git-branch class="w-3.5 h-3.5 text-fg-mute" stroke-width="1.75"/>Step dispatcher</span>
-                        <span class="flex items-center gap-2.5">
-                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em]" x-text="control?.step_dispatcher?.last_tick_age_seconds != null ? 'tick ' + ageHuman(control.step_dispatcher.last_tick_age_seconds) + ' ago' : 'no tick'"></span>
-                            <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" :style="`color: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`">
-                                <span class="w-[6px] h-[6px] rounded-chip" :class="control?.step_dispatcher?.running && 'animate-pulse'" :style="`background: ${control?.step_dispatcher?.running ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
-                                <span x-text="control?.step_dispatcher?.running ? 'Running' : 'Stalled'"></span>
-                            </span>
-                        </span>
-                    </div>
-
-                    {{-- slow queries --}}
-                    <div class="flex items-center justify-between gap-3">
-                        <span class="flex items-center gap-2.5 text-[12.5px] text-fg-3"><x-feathericon-database class="w-3.5 h-3.5 text-fg-mute" stroke-width="1.75"/>Slow queries</span>
-                        <span class="font-mono text-[11px] font-semibold tabular-nums inline-flex items-center gap-[2px] py-0.5 px-[7px] rounded-chip"
-                              :style="(control?.slow_queries?.last_hour_count ?? 0) > 0 ? 'color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)' : 'color: var(--fg-2)'">
-                            <span x-text="control?.slow_queries?.last_hour_count ?? 0"></span><span class="text-fg-mute ml-0.5">/ 1h</span>
-                        </span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        {{-- ===================== NODE REACHABILITY (LIVE) ===================== --}}
-        <div class="card card--flat overflow-hidden">
-            <x-ui.card-head icon="server" title="Node reachability" :accent="true" hint="control-plane heartbeat">
-                <x-slot:right>
-                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"
-                          x-text="loaded ? `${counts().online} reachable · ${attention()} need attention` : 'loading…'"></span>
+                    </span>
                 </x-slot:right>
             </x-ui.card-head>
-            <div class="hidden md:grid grid-cols-[minmax(160px,1.6fr)_120px_120px_minmax(120px,1fr)] items-center gap-4 py-2 px-5 border-b border-line-soft font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
-                <span>Node</span><span>Status</span><span>Last sync</span><span>Services</span>
-            </div>
+            <p class="text-[12px] text-fg-3 leading-snug px-5 py-3 border-b border-line-soft max-[640px]:px-4">Tiles marked <span class="font-mono text-[10px] font-bold tracking-[0.05em] uppercase text-pnlup">allowlisted</span> are the API-calling hosts whose egress IPs traders allowlist on the exchange side — rotating any of those needs a coordinated announcement.</p>
 
-            <div x-show="!loaded" class="py-10 text-center font-mono text-[11px] text-fg-mute">Pinging fleet…</div>
+            <div x-show="!loaded" class="py-12 text-center font-mono text-[11px] text-fg-mute">Pinging fleet…</div>
 
-            <template x-for="node in fleet" :key="node.hostname">
-                <div class="grid grid-cols-[minmax(160px,1.6fr)_120px_120px_minmax(120px,1fr)] items-center gap-4 py-3 px-5 border-b border-line-soft last:border-b-0 max-[760px]:grid-cols-[minmax(140px,1.6fr)_110px_1fr] max-[640px]:px-4 transition-colors duration-fast"
-                     :style="node.status === 'stale' ? 'background: color-mix(in srgb, var(--warn) 7%, transparent)' : (node.status === 'missing' ? 'background: color-mix(in srgb, var(--danger) 6%, transparent)' : '')">
-                    {{-- node: type + hostname + ip --}}
-                    <div class="flex items-center gap-2.5 min-w-0">
-                        <span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-mute w-[44px] flex-shrink-0" x-text="node.type ?? '—'"></span>
-                        <div class="flex flex-col leading-[1.2] min-w-0">
-                            <span class="font-mono text-[12.5px] font-semibold text-fg-1 tracking-[0.01em] whitespace-nowrap inline-flex items-center gap-1.5">
-                                <span x-text="node.hostname"></span>
-                                <span x-show="node.recently_rebooted" class="font-mono text-[8px] font-bold tracking-[0.06em] uppercase py-px px-1 rounded-chip" style="color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)">rebooted</span>
+            <div x-show="loaded" x-cloak class="grid grid-cols-3 gap-3 p-4 max-[1200px]:grid-cols-2 max-[760px]:grid-cols-1">
+                <template x-for="node in fleet" :key="node.hostname">
+                    <div class="bg-surface border rounded-control p-4 flex flex-col gap-3"
+                         :style="node.status === 'stale' ? 'border-color: color-mix(in srgb, var(--warn) 40%, transparent)' : (node.status === 'missing' ? 'border-color: color-mix(in srgb, var(--danger) 45%, transparent)' : 'border-color: var(--line)')">
+                        {{-- head: hostname + type | status --}}
+                        <div class="flex items-center justify-between gap-3">
+                            <span class="flex items-center gap-2 min-w-0">
+                                <span class="font-mono text-[13.5px] font-bold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis" x-text="node.hostname"></span>
+                                <span class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip bg-surface-3 text-fg-3 flex-shrink-0" x-text="node.type ?? '—'"></span>
+                                <span x-show="node.recently_rebooted" class="font-mono text-[8px] font-bold tracking-[0.06em] uppercase py-px px-1 rounded-chip flex-shrink-0" style="color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)">rebooted</span>
                             </span>
-                            <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em] whitespace-nowrap" x-text="node.ip_address ?? '—'"></span>
+                            <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase flex-shrink-0" :style="`color: ${statusMeta(node.status).color}`">
+                                <span class="w-[6px] h-[6px] rounded-chip" :class="node.status === 'online' && 'animate-pulse'" :style="`background: ${statusMeta(node.status).color}`"></span>
+                                <span x-text="statusMeta(node.status).label"></span>
+                            </span>
+                        </div>
+
+                        {{-- ip + allowlist + copy --}}
+                        <div class="flex items-center gap-2.5">
+                            <span class="font-mono text-[12px] font-semibold tabular-nums text-fg-1 tracking-[0.02em]" x-text="node.ip_address ?? '—'"></span>
+                            <span x-show="isAllowlisted(node)" class="font-mono text-[8.5px] font-bold tracking-[0.06em] uppercase text-pnlup">Allowlisted</span>
+                            <button type="button" x-show="node.ip_address" @click="copyIp(node)"
+                                    :style="copied === node.hostname ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
+                                    class="ml-auto appearance-none cursor-pointer inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[24px] px-2">
+                                <span x-show="copied !== node.hostname"><x-feathericon-copy class="w-[12px] h-[12px]" stroke-width="1.75"/></span>
+                                <span x-show="copied === node.hostname" x-cloak><x-feathericon-check class="w-[12px] h-[12px]" stroke-width="2"/></span>
+                                <span x-text="copied === node.hostname ? 'Copied' : 'Copy'"></span>
+                            </button>
+                        </div>
+
+                        {{-- vitals --}}
+                        <div class="grid grid-cols-3 gap-3">
+                            <template x-for="metric in [['CPU', node.cpu], ['MEM', node.ram], ['DISK', node.disk]]" :key="metric[0]">
+                                <div class="flex flex-col gap-1">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <span class="font-mono text-[9px] tracking-[0.08em] uppercase text-fg-mute" x-text="metric[0]"></span>
+                                        <span class="font-mono text-[11px] font-semibold tabular-nums"
+                                              :style="`color: ${metric[1]?.percent >= 75 ? barColor(metric[1].percent) : 'var(--fg-2)'}`"
+                                              x-text="metric[1]?.percent != null ? metric[1].percent + '%' : '—'"></span>
+                                    </div>
+                                    <div class="h-[4px] rounded-chip bg-surface-3 overflow-hidden"><div class="h-full rounded-chip transition-[width] duration-base" :style="`width: ${metric[1]?.percent ?? 0}%; background: ${barColor(metric[1]?.percent ?? 0)}`"></div></div>
+                                </div>
+                            </template>
+                        </div>
+
+                        {{-- footer: services | uptime + last sync --}}
+                        <div class="flex items-center gap-3 pt-2.5 border-t border-line-soft">
+                            <div class="flex items-center gap-[6px] flex-wrap min-h-[13px]">
+                                <span x-show="unitList(node.units).length === 0" class="font-mono text-[10px] text-fg-mute">no services</span>
+                                <template x-for="u in unitList(node.units)" :key="u.name">
+                                    <span class="relative group inline-flex items-center justify-center w-[13px] h-[13px] cursor-default">
+                                        <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0 transition-transform duration-fast group-hover:scale-150" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
+                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
+                                            <div class="font-mono text-[10px] font-bold text-fg-1 flex items-center gap-1.5">
+                                                <span class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
+                                                <span x-text="u.name"></span>
+                                            </div>
+                                            <div class="font-mono text-[9px] tracking-[0.06em] uppercase mt-0.5" :style="`color: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" x-text="u.state"></div>
+                                        </div>
+                                    </span>
+                                </template>
+                            </div>
+                            <span class="ml-auto font-mono text-[10px] text-fg-mute tracking-[0.04em] uppercase whitespace-nowrap">
+                                up <span class="text-fg-2 font-semibold tabular-nums" x-text="uptimeHuman(node.uptime_seconds)"></span>
+                                · sync <span class="text-fg-2 font-semibold tabular-nums" x-text="node.status === 'missing' ? '—' : ageHuman(node.age_seconds)"></span>
+                            </span>
                         </div>
                     </div>
-                    {{-- status --}}
-                    <span class="inline-flex items-center gap-1.5 font-mono text-[10px] font-bold tracking-[0.07em] uppercase" :style="`color: ${statusMeta(node.status).color}`">
-                        <span class="w-[6px] h-[6px] rounded-chip" :class="node.status === 'online' && 'animate-pulse'" :style="`background: ${statusMeta(node.status).color}`"></span>
-                        <span x-text="statusMeta(node.status).label"></span>
-                    </span>
-                    {{-- last sync --}}
-                    <span class="font-mono text-[11.5px] tabular-nums" :style="`color: ${node.status === 'missing' ? 'var(--fg-mute)' : 'var(--fg-2)'}`"
-                          x-text="node.status === 'missing' ? 'no data' : ageHuman(node.age_seconds)"></span>
-                    {{-- supervisor services — hover a dot for the service name + state --}}
-                    <div class="flex items-center gap-[6px] flex-wrap max-[760px]:hidden">
-                        <span x-show="unitList(node.units).length === 0" class="font-mono text-[10px] text-fg-mute">—</span>
-                        <template x-for="u in unitList(node.units)" :key="u.name">
-                            <span class="relative group inline-flex items-center justify-center w-[13px] h-[13px] cursor-default">
-                                <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0 transition-transform duration-fast group-hover:scale-150" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
-                                <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
-                                    <div class="font-mono text-[10px] font-bold text-fg-1 flex items-center gap-1.5">
-                                        <span class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
-                                        <span x-text="u.name"></span>
-                                    </div>
-                                    <div class="font-mono text-[9px] tracking-[0.06em] uppercase mt-0.5" :style="`color: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" x-text="u.state"></div>
-                                </div>
-                            </span>
-                        </template>
-                    </div>
-                </div>
-            </template>
+                </template>
+            </div>
         </div>
     </div>
 </x-app-layout>
