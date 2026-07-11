@@ -109,8 +109,11 @@ function seedRedAccount(int $userId): array
         ['position_id' => $positionId, 'type' => 'LIMIT', 'status' => 'FILLED', 'exchange_order_id' => 'x2', 'quantity' => 4, 'price' => 88],
         ['position_id' => $positionId, 'type' => 'LIMIT', 'status' => 'NEW', 'exchange_order_id' => 'x3', 'quantity' => 8, 'price' => 84],
         ['position_id' => $positionId, 'type' => 'LIMIT', 'status' => 'NEW', 'exchange_order_id' => 'x4', 'quantity' => 16, 'price' => 80],
-        // Noise that must not count: TP order + an unplaced LIMIT (no exchange id).
-        ['position_id' => $positionId, 'type' => 'PROFIT-LIMIT', 'status' => 'NEW', 'exchange_order_id' => 'x5', 'quantity' => 2, 'price' => 100],
+        // TP orders (never rungs): the ORIGINAL one cancelled by the WAP
+        // recalculation, the live one moved deeper (100 -> 96). Ladder must
+        // pick the live one and place it at 20% of the corridor.
+        ['position_id' => $positionId, 'type' => 'PROFIT-LIMIT', 'status' => 'CANCELLED', 'exchange_order_id' => 'x5', 'quantity' => 2, 'price' => 100],
+        ['position_id' => $positionId, 'type' => 'PROFIT-LIMIT', 'status' => 'NEW', 'exchange_order_id' => 'x6', 'quantity' => 6, 'price' => 96],
         ['position_id' => $positionId, 'type' => 'LIMIT', 'status' => 'NEW', 'exchange_order_id' => null, 'quantity' => 32, 'price' => 60],
     ]);
     // Margin ratio 5%: maintenance 50 over balance 1000; PnL −26.
@@ -213,6 +216,8 @@ it('splits an expanded account into longs and shorts with exact rung and alpha f
         ->assertJsonPath('longs.0.ladder.tp_price', 100)
         ->assertJsonPath('longs.0.ladder.deepest_price', 80)
         ->assertJsonPath('longs.0.ladder.price_pct', 90)
+        ->assertJsonPath('longs.0.ladder.live_tp_price', 96)
+        ->assertJsonPath('longs.0.ladder.live_tp_pct', 20)
         ->assertJsonCount(4, 'longs.0.ladder.rungs')
         ->assertJsonPath('longs.0.ladder.rungs.0.pct', 40)
         ->assertJsonPath('longs.0.ladder.rungs.0.filled', true)

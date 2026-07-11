@@ -231,10 +231,23 @@ class PositionsController extends Controller
         $span = $deepest - $tp;
         $pct = fn (float $price): float => round(max(0.0, min(1.0, ($price - $tp) / $span)) * 100, 1);
 
+        // Live TP — the position's CURRENT profit order (same liveness rule
+        // as the engine's profitOrder(), read off the eager-loaded orders).
+        // Starts equal to first_profit_price; each WAP recalculation after a
+        // rung fills moves it deeper into the corridor.
+        $liveTp = $p->orders
+            ->whereIn('type', ['PROFIT-LIMIT', 'PROFIT-MARKET'])
+            ->whereNotIn('status', ['CANCELLED', 'EXPIRED', 'REJECTED'])
+            ->sortByDesc('id')
+            ->first()?->price;
+        $liveTp = $liveTp !== null ? (float) $liveTp : null;
+
         return [
             'tp_price' => $tp,
             'deepest_price' => $deepest,
             'mark_price' => $mark,
+            'live_tp_price' => $liveTp,
+            'live_tp_pct' => $liveTp !== null ? $pct($liveTp) : null,
             'price_pct' => round($alphaPct, 1),
             'rungs' => $rungs->map(fn ($o, int $i): array => [
                 'n' => $i + 1,

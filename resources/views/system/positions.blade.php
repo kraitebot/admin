@@ -201,12 +201,22 @@
                                             <div class="absolute left-0 top-[34px] h-[4px] rounded-chip opacity-90"
                                                  :style="`width: ${Math.min(100, pos.ladder.price_pct)}%; background: ${bandColor(pos.band)}`"></div>
 
-                                            {{-- TP anchor at 0% --}}
+                                            {{-- first-TP anchor at 0% — the ORIGINAL target, never moves --}}
                                             <div class="absolute -translate-x-1/2" style="left: 0">
-                                                <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tracking-[0.06em] uppercase" style="color: var(--pnl-up-fg)">TP</span>
+                                                <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tracking-[0.06em] uppercase" style="color: var(--pnl-up-fg)" x-text="pos.ladder.live_tp_pct > 0 ? 'TP1' : 'TP'"></span>
                                                 <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip" style="background: var(--pnl-up-fg)"></span>
                                                 <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] font-semibold tabular-nums whitespace-nowrap" style="color: var(--pnl-up-fg)" x-text="fmtPrice(pos.ladder.tp_price)"></span>
                                             </div>
+
+                                            {{-- live TP — sits on the anchor until a rung fills, then
+                                                 WAP recalculation slides it right; only drawn once moved --}}
+                                            <template x-if="pos.ladder.live_tp_pct !== null && pos.ladder.live_tp_pct > 0">
+                                                <div class="absolute" :style="`left: ${Math.min(100, pos.ladder.live_tp_pct)}%`">
+                                                    <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tracking-[0.06em] uppercase" style="color: var(--pnl-up-fg)">TP</span>
+                                                    <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip" style="background: var(--pnl-up-fg)"></span>
+                                                    <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] font-semibold tabular-nums whitespace-nowrap" style="color: var(--pnl-up-fg)" x-text="fmtPrice(pos.ladder.live_tp_price)"></span>
+                                                </div>
+                                            </template>
 
                                             {{-- rung ticks --}}
                                             <template x-for="rung in pos.ladder.rungs" :key="rung.n">

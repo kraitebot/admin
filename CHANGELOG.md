@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.4] — 2026-07-11
+
+### Improvements
+- **Live TP on the ladder.** The left anchor is the original first TP and never moves (verified against the engine: recorded once at placement, the WAP recalculation never rewrites it). Once a rung fills and the engine recalculates the average entry, the real TP order moves deeper — the ladder now draws that live TP as a second green marker sliding right, with the anchor relabelled TP1 the moment they split. Until the first fill the two coincide and only the anchor shows.
+
 ## [0.16.3] — 2026-07-11
 
 ### Improvements
