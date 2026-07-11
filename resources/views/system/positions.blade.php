@@ -8,7 +8,6 @@
             accounts: initial.accounts,
             expanded: {},                       // account id -> { tab, data, loading }
             loading: false,
-            lastSync: null,                     // wall-clock proof the tick landed
             _timer: null,
 
             init() {
@@ -31,7 +30,6 @@
                         jobs.push(this.loadAccount(id, opts));
                     }
                     await Promise.all(jobs);
-                    this.lastSync = new Date().toLocaleTimeString('en-GB');
                 } finally {
                     setTimeout(() => { this.loading = false; }, 450);
                 }
@@ -105,7 +103,7 @@
             </div>
             <div class="inline-flex items-center gap-[7px] rounded-control border border-line whitespace-nowrap h-[36px] px-3.5 text-[13px] font-sans font-semibold text-fg-3 flex-shrink-0 cursor-default select-none">
                 <x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75" ::class="loading && 'animate-spin'"/>
-                <span x-text="lastSync ? `Auto-sync · ${lastSync}` : 'Auto-sync · 10s'">Auto-sync · 10s</span>
+                <span>Auto-sync · 10s</span>
             </div>
         </div>
 

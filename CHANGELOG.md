@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.7] — 2026-07-11
+
+### Improvements
+- **Auto-sync badge back to its quiet form** — static "Auto-sync · 10s" with the spinning icon during refresh; the last-sync timestamp experiment is gone. The 8-second request cap that keeps the loop alive stays.
+
 ## [0.16.6] — 2026-07-11
 
 ### Fixes
