@@ -2,15 +2,8 @@
     // Projections — REAL DATA. The calendar consumes ProjectionsController::data:
     // realized daily revenue (actuals), the live wallet, and observed daily-rate
     // scenarios. Forward months compound the live wallet at the scenario rate.
-
-    // REAL first-run gate: projections are built from realized revenue —
-    // an account that has never traded has nothing to project.
-    $accountIds = auth()->user()->is_admin
-        ? null
-        : Kraite\Core\Models\Account::where('user_id', auth()->id())->pluck('id');
-    $noPositions = ! Kraite\Core\Models\Position::query()
-        ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
-        ->exists();
+    // ($noPositions — the first-run gate — comes from the controller; no
+    // queries in the template.)
 
     $initialAccountId = $accounts->first()['id'] ?? null;
 
@@ -68,7 +61,6 @@
                 tag: a.name,
                 note: a.owner || '',
                 mono: (a.exchange || '?').replace(/[^A-Za-z]/g, '').slice(0, 2).toUpperCase() || '?',
-                state: 'ok',
                 equityStr: '—',
             }));
 
@@ -94,6 +86,8 @@
                 acctOpen: false,
                 monOpen: false,
                 pYear: null,
+                _reqToken: 0,
+                _todayAnchored: false,
                 // Safe stub so the always-rendered control row never reads a
                 // null `m` during the first async fetch; replaced on response.
                 m: { type: 'current', dim: 30, cells: [], startedAt: null, realized: 0, projected: 0, endBal: 0, monthlyPct: 0, cumFromToday: 0, rate: 0, rates: { pess: 0, neutral: 0, opt: 0, n: 0 }, S0: 0, firstWeekday: 0 },
@@ -125,7 +119,6 @@
                 typeBadge() { return this.m.type === 'past' ? 'Realized' : this.m.type === 'future' ? 'Projected' : 'Hybrid'; },
                 leadCells() { return Array.from({ length: this.m.firstWeekday }); },
                 trailCells() { const t = this.m.firstWeekday + this.m.dim; return Array.from({ length: (7 - t % 7) % 7 }); },
-                dotCls(state) { return 'w-[8px] h-[8px] rounded-chip flex-shrink-0 ' + (state === 'ok' ? 'bg-green-500' : state === 'down' ? 'bg-danger animate-pulse-soft' : 'bg-warn'); },
                 mix(pct, base) { return `color-mix(in srgb, ${this.tone().css} ${pct}%, ${base})`; },
 
                 // formatters (exposed)
@@ -147,14 +140,33 @@
 
                 async recompute(shimmer) {
                     if (!this.accountId) return;
+                    // Latest-wins: rapid month/account switches can land out
+                    // of order — a stale response must never render into a
+                    // newer month's view.
+                    const token = ++this._reqToken;
                     if (shimmer) this.loading = true;
                     try {
                         const url = `${this.dataUrl}?account_id=${this.accountId}&year=${this.ym.year}&month=${this.ym.month + 1}`;
-                        const res = await fetch(url, { headers: { Accept: 'application/json' } });
+                        // 8s cap: a hung response must never leave the
+                        // skeleton up and the Sync button dead forever.
+                        const res = await fetch(url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(8000) });
+                        if (token !== this._reqToken) return;
                         if (res.ok) {
                             this.fetched = await res.json();
                             const [ty, tm, td] = this.fetched.today.split('-').map(Number);
                             this.curY = ty; this.curM = tm - 1; this.curD = td;
+                            // First response: snap the view to the SERVER'S
+                            // current month if the browser clock opened the
+                            // calendar on a different one (midnight-UTC edge).
+                            if (!this._todayAnchored) {
+                                this._todayAnchored = true;
+                                if (this.ym.year !== this.curY || this.ym.month !== this.curM) {
+                                    this.ym = { year: this.curY, month: this.curM };
+                                    this.pYear = this.curY;
+                                    this.recompute(false);
+                                    return;
+                                }
+                            }
                             if (ACCTS[this.acctIdx]) {
                                 ACCTS[this.acctIdx].equityStr = this.fetched.current_wallet != null
                                     ? fmtAbsFull(parseFloat(this.fetched.current_wallet)) : '—';
@@ -162,8 +174,10 @@
                             this.m = this.buildMonth();
                             this.totalsCells = this.buildTotals();
                         }
+                    } catch (_) {
+                        // timeout / network blip — Sync retries manually
                     } finally {
-                        this.loading = false;
+                        if (token === this._reqToken) this.loading = false;
                     }
                 },
 
@@ -310,14 +324,13 @@
                 <div class="relative" @click.outside="acctOpen = false">
                     <button type="button" @click="acctOpen = !acctOpen"
                             :class="acctOpen ? 'border-accent' : 'border-line hover:border-line-strong'"
-                            class="inline-flex items-center gap-2.5 h-[34px] border rounded-control bg-surface pl-2 pr-3 cursor-pointer transition-colors duration-fast ease-out">
+                            class="inline-flex items-center gap-2.5 h-[40px] max-w-[320px] border rounded-control bg-surface pl-2 pr-3 cursor-pointer transition-colors duration-fast ease-out">
                         <span class="w-[24px] h-[24px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10px] flex items-center justify-center flex-shrink-0" x-text="acct().mono"></span>
-                        <span class="flex flex-col items-start leading-[1.15] min-w-0">
-                            <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap"><span x-text="acct().ex"></span> <span class="text-fg-mute font-normal" x-text="'· ' + acct().tag"></span></span>
-                            <span class="font-mono text-[10px] text-fg-mute tabular-nums tracking-[0.02em] whitespace-nowrap" x-text="acct().equityStr"></span>
+                        <span class="flex flex-col items-start leading-[1.2] min-w-0">
+                            <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis w-full text-left"><span x-text="acct().ex"></span> <span class="text-fg-mute font-normal" x-text="'· ' + acct().tag"></span></span>
+                            <span x-show="acct().equityStr !== '—'" class="font-mono text-[10px] text-fg-mute tabular-nums tracking-[0.02em] whitespace-nowrap" x-text="acct().equityStr"></span>
                         </span>
-                        <span :class="dotCls(acct().state)"></span>
-                        <x-feathericon-chevron-down class="w-[14px] h-[14px] text-fg-mute" stroke-width="1.75"/>
+                        <x-feathericon-chevron-down class="w-[14px] h-[14px] text-fg-mute flex-shrink-0" stroke-width="1.75"/>
                     </button>
                     <div x-show="acctOpen" x-cloak
                          class="absolute top-[calc(100%+6px)] left-0 z-[60] w-[280px] bg-surface border border-line rounded-control shadow-2 p-[5px] flex flex-col gap-px animate-dd-in">
@@ -327,18 +340,12 @@
                                     :class="i === acctIdx ? 'bg-hover' : ''"
                                     class="appearance-none cursor-pointer text-left flex items-center gap-2.5 bg-transparent border-0 rounded-[7px] py-2 px-[9px] transition-colors duration-fast ease-out hover:bg-hover">
                                 <span class="w-[26px] h-[26px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10.5px] flex items-center justify-center flex-shrink-0" x-text="ac.mono"></span>
-                                <span class="flex flex-col leading-[1.2] flex-1 min-w-0">
-                                    <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap"><span x-text="ac.ex"></span> <span class="text-fg-mute font-normal" x-text="'· ' + ac.tag"></span></span>
-                                    <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em] whitespace-nowrap" x-text="ac.note"></span>
+                                <span class="flex flex-col leading-[1.2] flex-1 min-w-0 overflow-hidden">
+                                    <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis"><span x-text="ac.ex"></span> <span class="text-fg-mute font-normal" x-text="'· ' + ac.tag"></span></span>
+                                    <span class="font-mono text-[10px] text-fg-mute tracking-[0.02em] whitespace-nowrap overflow-hidden text-ellipsis" x-text="ac.note"></span>
                                 </span>
-                                <span class="flex flex-col items-end gap-1 flex-shrink-0">
-                                    <span class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums" x-text="ac.equityStr"></span>
-                                    <span class="inline-flex items-center gap-[5px] font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase"
-                                          :style="`color: ${ac.state === 'ok' ? 'var(--pnl-up-fg)' : ac.state === 'down' ? 'var(--danger)' : 'var(--warn)'}`">
-                                        <span :class="dotCls(ac.state)"></span><span x-text="ac.state === 'ok' ? 'Linked' : ac.state === 'down' ? 'Down' : 'Degraded'"></span>
-                                    </span>
-                                </span>
-                                <span x-show="i === acctIdx" class="flex-shrink-0 text-accent"><x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/></span>
+                                <span x-show="ac.equityStr !== '—'" class="font-mono text-[11.5px] font-semibold text-fg-1 tabular-nums flex-shrink-0" x-text="ac.equityStr"></span>
+                                <span class="flex-shrink-0 w-[15px]" :class="i === acctIdx ? 'text-accent' : 'opacity-0'"><x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/></span>
                             </button>
                         </template>
                     </div>

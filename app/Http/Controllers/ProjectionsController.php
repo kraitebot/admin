@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\Position;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\Window;
 
@@ -35,9 +36,21 @@ class ProjectionsController extends Controller
                 'owner' => $a->user?->name ?? 'Unknown',
             ]);
 
+        // First-run gate: projections are built from realized revenue — an
+        // account that has never traded has nothing to project. On any query
+        // failure default to SHOWING the page (the data feed degrades on its
+        // own) rather than hiding it behind the first-run screen.
+        $noPositions = rescue(fn (): bool => ! Position::query()
+            ->when(! $isAdmin, fn ($q) => $q->whereIn(
+                'account_id',
+                Account::where('user_id', Auth::id())->select('id'),
+            ))
+            ->exists(), false);
+
         return view('projections', [
             'accounts' => $accounts,
             'isAdmin' => $isAdmin,
+            'noPositions' => $noPositions,
         ]);
     }
 

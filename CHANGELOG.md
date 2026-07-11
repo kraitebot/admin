@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.5] — 2026-07-12
+
+### Fixes
+- **Projections first pass — three bugs fixed.** Fast month-flipping could render a stale response into the wrong month (latest request now always wins); a hung response could leave the loading skeleton up and the Sync button dead forever (8-second cap, same guard as the rest of the panel); around the UTC midnight edge the calendar could open on the browser's idea of the current month instead of the server's (first response now snaps the view). Data lookups also moved out of the page template into the controller. First test coverage for the page: feed shape, owner gate, input validation.
+
+### Improvements
+- **Account picker cleaned up** — decorative "Linked" badge and status dot removed, long account names truncate instead of running under the check mark, and the wallet amount only shows once it's actually loaded.
+
 ## [0.17.4] — 2026-07-11
 
 ### Fixes
