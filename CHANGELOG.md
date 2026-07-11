@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.1] — 2026-07-11
+
+### Fixes
+- **Fleet positions rows now speak the engine's numbers.** Rows were computed from the position's reference opening price, which is not the actual fill — PnL read near-zero on fresh positions while the account header (exchange truth) disagreed. Rows now call the engine's own position methods: PnL = cost-weighted average entry across filled orders vs live mark (identical to the trader surfaces, truncated to symbol precision), alpha path via the engine getter with a live-mark fallback when the candle-based price source is stale (production's web host holds no fresh candles — the engine read a dead 0 there).
+- **Alpha limit column added** — distance price still has to travel to fill the NEXT pending rung, as % of mark; 0 when the rung is already reached.
+- **Column labels** on the expanded position rows (Token / Rungs filled / Alpha path / Alpha limit / PnL).
+
 ## [0.16.0] — 2026-07-11
 
 ### Added

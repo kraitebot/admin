@@ -37,6 +37,9 @@ function stubPositionTables(): void
         $t->id();
         $t->string('token')->nullable();
         $t->decimal('mark_price', 20, 8)->nullable();
+        // api_format_price() reads these when the engine formats PnL.
+        $t->unsignedTinyInteger('price_precision')->default(2);
+        $t->decimal('tick_size', 20, 8)->nullable();
     });
     Schema::create('positions', function (Blueprint $t): void {
         $t->id();
@@ -61,6 +64,13 @@ function stubPositionTables(): void
         $t->decimal('price', 20, 8)->nullable();
         $t->timestamps();
     });
+    // ExchangeSymbol auto-eager-loads its price history relation.
+    Schema::create('exchange_symbol_prices', function (Blueprint $t): void {
+        $t->id();
+        $t->unsignedBigInteger('exchange_symbol_id');
+        $t->decimal('price', 20, 8)->nullable();
+        $t->timestamps();
+    });
     Schema::create('account_balance_history', function (Blueprint $t): void {
         $t->id();
         $t->unsignedBigInteger('account_id');
@@ -72,7 +82,7 @@ function stubPositionTables(): void
 }
 
 afterEach(function (): void {
-    foreach (['api_systems', 'accounts', 'exchange_symbols', 'positions', 'orders', 'account_balance_history'] as $table) {
+    foreach (['api_systems', 'accounts', 'exchange_symbols', 'exchange_symbol_prices', 'positions', 'orders', 'account_balance_history'] as $table) {
         Schema::dropIfExists($table);
     }
 });
@@ -180,15 +190,23 @@ it('splits an expanded account into longs and shorts with exact rung and alpha f
         ->assertJsonPath('longs.0.rungs_total', 4)
         ->assertJsonPath('longs.0.alpha_pct', 90)
         ->assertJsonPath('longs.0.band', 'red')
-        // LONG pnl: (mark 82 − open 95) × qty 2 = −26.
-        ->assertJsonPath('longs.0.pnl', -26)
+        // Engine PnL: weighted entry (92×2 + 88×4)/6 = 89.3333; LONG
+        // qty 2 × (mark 82 − 89.3333) = −14.666…, TRUNCATED (not rounded)
+        // to the symbol's 2-dp precision by the engine's price formatter.
+        ->assertJsonPath('longs.0.pnl', -14.66)
+        // LONG next pending rung (qty-asc) sits at 84, ABOVE mark 82 —
+        // already reached, so distance clamps to 0.
+        ->assertJsonPath('longs.0.alpha_limit_pct', 0)
         ->assertJsonPath('shorts.0.symbol', 'ETHUSDT')
         ->assertJsonPath('shorts.0.rungs_filled', 1)
         ->assertJsonPath('shorts.0.rungs_total', 3)
         ->assertJsonPath('shorts.0.alpha_pct', 20)
         ->assertJsonPath('shorts.0.band', 'green')
-        // SHORT pnl: (open 55 − mark 54) × qty 1 = 1.
-        ->assertJsonPath('shorts.0.pnl', 1);
+        // Engine PnL: weighted entry 58 (single fill); SHORT qty 1 ×
+        // (58 − mark 54) = +4.
+        ->assertJsonPath('shorts.0.pnl', 4)
+        // SHORT next pending rung 70 vs mark 54: (70−54)/54 = 29.6%.
+        ->assertJsonPath('shorts.0.alpha_limit_pct', 29.6);
 });
 
 it('orders accounts worst-first by roll-up depth', function (): void {

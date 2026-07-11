@@ -161,14 +161,21 @@
                         <div x-show="expanded[acc.id]?.data && tabRows(acc.id).length === 0" class="py-6 text-center font-mono text-[11px] text-fg-mute"
                              x-text="`No ${expanded[acc.id]?.tab} open on this account.`"></div>
 
+                        {{-- column labels --}}
+                        <div x-show="tabRows(acc.id).length > 0"
+                             class="flex items-center gap-4 pt-3 pb-1.5 px-5 max-[640px]:px-4 font-mono text-[8.5px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
+                            <span class="w-[130px] flex-shrink-0">Token</span>
+                            <span class="w-[80px] flex-shrink-0">Rungs filled</span>
+                            <span class="flex-1 min-w-[120px]">Alpha path</span>
+                            <span class="w-[90px] text-right flex-shrink-0">Alpha limit</span>
+                            <span class="w-[110px] text-right flex-shrink-0">PnL</span>
+                        </div>
+
                         <template x-for="pos in tabRows(acc.id)" :key="pos.id">
                             <div class="flex items-center gap-4 py-2.5 px-5 border-t border-line-soft max-[640px]:px-4 max-[640px]:flex-wrap max-[640px]:gap-y-1.5"
                                  :style="pos.band === 'red' ? 'background: color-mix(in srgb, var(--danger) 7%, transparent)' : (pos.band === 'yellow' ? 'background: color-mix(in srgb, var(--warn) 6%, transparent)' : '')">
                                 <span class="font-mono text-[12px] font-semibold text-fg-1 w-[130px] flex-shrink-0 whitespace-nowrap overflow-hidden text-ellipsis" x-text="pos.symbol"></span>
-                                <span class="flex flex-col leading-tight w-[80px] flex-shrink-0">
-                                    <span class="font-mono text-[12px] font-bold tabular-nums text-fg-1" x-text="`${pos.rungs_filled} / ${pos.rungs_total}`"></span>
-                                    <span class="font-mono text-[8.5px] tracking-[0.06em] uppercase text-fg-mute">rungs filled</span>
-                                </span>
+                                <span class="font-mono text-[12px] font-bold tabular-nums text-fg-1 w-[80px] flex-shrink-0" x-text="`${pos.rungs_filled} / ${pos.rungs_total}`"></span>
                                 {{-- alpha path: number + corridor bar --}}
                                 <span class="flex-1 min-w-[120px] flex items-center gap-2.5">
                                     <span class="font-mono text-[12px] font-bold tabular-nums w-[52px] text-right" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span>
@@ -176,6 +183,9 @@
                                         <span class="block h-full rounded-chip transition-[width] duration-base" :style="`width: ${Math.min(100, pos.alpha_pct)}%; background: ${bandColor(pos.band)}`"></span>
                                     </span>
                                 </span>
+                                {{-- alpha limit: distance to the next pending rung --}}
+                                <span class="font-mono text-[12px] font-bold tabular-nums w-[90px] text-right flex-shrink-0 text-fg-2"
+                                      x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span>
                                 <span class="font-mono text-[12px] font-bold tabular-nums w-[110px] text-right flex-shrink-0" :style="`color: ${pnlColor(pos.pnl)}`" x-text="fmtMoney(pos.pnl)"></span>
                             </div>
                         </template>

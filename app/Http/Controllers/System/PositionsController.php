@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\Position;
 
 /**
  * Sysadmin fleet-wide position picture — general level.
@@ -117,7 +118,7 @@ class PositionsController extends Controller
                 ? round(((float) $balance->total_maintenance_margin / $marginBalance) * 100, 2)
                 : null;
 
-            $worstAlpha = (float) $accountPositions->max(fn (object $p): float => $this->alphaPathPct($p));
+            $worstAlpha = (float) $accountPositions->max(fn (Position $p): float => $this->alphaPct($p));
 
             $rows[] = [
                 'id' => (int) $accountId,
@@ -147,93 +148,117 @@ class PositionsController extends Controller
      */
     private function positionRows(int $accountId): array
     {
-        return $this->openPositions($accountId)->map(function (object $p): array {
-            $alpha = $this->alphaPathPct($p);
-
-            return [
-                'id' => (int) $p->id,
-                'symbol' => $p->parsed_trading_pair ?: ($p->token ?? '?'),
-                'direction' => $p->direction,
-                'rungs_filled' => (int) $p->filled_limits,
-                'rungs_total' => (int) $p->total_limit_orders,
-                'alpha_pct' => round($alpha, 1),
-                'band' => $this->band($alpha),
-                'pnl' => $this->positionPnl($p),
-                'opened_at' => $p->created_at,
-            ];
-        })->all();
+        return $this->openPositions($accountId)
+            ->map(fn (Position $p): array => $this->positionRow($p))
+            ->all();
     }
 
     // ------------------------------------------------------------------
-    // Shared queries + math
+    // Shared queries + math — the ENGINE'S OWN getters (Bruno's call:
+    // same Position methods as every other surface, zero drift).
     // ------------------------------------------------------------------
 
     /**
-     * Open positions with everything the alpha-path / rungs / PnL math
-     * needs, in one portable query: symbol price, the deepest live LIMIT
-     * rung (largest quantity — same definition as the engine's
-     * lastLimitOrder()), and the filled-rung count.
+     * Open positions as real models so rows read the canonical getters:
+     * unrealizedPnl(), alphaPathPercent(), nextPendingLimitOrderPrice().
+     * Row counts here are small (a few per account), so the getters'
+     * per-position queries are fine.
      *
-     * @return Collection<int, object>
+     * @return Collection<int, Position>
      */
     private function openPositions(?int $accountId = null): Collection
     {
-        return DB::table('positions as p')
-            ->leftJoin('exchange_symbols as es', 'es.id', '=', 'p.exchange_symbol_id')
-            ->where('p.is_open', self::OPEN_FLAG)
-            ->when($accountId !== null, fn ($q) => $q->where('p.account_id', $accountId))
-            ->select([
-                'p.id', 'p.account_id', 'p.direction', 'p.parsed_trading_pair',
-                'p.first_profit_price', 'p.opening_price', 'p.quantity',
-                'p.total_limit_orders', 'p.created_at',
-                'es.mark_price', 'es.token',
-            ])
-            ->selectSub(function ($query): void {
-                $query->from('orders')
-                    ->select('price')
-                    ->whereColumn('orders.position_id', 'p.id')
-                    ->where('orders.type', 'LIMIT')
-                    ->whereNotNull('orders.exchange_order_id')
-                    ->whereIn('orders.status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
-                    ->orderByDesc('orders.quantity')
-                    ->limit(1);
-            }, 'last_limit_price')
-            ->selectSub(function ($query): void {
-                $query->from('orders')
-                    ->selectRaw('COUNT(*)')
-                    ->whereColumn('orders.position_id', 'p.id')
-                    ->where('orders.type', 'LIMIT')
-                    ->where('orders.status', 'FILLED');
-            }, 'filled_limits')
+        return Position::query()
+            ->where('is_open', self::OPEN_FLAG)
+            ->when($accountId !== null, fn ($q) => $q->where('account_id', $accountId))
+            ->with(['exchangeSymbol', 'orders'])
             ->get();
     }
 
     /**
-     * Alpha path % — how far price has walked the ladder corridor, from
-     * the first profit price (0) to the deepest live rung (100). Mirrors
-     * the engine's fraction math (direction-aware, clamped); missing
-     * inputs read 0, same as the engine's safe default. Price source is
-     * mark_price — the freshest price the platform holds.
+     * @return array<string, mixed>
      */
-    private function alphaPathPct(object $p): float
+    private function positionRow(Position $p): array
     {
+        $alpha = $this->alphaPct($p);
+        $limits = $p->orders->where('type', 'LIMIT')->whereNotNull('exchange_order_id');
+
+        return [
+            'id' => (int) $p->id,
+            'symbol' => $p->parsed_trading_pair ?: ($p->exchangeSymbol?->token ?? '?'),
+            'direction' => $p->direction,
+            'rungs_filled' => $limits->where('status', 'FILLED')->count(),
+            'rungs_total' => (int) $p->total_limit_orders,
+            'alpha_pct' => round($alpha, 1),
+            'alpha_limit_pct' => $this->alphaLimitPct($p),
+            'band' => $this->band($alpha),
+            'pnl' => $this->pnl($p),
+            'opened_at' => optional($p->created_at)->format('Y-m-d H:i:s'),
+        ];
+    }
+
+    /**
+     * Alpha path % via the engine's own getter. Its price source is the
+     * 5m candle close (null when stale — pheme holds no fresh candles),
+     * so when the engine reads no price we fall back to the SAME corridor
+     * math on the live mark price rather than showing a dead 0.
+     */
+    private function alphaPct(Position $p): float
+    {
+        try {
+            if ($p->exchangeSymbol?->current_price !== null) {
+                return (float) $p->alphaPathPercent();
+            }
+        } catch (\Throwable) {
+            // candles table absent (dev suite) — fall through to mark math
+        }
+
         $start = $p->first_profit_price !== null ? (float) $p->first_profit_price : null;
-        $end = $p->last_limit_price !== null ? (float) $p->last_limit_price : null;
-        $current = $p->mark_price !== null ? (float) $p->mark_price : null;
+        $end = null;
+        try {
+            $end = $p->lastLimitOrder()?->price;
+            $end = $end !== null ? (float) $end : null;
+        } catch (\Throwable) {
+            $end = null;
+        }
+        $current = $p->exchangeSymbol?->mark_price !== null ? (float) $p->exchangeSymbol->mark_price : null;
 
         if ($start === null || $end === null || $current === null || $start === $end) {
             return 0.0;
         }
 
-        // LONG corridors run downward (TP above, rungs below); SHORT the
-        // inverse. The generic form handles both:
         $fraction = ($start - $current) / ($start - $end);
 
         return max(0.0, min(1.0, $fraction)) * 100;
     }
 
     /**
-     * Bruno's triage bands: green ≤ 50 · yellow 50–85 · red ≥ 85.
+     * Alpha limit % — distance price still has to travel to fill the NEXT
+     * pending rung (engine's qty-ascending pending getter), as a percent
+     * of the current mark. 0 when price already sits at/past the rung.
+     */
+    private function alphaLimitPct(Position $p): ?float
+    {
+        try {
+            $next = $p->nextPendingLimitOrderPrice();
+        } catch (\Throwable) {
+            return null;
+        }
+        $mark = $p->exchangeSymbol?->mark_price;
+
+        if ($next === null || $mark === null || (float) $mark === 0.0) {
+            return null;
+        }
+
+        $distance = $p->direction === 'LONG'
+            ? ((float) $mark - (float) $next) / (float) $mark
+            : ((float) $next - (float) $mark) / (float) $mark;
+
+        return round(max(0.0, $distance) * 100, 1);
+    }
+
+    /**
+     * Bruno's triage bands: green <= 50 - yellow 50-85 - red >= 85.
      */
     private function band(float $alphaPct): string
     {
@@ -245,19 +270,18 @@ class PositionsController extends Controller
     }
 
     /**
-     * Unrealised PnL from entry vs mark — the same math the trader-side
-     * feed uses for open positions.
+     * The engine's unrealizedPnl(): live mark vs the cost-weighted average
+     * entry across every filled order — identical numbers to the trader
+     * surfaces. Null (rendered as em-dash) before the first fill lands.
      */
-    private function positionPnl(object $p): ?float
+    private function pnl(Position $p): ?float
     {
-        if ($p->opening_price === null || $p->mark_price === null || $p->quantity === null) {
+        try {
+            $value = $p->unrealizedPnl();
+        } catch (\Throwable) {
             return null;
         }
 
-        $diff = $p->direction === 'LONG'
-            ? (float) $p->mark_price - (float) $p->opening_price
-            : (float) $p->opening_price - (float) $p->mark_price;
-
-        return round($diff * (float) $p->quantity, 2);
+        return $value !== null && is_numeric($value) ? round((float) $value, 2) : null;
     }
 }
