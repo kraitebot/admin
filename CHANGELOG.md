@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.2] — 2026-07-11
+
+### Improvements
+- **Expanded positions are a mini dashboard — one big tile per position with the ladder drawing.** The row grid gave way to tiles: token + side chip + PnL up top, then the corridor visual — TP anchor on the left, every live rung as a tick at its true proportional price position (filled rungs highlighted, L1–L4 labelled with prices), and the live price marker sitting exactly at the alpha-path percent (pulsing when the position is yellow/red). Stats strip below carries rungs filled, alpha path and next-rung distance. Two-up on desktop, single column on phone.
+
 ## [0.16.1] — 2026-07-11
 
 ### Fixes

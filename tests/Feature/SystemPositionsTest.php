@@ -206,7 +206,20 @@ it('splits an expanded account into longs and shorts with exact rung and alpha f
         // (58 − mark 54) = +4.
         ->assertJsonPath('shorts.0.pnl', 4)
         // SHORT next pending rung 70 vs mark 54: (70−54)/54 = 29.6%.
-        ->assertJsonPath('shorts.0.alpha_limit_pct', 29.6);
+        ->assertJsonPath('shorts.0.alpha_limit_pct', 29.6)
+        // Ladder drawing geometry (LONG corridor 100 → 80): rungs at
+        // 92/88/84/80 map to 40/60/80/100% of the corridor; the unplaced
+        // rung (no exchange id) never draws; fills flag the first two.
+        ->assertJsonPath('longs.0.ladder.tp_price', 100)
+        ->assertJsonPath('longs.0.ladder.deepest_price', 80)
+        ->assertJsonPath('longs.0.ladder.price_pct', 90)
+        ->assertJsonCount(4, 'longs.0.ladder.rungs')
+        ->assertJsonPath('longs.0.ladder.rungs.0.pct', 40)
+        ->assertJsonPath('longs.0.ladder.rungs.0.filled', true)
+        ->assertJsonPath('longs.0.ladder.rungs.1.pct', 60)
+        ->assertJsonPath('longs.0.ladder.rungs.1.filled', true)
+        ->assertJsonPath('longs.0.ladder.rungs.2.filled', false)
+        ->assertJsonPath('longs.0.ladder.rungs.3.pct', 100);
 });
 
 it('orders accounts worst-first by roll-up depth', function (): void {

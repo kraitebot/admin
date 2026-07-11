@@ -194,6 +194,54 @@ class PositionsController extends Controller
             'band' => $this->band($alpha),
             'pnl' => $this->pnl($p),
             'opened_at' => optional($p->created_at)->format('Y-m-d H:i:s'),
+            'ladder' => $this->ladder($p, $alpha),
+        ];
+    }
+
+    /**
+     * The ladder drawing: TP anchors the corridor at 0%, the deepest live
+     * rung at 100%, every rung tick and the live price marker placed at
+     * their proportional positions — the same corridor scale as alpha
+     * path, so the price marker sits exactly at the alpha-path percent.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function ladder(Position $p, float $alphaPct): ?array
+    {
+        $tp = $p->first_profit_price !== null ? (float) $p->first_profit_price : null;
+        $mark = $p->exchangeSymbol?->mark_price !== null ? (float) $p->exchangeSymbol->mark_price : null;
+
+        // Live rungs in ladder order (quantity ascending — martingale
+        // doubles each rung), same liveness rule as the engine's
+        // lastLimitOrder(): placed on the exchange, not terminal.
+        $rungs = $p->orders
+            ->where('type', 'LIMIT')
+            ->whereNotNull('exchange_order_id')
+            ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
+            ->sortBy(fn ($o) => (float) $o->quantity)
+            ->values();
+
+        $deepest = $rungs->last()?->price;
+        $deepest = $deepest !== null ? (float) $deepest : null;
+
+        if ($tp === null || $deepest === null || $tp === $deepest) {
+            return null;
+        }
+
+        $span = $deepest - $tp;
+        $pct = fn (float $price): float => round(max(0.0, min(1.0, ($price - $tp) / $span)) * 100, 1);
+
+        return [
+            'tp_price' => $tp,
+            'deepest_price' => $deepest,
+            'mark_price' => $mark,
+            'price_pct' => round($alphaPct, 1),
+            'rungs' => $rungs->map(fn ($o, int $i): array => [
+                'n' => $i + 1,
+                'price' => (float) $o->price,
+                'pct' => $pct((float) $o->price),
+                'filled' => $o->status === 'FILLED',
+            ])->all(),
         ];
     }
 

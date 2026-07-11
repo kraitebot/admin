@@ -60,6 +60,14 @@
             bandColor(band) {
                 return { green: 'var(--pnl-up-fg)', yellow: 'var(--warn)', red: 'var(--danger)' }[band] ?? 'var(--fg-mute)';
             },
+            // Compact price labels for the ladder ticks: sensible digits per
+            // magnitude, no trailing-zero noise.
+            fmtPrice(v) {
+                const n = Number(v);
+                if (!isFinite(n)) return '';
+                const digits = n >= 1000 ? 1 : (n >= 10 ? 2 : (n >= 0.1 ? 4 : 6));
+                return String(parseFloat(n.toFixed(digits)));
+            },
             marginColor(ratio) {
                 if (ratio === null || ratio === undefined) return 'var(--fg-mute)';
                 return ratio >= 50 ? 'var(--danger)' : (ratio >= 20 ? 'var(--warn)' : 'var(--fg-1)');
@@ -161,34 +169,73 @@
                         <div x-show="expanded[acc.id]?.data && tabRows(acc.id).length === 0" class="py-6 text-center font-mono text-[11px] text-fg-mute"
                              x-text="`No ${expanded[acc.id]?.tab} open on this account.`"></div>
 
-                        {{-- column labels --}}
-                        <div x-show="tabRows(acc.id).length > 0"
-                             class="flex items-center gap-4 pt-3 pb-1.5 px-5 max-[640px]:px-4 font-mono text-[8.5px] font-semibold tracking-[0.1em] uppercase text-fg-faint">
-                            <span class="w-[130px] flex-shrink-0">Token</span>
-                            <span class="w-[80px] flex-shrink-0">Rungs filled</span>
-                            <span class="flex-1 min-w-[120px]">Alpha path</span>
-                            <span class="w-[90px] text-right flex-shrink-0">Alpha limit</span>
-                            <span class="w-[110px] text-right flex-shrink-0">PnL</span>
-                        </div>
+                        {{-- mini dashboard: one big tile per position, the
+                             ladder corridor drawing as the centerpiece:
+                             [TP] ---- <price> --- |1 --- |2 --- |3 --- |4 --}}
+                        <div class="grid grid-cols-2 gap-3 p-4 max-[980px]:grid-cols-1" x-show="tabRows(acc.id).length > 0">
+                            <template x-for="pos in tabRows(acc.id)" :key="pos.id">
+                                <div class="bg-surface border rounded-control p-4 flex flex-col gap-3"
+                                     :style="pos.band === 'red' ? 'border-color: color-mix(in srgb, var(--danger) 45%, transparent)' : (pos.band === 'yellow' ? 'border-color: color-mix(in srgb, var(--warn) 40%, transparent)' : 'border-color: var(--line)')">
+                                    {{-- tile header: token + side | pnl --}}
+                                    <div class="flex items-center justify-between gap-3">
+                                        <span class="flex items-center gap-2 min-w-0">
+                                            <span class="font-mono text-[13px] font-bold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis" x-text="pos.symbol"></span>
+                                            <span class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip flex-shrink-0"
+                                                  :style="pos.direction === 'LONG'
+                                                      ? 'color: var(--pnl-up-fg); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)'
+                                                      : 'color: var(--pnl-down-fg); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)'"
+                                                  x-text="pos.direction"></span>
+                                        </span>
+                                        <span class="font-mono text-[14px] font-bold tabular-nums flex-shrink-0" :style="`color: ${pnlColor(pos.pnl)}`" x-text="fmtMoney(pos.pnl)"></span>
+                                    </div>
 
-                        <template x-for="pos in tabRows(acc.id)" :key="pos.id">
-                            <div class="flex items-center gap-4 py-2.5 px-5 border-t border-line-soft max-[640px]:px-4 max-[640px]:flex-wrap max-[640px]:gap-y-1.5"
-                                 :style="pos.band === 'red' ? 'background: color-mix(in srgb, var(--danger) 7%, transparent)' : (pos.band === 'yellow' ? 'background: color-mix(in srgb, var(--warn) 6%, transparent)' : '')">
-                                <span class="font-mono text-[12px] font-semibold text-fg-1 w-[130px] flex-shrink-0 whitespace-nowrap overflow-hidden text-ellipsis" x-text="pos.symbol"></span>
-                                <span class="font-mono text-[12px] font-bold tabular-nums text-fg-1 w-[80px] flex-shrink-0" x-text="`${pos.rungs_filled} / ${pos.rungs_total}`"></span>
-                                {{-- alpha path: number + corridor bar --}}
-                                <span class="flex-1 min-w-[120px] flex items-center gap-2.5">
-                                    <span class="font-mono text-[12px] font-bold tabular-nums w-[52px] text-right" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span>
-                                    <span class="flex-1 h-[5px] rounded-chip bg-surface-3 overflow-hidden">
-                                        <span class="block h-full rounded-chip transition-[width] duration-base" :style="`width: ${Math.min(100, pos.alpha_pct)}%; background: ${bandColor(pos.band)}`"></span>
-                                    </span>
-                                </span>
-                                {{-- alpha limit: distance to the next pending rung --}}
-                                <span class="font-mono text-[12px] font-bold tabular-nums w-[90px] text-right flex-shrink-0 text-fg-2"
-                                      x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span>
-                                <span class="font-mono text-[12px] font-bold tabular-nums w-[110px] text-right flex-shrink-0" :style="`color: ${pnlColor(pos.pnl)}`" x-text="fmtMoney(pos.pnl)"></span>
-                            </div>
-                        </template>
+                                    {{-- the corridor drawing --}}
+                                    <template x-if="pos.ladder">
+                                        <div class="relative h-[58px] mt-1">
+                                            {{-- track + walked overlay --}}
+                                            <div class="absolute left-0 right-0 top-[26px] h-[3px] rounded-chip bg-surface-3"></div>
+                                            <div class="absolute left-0 top-[26px] h-[3px] rounded-chip opacity-80"
+                                                 :style="`width: ${Math.min(100, pos.ladder.price_pct)}%; background: ${bandColor(pos.band)}`"></div>
+
+                                            {{-- TP anchor at 0% --}}
+                                            <div class="absolute top-0 bottom-0 flex flex-col items-start" style="left: 0">
+                                                <span class="font-mono text-[8px] font-bold tracking-[0.08em] uppercase" style="color: var(--pnl-up-fg)">TP</span>
+                                                <span class="w-[2px] flex-shrink-0 h-[14px] mt-[3px] rounded-chip" style="background: var(--pnl-up-fg)"></span>
+                                                <span class="font-mono text-[8.5px] tabular-nums text-fg-mute mt-auto" x-text="fmtPrice(pos.ladder.tp_price)"></span>
+                                            </div>
+
+                                            {{-- rung ticks --}}
+                                            <template x-for="rung in pos.ladder.rungs" :key="rung.n">
+                                                <div class="absolute top-0 bottom-0 flex flex-col items-center -translate-x-1/2" :style="`left: ${rung.pct}%`">
+                                                    <span class="font-mono text-[8px] font-bold tabular-nums" :class="rung.filled ? 'text-fg-1' : 'text-fg-faint'" x-text="`L${rung.n}`"></span>
+                                                    <span class="w-[2px] flex-shrink-0 h-[14px] mt-[3px] rounded-chip"
+                                                          :style="rung.filled ? 'background: var(--accent)' : 'background: var(--fg-faint); opacity: .55'"></span>
+                                                    <span class="font-mono text-[8.5px] tabular-nums mt-auto" :class="rung.filled ? 'text-fg-3' : 'text-fg-faint'"
+                                                          x-text="fmtPrice(rung.price)"></span>
+                                                </div>
+                                            </template>
+
+                                            {{-- live price marker at alpha-path % --}}
+                                            <div class="absolute flex flex-col items-center -translate-x-1/2 z-[1]" :style="`left: ${Math.min(100, Math.max(0, pos.ladder.price_pct))}%; top: 0; bottom: 0`">
+                                                <span class="font-mono text-[8.5px] font-bold tabular-nums whitespace-nowrap" :style="`color: ${bandColor(pos.band)}`"
+                                                      x-text="pos.ladder.mark_price === null ? '' : fmtPrice(pos.ladder.mark_price)"></span>
+                                                <span class="w-[9px] h-[9px] rounded-chip border-2 mt-[16px]"
+                                                      :style="`background: ${bandColor(pos.band)}; border-color: var(--surface, #fff)`"
+                                                      :class="pos.band !== 'green' && 'animate-pulse'"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div x-show="!pos.ladder" class="font-mono text-[10px] text-fg-mute py-3">No live ladder to draw (rungs not placed yet).</div>
+
+                                    {{-- stats strip --}}
+                                    <div class="flex items-center gap-4 pt-2 border-t border-line-soft font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-mute">
+                                        <span>Rungs <span class="text-fg-1 font-bold" x-text="`${pos.rungs_filled}/${pos.rungs_total}`"></span></span>
+                                        <span>Alpha path <span class="font-bold" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span></span>
+                                        <span>Next rung <span class="text-fg-1 font-bold" x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span></span>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
                     </div>
                 </div>
             </template>
