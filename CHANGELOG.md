@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.10] — 2026-07-11
+
+### Fixes
+- **Trader dashboard review pass — three bugs fixed.**
+  - Activity-feed close rows showed the wrong profit on averaged-down (WAP'd) positions: they recomputed PnL from the very first fill price instead of the blended entry, and ignored fees — so the feed could claim a profit on a close the KPI strip counted as a loss (and badge it "High profit"). Close rows now show the exchange's own stored net figure, the exact number the KPI totals sum; the price recompute survives only as a fallback for closes that predate the stored figure.
+  - The 10-second refresh could die silently forever if a single response hung — same 8-second cap the positions and infra pages got, plus a quiet retry on the next tick.
+  - A degenerate fallback could serialize a whole related record into a tile's symbol label; it now falls back to the exchange symbol's trading pair.
+
 ## [0.16.9] — 2026-07-11
 
 ### Improvements

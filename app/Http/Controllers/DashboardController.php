@@ -225,10 +225,18 @@ class DashboardController extends Controller
             ->whereNotNull('closed_at')
             ->orderByDesc('closed_at')
             ->limit(30)
-            ->get(['id', 'was_waped', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
+            ->get(['id', 'pnl', 'was_waped', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
             ->each(function ($p) use ($events, $ago): void {
+                // The engine stores the exchange's own net realized PnL on the
+                // position after every close (fees included) — the SAME figure
+                // the KPI strip sums. Prefer it; the price-delta recompute is
+                // only a fallback for rows closed before that column existed,
+                // and it is WRONG on WAP'd closes (opening_price is the first
+                // fill, not the blended entry the close actually realized).
                 $pnl = null;
-                if (is_numeric($p->opening_price) && is_numeric($p->closing_price) && is_numeric($p->quantity)) {
+                if (is_numeric($p->pnl)) {
+                    $pnl = number_format((float) $p->pnl, 2, '.', '');
+                } elseif (is_numeric($p->opening_price) && is_numeric($p->closing_price) && is_numeric($p->quantity)) {
                     $delta = strtoupper((string) $p->direction) === 'LONG'
                         ? bcsub((string) $p->closing_price, (string) $p->opening_price, 8)
                         : bcsub((string) $p->opening_price, (string) $p->closing_price, 8);
@@ -718,7 +726,7 @@ class DashboardController extends Controller
         return [
             'id' => $position->id,
             'status' => strtolower((string) $position->status),
-            'symbol' => $position->parsed_trading_pair ?? $exchangeSymbol?->symbol ?? 'Unknown',
+            'symbol' => $position->parsed_trading_pair ?? $exchangeSymbol?->parsed_trading_pair ?? 'Unknown',
             'token' => $exchangeSymbol?->token ?? $symbol?->token ?? null,
             'token_name' => $symbol?->name ?? null,
             'token_image' => $symbol?->image_url ?? null,

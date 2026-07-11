@@ -58,8 +58,11 @@
                 this.spinning = true;
                 const started = Date.now();
                 try {
+                    // 8s cap: a single stalled response must never wedge
+                    // `loading` and silently kill every future poll.
                     const res = await fetch(`${dataUrl}?account_id=${this.accountId}`, {
                         headers: { 'Accept': 'application/json' },
+                        signal: AbortSignal.timeout(8000),
                     });
                     if (res.ok) {
                         this.d = await res.json();
@@ -67,6 +70,8 @@
                         this.page = Math.min(this.page, this.pageCount() - 1);
                         this.syncDot();
                     }
+                } catch (_) {
+                    // timeout / network blip — keep the last payload, next tick retries
                 } finally {
                     this.loading = false;
                     // Hold the spin for at least 1s — a sub-100ms local fetch

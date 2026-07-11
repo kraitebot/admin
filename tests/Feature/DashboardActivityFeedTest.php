@@ -26,6 +26,7 @@ beforeEach(function (): void {
         $table->string('quantity')->nullable();
         $table->string('opening_price')->nullable();
         $table->string('closing_price')->nullable();
+        $table->decimal('pnl', 20, 8)->nullable();
         $table->boolean('was_waped')->default(false);
         $table->dateTime('opened_at')->nullable();
         $table->dateTime('closed_at')->nullable();
@@ -99,6 +100,47 @@ it('keeps every active position in the feed despite newer closed-position churn'
     // The active position's OPEN event must be present even though 40 newer
     // opens and 40 newer closes exist.
     expect($activeSymbols)->toContain('KASUSDT');
+});
+
+it('reports the exchange-stored net PnL on closes, not the pre-WAP price recompute', function (): void {
+    $accountId = 11;
+    $base = now()->subHour();
+
+    // WAP'd close: opening_price is the FIRST fill only — the naive
+    // (close − open) × qty recompute says (2 − 1) × 10 = +10.00, but the
+    // exchange's stored net figure (blended entry + fees) is −3.21.
+    DB::table('positions')->insert([
+        'account_id' => $accountId,
+        'status' => 'closed',
+        'parsed_trading_pair' => 'WAPUSDT',
+        'direction' => 'LONG',
+        'quantity' => '10',
+        'opening_price' => '1',
+        'closing_price' => '2',
+        'pnl' => '-3.21',
+        'was_waped' => true,
+        'opened_at' => $base,
+        'closed_at' => $base->copy()->addMinutes(30),
+    ]);
+
+    // Legacy close without a stored figure — the price recompute fallback.
+    DB::table('positions')->insert([
+        'account_id' => $accountId,
+        'status' => 'closed',
+        'parsed_trading_pair' => 'OLDUSDT',
+        'direction' => 'SHORT',
+        'quantity' => '4',
+        'opening_price' => '10',
+        'closing_price' => '9',
+        'pnl' => null,
+        'opened_at' => $base,
+        'closed_at' => $base->copy()->addMinutes(10),
+    ]);
+
+    $closes = collect(buildActivityFeed($accountId))->where('kind', 'CLOSE')->keyBy('symbol');
+
+    expect($closes['WAPUSDT']['pnl'])->toBe('-3.21')
+        ->and($closes['OLDUSDT']['pnl'])->toBe('4.00');
 });
 
 it('includes a WAP event from an active position buried under churn', function (): void {
