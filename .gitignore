@@ -36,3 +36,6 @@ Thumbs.db
 
 # Step-dispatcher runtime flags (local trading-active state, regenerated)
 /storage/step-dispatcher/
+
+# Session artifacts from automated diff reviews — never commit
+/code-review/

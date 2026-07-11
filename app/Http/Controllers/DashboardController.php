@@ -9,6 +9,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Kraite\Core\Models\Account;
@@ -158,16 +159,22 @@ class DashboardController extends Controller
      */
     private function connectivityServers(): array
     {
+        // Fleet-global and near-static, but the payload is polled every 10s
+        // per open tab — a short cache keeps the roster query off that path.
         return rescue(
-            fn (): array => app(AccountServerConnectivityService::class)
-                ->apiConnectivityServers()
-                ->map(fn ($server): array => [
-                    'id' => (int) $server->id,
-                    'hostname' => $server->hostname,
-                    'ip_address' => $server->ip_address,
-                ])
-                ->values()
-                ->all(),
+            fn (): array => Cache::remember(
+                'dashboard.connectivity-servers',
+                60,
+                fn (): array => app(AccountServerConnectivityService::class)
+                    ->apiConnectivityServers()
+                    ->map(fn ($server): array => [
+                        'id' => (int) $server->id,
+                        'hostname' => $server->hostname,
+                        'ip_address' => $server->ip_address,
+                    ])
+                    ->values()
+                    ->all(),
+            ),
             [],
         );
     }

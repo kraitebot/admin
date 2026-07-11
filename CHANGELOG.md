@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.1] — 2026-07-11
+
+### Fixes
+- **Connectivity card hardening**: a saved check that no longer exists is forgotten instead of being polled every 3 seconds forever; "Checked Xs ago" only appears for checks run in this session (a rehydrated old result reads "Last result"); the server roster is cached for a minute so the 10-second payload poll stops re-reading invariant fleet data.
+
 ## [0.17.0] — 2026-07-11
 
 ### Added

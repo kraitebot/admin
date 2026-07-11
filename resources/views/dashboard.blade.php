@@ -243,7 +243,7 @@
             // forgotten IP whitelist shows up as a red row naming the IP.
             // Last result is remembered per account (localStorage block id)
             // and re-hydrated on page load.
-            conn: { rows: null, block: null, testing: false, checkedAt: null, error: null },
+            conn: { rows: null, block: null, testing: false, checkedAt: null, error: null, startedHere: false },
             _connTimer: null,
             connKey() { return `kraite.connCheck.${this.accountId}`; },
             connRows() {
@@ -263,6 +263,7 @@
                 if (this.conn.testing || !this.accountId) return;
                 this.conn.error = null;
                 this.conn.testing = true;
+                this.conn.startedHere = true;
                 const res = await hubUiFetch(connUrls.start.replace('__ID__', this.accountId), { body: {} });
                 if (!res.ok) {
                     this.conn.testing = false;
@@ -285,15 +286,23 @@
                     this.conn.rows = res.data.servers;
                     if (res.data.is_complete) {
                         this.conn.testing = false;
-                        this.conn.checkedAt = Date.now();
+                        // "Checked Xs ago" only for a check run in THIS session —
+                        // a rehydrated historical result shows "Last result".
+                        if (this.conn.startedHere) this.conn.checkedAt = Date.now();
                         return;
                     }
                     this.conn.testing = true;
+                } else if (res.status >= 400 && res.status < 500) {
+                    // Terminal: the saved workflow is gone / not ours / session
+                    // expired. Forget it — never poll a dead block forever.
+                    try { localStorage.removeItem(this.connKey()); } catch (_) {}
+                    this.conn = { rows: null, block: null, testing: false, checkedAt: null, error: null, startedHere: false };
+                    return;
                 }
                 this._connTimer = setTimeout(() => this.pollConn(), 3000);
             },
             hydrateConn() {
-                this.conn = { rows: null, block: null, testing: false, checkedAt: null, error: null };
+                this.conn = { rows: null, block: null, testing: false, checkedAt: null, error: null, startedHere: false };
                 if (this._connTimer) { clearTimeout(this._connTimer); this._connTimer = null; }
                 let block = null;
                 try { block = localStorage.getItem(this.connKey()); } catch (_) {}
