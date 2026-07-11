@@ -106,6 +106,30 @@ class DashboardController extends Controller
     }
 
     /**
+     * Fire the engine's connectivity workflow for one of the caller's OWN
+     * accounts (saved credentials, one test per apiable server). Owner-scoped
+     * exactly like data() — the core API route's policy gate expects the
+     * core User model and rejects this app's authenticated user outright,
+     * so the dashboard drives the service through this thin endpoint
+     * instead. Polling reuses accounts.connectivity.status (same ownership
+     * rule, no policy involved).
+     */
+    public function startConnectivity(Request $request, AccountServerConnectivityService $connectivity): JsonResponse
+    {
+        $request->validate([
+            'account_id' => ['required', 'integer'],
+        ]);
+
+        $query = Account::where('id', $request->input('account_id'));
+
+        if (! Auth::user()->is_admin) {
+            $query->where('user_id', Auth::id());
+        }
+
+        return response()->json($connectivity->start($query->firstOrFail()));
+    }
+
+    /**
      * Full dashboard payload for one account — shared by the first paint
      * (index) and the polling endpoint (data) so both render one shape.
      *

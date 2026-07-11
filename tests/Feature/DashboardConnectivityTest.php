@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\DashboardController;
+use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -56,4 +57,29 @@ it('degrades to an empty roster when the servers table is unavailable', function
     Schema::dropIfExists('servers');
 
     expect(buildConnectivityServers())->toBe([]);
+});
+
+it('gates the connectivity start endpoint to the account owner', function (): void {
+    Schema::create('accounts', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('user_id');
+        $table->softDeletes();
+        $table->timestamps();
+    });
+
+    $owner = User::factory()->create(['email' => 'conn-owner@kraite.test']);
+    $intruder = User::factory()->create(['email' => 'conn-intruder@kraite.test', 'is_admin' => false]);
+    $accountId = DB::table('accounts')->insertGetId(['user_id' => $owner->id]);
+
+    // Guests never reach it.
+    $this->post('https://admin.kraite.test/dashboard/connectivity/test', ['account_id' => $accountId])
+        ->assertRedirect();
+
+    // Another user's account reads as nonexistent — same 404 surface as the
+    // data feed, so account existence isn't leaked.
+    $this->actingAs($intruder)
+        ->post('https://admin.kraite.test/dashboard/connectivity/test', ['account_id' => $accountId])
+        ->assertNotFound();
+
+    Schema::dropIfExists('accounts');
 });

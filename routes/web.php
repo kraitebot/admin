@@ -71,6 +71,13 @@ Route::domain(config('domains.admin'))->group(function () {
         // Dashboard data feed
         Route::get('/dashboard/data', [DashboardController::class, 'data'])->name('dashboard.data');
 
+        // Server-connectivity check for the dashboard card — starts the
+        // engine's per-server workflow on one of the caller's own accounts.
+        // Status polling reuses accounts.connectivity.status.
+        Route::post('/dashboard/connectivity/test', [DashboardController::class, 'startConnectivity'])
+            ->middleware('throttle:6,1')
+            ->name('dashboard.connectivity.test');
+
         // Projections
         Route::get('/projections', [ProjectionsController::class, 'index'])->name('projections');
         Route::get('/projections/data', [ProjectionsController::class, 'data'])->name('projections.data');

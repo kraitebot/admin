@@ -264,7 +264,7 @@
                 this.conn.error = null;
                 this.conn.testing = true;
                 this.conn.startedHere = true;
-                const res = await hubUiFetch(connUrls.start.replace('__ID__', this.accountId), { body: {} });
+                const res = await hubUiFetch(connUrls.start, { body: { account_id: this.accountId } });
                 if (!res.ok) {
                     this.conn.testing = false;
                     this.conn.error = res.status === 429 ? 'Too many checks — wait a minute and retry.' : (res.data?.error || 'Could not start the check.');
@@ -312,8 +312,8 @@
     </script>
 
     <div x-data="dashPage(@js($initialPayload), @js($accounts), @js($initialAccountId), @js(route('dashboard.data')), @js([
-            'start' => route('connectivity-test.accounts.start', '__ID__'),
-            'status' => route('connectivity-test.status', '__UUID__'),
+            'start' => route('dashboard.connectivity.test'),
+            'status' => route('accounts.connectivity.status', '__UUID__'),
         ]))">
 
         {{-- ===================== PAGE HEADER ===================== --}}

@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.2] — 2026-07-11
+
+### Fixes
+- **Connectivity check now actually starts.** The card's first live run hit "Server Error": the engine-side permission gate on the shared API route expects the engine's own user type and rejected the panel's logged-in users outright. The card now starts the workflow through a panel-owned endpoint with the same owner-only scoping as the dashboard feed (existence not leaked to other users, rate-limited), and polls the account panel's existing status route. The engine-side gate gets the proper fix in the next core release.
+
 ## [0.17.1] — 2026-07-11
 
 ### Fixes
