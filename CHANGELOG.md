@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.4] — 2026-07-11
+
+### Fixes
+- **Freshly-opened positions no longer flash "out of sync".** A position opened after the engine's last exchange snapshot can't be in that snapshot — its absence now reads "unverified" until the next snapshot lands, while proven value mismatches on matched rows still flag. Also fixed the negative "AGE −1200" artifact and the "0s old" mislabel on the exchange-picture age (trading apps stamp rows in their own timezone while the database clock runs UTC — ages are now normalized).
+
 ## [0.17.3] — 2026-07-11
 
 ### Fixes

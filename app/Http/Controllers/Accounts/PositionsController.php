@@ -467,7 +467,7 @@ class PositionsController extends Controller
         // position "out of sync"). Symbol configs (leverage/marginType)
         // have no snapshot source yet; the comparator already treats a
         // missing exchange-side value as "no signal", never drift.
-        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent] =
+        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent, $snapshotOldestAt] =
             $this->exchangeStateFromSnapshots($account);
         $symbolConfigs = [];
 
@@ -503,6 +503,47 @@ class PositionsController extends Controller
                     $p['orders'],
                 );
                 $p['order_counts'] = $this->countStatuses($p['orders']);
+
+                return $p;
+            }, $pairs);
+        }
+
+        // Snapshot race on freshly-opened positions: a snapshot written
+        // BEFORE (or moments after) a position opened cannot contain that
+        // position or its rungs — absence proves nothing, only presence-
+        // with-different-values does. Both timestamps are written by the
+        // same trading apps, so comparing them raw is timezone-safe (no
+        // NOW() involved — the DB clock runs in a different frame than the
+        // writers'). Matched-row FIELD drift is real proof and stays.
+        if ($snapshotsPresent && $snapshotOldestAt !== null) {
+            $pairs = array_map(function (array $p) use ($dbPositions, $snapshotOldestAt): array {
+                $dbId = $p['db']['id'] ?? null;
+                $openedAt = $dbId !== null
+                    ? (string) optional($dbPositions->firstWhere('id', $dbId))->getRawOriginal('opened_at')
+                    : '';
+
+                if ($openedAt === '' || strtotime($openedAt) < strtotime($snapshotOldestAt) - 60) {
+                    return $p; // position predates the snapshot — absence is real evidence
+                }
+
+                $p['orders'] = array_map(
+                    fn (array $o): array => $o['status'] === self::PAIR_STATUS_DB_ONLY
+                        ? array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []])
+                        : $o,
+                    $p['orders'],
+                );
+                $p['order_counts'] = $this->countStatuses($p['orders']);
+
+                if ($p['status'] === self::PAIR_STATUS_DB_ONLY) {
+                    $p['status'] = self::PAIR_STATUS_UNVERIFIED;
+                } elseif ($p['status'] === self::PAIR_STATUS_DRIFT) {
+                    $provenOrderDrift = collect($p['orders'])->contains(
+                        fn (array $o): bool => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
+                    );
+                    if (! $provenOrderDrift && empty($p['position_drift_fields'])) {
+                        $p['status'] = self::PAIR_STATUS_SYNCED;
+                    }
+                }
 
                 return $p;
             }, $pairs);
@@ -558,20 +599,52 @@ class PositionsController extends Controller
         }
 
         $age = null;
+        $oldestAt = null;
         if ($snapshotsPresent) {
-            // Snapshot rows are written in the DB session tz by the trading
-            // boxes while this app reads UTC — diff on the DB clock (MySQL);
-            // the SQLite test connection writes UTC, so a plain diff is right.
+            // Oldest of the snapshots used — raw, for same-frame comparison
+            // against positions.opened_at (both written by the trading apps).
+            $oldestAt = $account->apiSnapshots()
+                ->whereIn('canonical', ['account-positions', 'account-open-orders'])
+                ->min('updated_at');
+            $oldestAt = $oldestAt !== null ? (string) $oldestAt : null;
+
             $age = rescue(fn () => $account->apiSnapshots()
                 ->whereIn('canonical', ['account-positions', 'account-open-orders'])
                 ->selectRaw(DB::connection()->getDriverName() === 'mysql'
                     ? 'MAX(TIMESTAMPDIFF(SECOND, updated_at, NOW())) as age'
                     : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
                 ->value('age'), null, false);
-            $age = $age !== null ? max(0, (int) $age) : null;
+            $age = $this->normalizeAge($age !== null ? (int) $age : null);
         }
 
-        return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent];
+        return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent, $oldestAt];
+    }
+
+    /**
+     * Ages diffed against the DB clock can come out negative by WHOLE
+     * HOURS: the trading apps stamp rows in their own timezone while the
+     * DB clock runs UTC. Normalize by adding whole hours until the age is
+     * non-negative (a small negative from ordinary clock skew clamps to
+     * 0). Ceiling: a real age beyond one hour can be under-reported when
+     * the writer's offset is unknown — anything that old already reads as
+     * a stale picture, which is the operative signal.
+     */
+    private function normalizeAge(?int $raw): ?int
+    {
+        if ($raw === null) {
+            return null;
+        }
+        if ($raw >= 0) {
+            return $raw;
+        }
+        if ($raw > -60) {
+            return 0;
+        }
+        while ($raw < 0) {
+            $raw += 3600;
+        }
+
+        return $raw;
     }
 
     private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
@@ -858,7 +931,9 @@ class PositionsController extends Controller
             'leverage' => (string) $pos->leverage,
             'margin' => (string) $pos->margin,
             'margin_mode' => $accountMarginMode,
-            'opened_seconds_ago' => $pos->opened_seconds_ago !== null ? (int) $pos->opened_seconds_ago : null,
+            // Normalized: workers stamp opened_at in their app tz while the
+            // DB clock runs UTC, so the raw diff can read negative ("-1200").
+            'opened_seconds_ago' => $this->normalizeAge($pos->opened_seconds_ago !== null ? (int) $pos->opened_seconds_ago : null),
             'unrealized_pnl' => null,
         ];
     }

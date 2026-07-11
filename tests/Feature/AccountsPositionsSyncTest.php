@@ -185,6 +185,30 @@ it('reports every pair unverified when no exchange snapshots exist yet', functio
         ->assertJsonPath('pairs.0.orders.1.status', 'unverified');
 });
 
+it('treats a position newer than the snapshot as unverified, not drifting', function (): void {
+    [$userId, $accountId] = seedSyncedAccount();
+
+    // Snapshots written BEFORE this position opened — they cannot contain
+    // it, so its absence proves nothing. (Exactly the race that flagged a
+    // minutes-old POLUSDT as fully out of sync in production.)
+    seedExchangeSnapshots($accountId);
+    DB::table('api_snapshots')->update(['updated_at' => now()->subMinutes(30)]);
+    DB::table('api_snapshots')
+        ->where('canonical', 'account-positions')
+        ->update(['api_response' => json_encode([])]); // position absent
+    DB::table('api_snapshots')
+        ->where('canonical', 'account-open-orders')
+        ->update(['api_response' => json_encode([])]); // orders absent
+    DB::table('positions')->update(['opened_at' => now()->subMinutes(5), 'created_at' => now()->subMinutes(5)]);
+
+    $this->actingAs(User::findOrFail($userId))
+        ->get("https://admin.kraite.test/accounts/positions/data?account_id={$accountId}")
+        ->assertSuccessful()
+        ->assertJsonPath('pairs.0.status', 'unverified')
+        ->assertJsonPath('pairs.0.orders.0.status', 'unverified')
+        ->assertJsonPath('pairs.0.orders.1.status', 'unverified');
+});
+
 it('flags a stop order as db_only once the algo snapshot exists and lacks it', function (): void {
     [$userId, $accountId] = seedSyncedAccount();
     seedExchangeSnapshots($accountId);
