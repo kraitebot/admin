@@ -174,64 +174,70 @@
                              [TP] ---- <price> --- |1 --- |2 --- |3 --- |4 --}}
                         <div class="grid grid-cols-2 gap-3 p-4 max-[980px]:grid-cols-1" x-show="tabRows(acc.id).length > 0">
                             <template x-for="pos in tabRows(acc.id)" :key="pos.id">
-                                <div class="bg-surface border rounded-control p-4 flex flex-col gap-3"
+                                <div class="bg-surface border rounded-control p-5 flex flex-col gap-3"
                                      :style="pos.band === 'red' ? 'border-color: color-mix(in srgb, var(--danger) 45%, transparent)' : (pos.band === 'yellow' ? 'border-color: color-mix(in srgb, var(--warn) 40%, transparent)' : 'border-color: var(--line)')">
                                     {{-- tile header: token + side | pnl --}}
                                     <div class="flex items-center justify-between gap-3">
                                         <span class="flex items-center gap-2 min-w-0">
-                                            <span class="font-mono text-[13px] font-bold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis" x-text="pos.symbol"></span>
+                                            <span class="font-mono text-[14.5px] font-bold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis" x-text="pos.symbol"></span>
                                             <span class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip flex-shrink-0"
                                                   :style="pos.direction === 'LONG'
                                                       ? 'color: var(--pnl-up-fg); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)'
                                                       : 'color: var(--pnl-down-fg); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)'"
                                                   x-text="pos.direction"></span>
                                         </span>
-                                        <span class="font-mono text-[14px] font-bold tabular-nums flex-shrink-0" :style="`color: ${pnlColor(pos.pnl)}`" x-text="fmtMoney(pos.pnl)"></span>
+                                        <span class="font-mono text-[16px] font-bold tabular-nums flex-shrink-0" :style="`color: ${pnlColor(pos.pnl)}`" x-text="fmtMoney(pos.pnl)"></span>
                                     </div>
 
-                                    {{-- the corridor drawing --}}
+                                    {{-- the corridor drawing. Fixed pixel geometry so every
+                                         element centres on the track (y=36px): labels at 0,
+                                         ticks 24-48, track 34-38, dot centred at 36, prices at 56.
+                                         Horizontal inset gives the 0% / 100% markers room so the
+                                         last rung's label never clips at the tile edge. --}}
                                     <template x-if="pos.ladder">
-                                        <div class="relative h-[58px] mt-1">
+                                        <div class="relative h-[74px] mt-1 mx-6">
                                             {{-- track + walked overlay --}}
-                                            <div class="absolute left-0 right-0 top-[26px] h-[3px] rounded-chip bg-surface-3"></div>
-                                            <div class="absolute left-0 top-[26px] h-[3px] rounded-chip opacity-80"
+                                            <div class="absolute left-0 right-0 top-[34px] h-[4px] rounded-chip bg-surface-3"></div>
+                                            <div class="absolute left-0 top-[34px] h-[4px] rounded-chip opacity-90"
                                                  :style="`width: ${Math.min(100, pos.ladder.price_pct)}%; background: ${bandColor(pos.band)}`"></div>
 
                                             {{-- TP anchor at 0% --}}
-                                            <div class="absolute top-0 bottom-0 flex flex-col items-start" style="left: 0">
-                                                <span class="font-mono text-[8px] font-bold tracking-[0.08em] uppercase" style="color: var(--pnl-up-fg)">TP</span>
-                                                <span class="w-[2px] flex-shrink-0 h-[14px] mt-[3px] rounded-chip" style="background: var(--pnl-up-fg)"></span>
-                                                <span class="font-mono text-[8.5px] tabular-nums text-fg-mute mt-auto" x-text="fmtPrice(pos.ladder.tp_price)"></span>
+                                            <div class="absolute -translate-x-1/2" style="left: 0">
+                                                <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tracking-[0.06em] uppercase" style="color: var(--pnl-up-fg)">TP</span>
+                                                <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip" style="background: var(--pnl-up-fg)"></span>
+                                                <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] font-semibold tabular-nums whitespace-nowrap" style="color: var(--pnl-up-fg)" x-text="fmtPrice(pos.ladder.tp_price)"></span>
                                             </div>
 
                                             {{-- rung ticks --}}
                                             <template x-for="rung in pos.ladder.rungs" :key="rung.n">
-                                                <div class="absolute top-0 bottom-0 flex flex-col items-center -translate-x-1/2" :style="`left: ${rung.pct}%`">
-                                                    <span class="font-mono text-[8px] font-bold tabular-nums" :class="rung.filled ? 'text-fg-1' : 'text-fg-faint'" x-text="`L${rung.n}`"></span>
-                                                    <span class="w-[2px] flex-shrink-0 h-[14px] mt-[3px] rounded-chip"
-                                                          :style="rung.filled ? 'background: var(--accent)' : 'background: var(--fg-faint); opacity: .55'"></span>
-                                                    <span class="font-mono text-[8.5px] tabular-nums mt-auto" :class="rung.filled ? 'text-fg-3' : 'text-fg-faint'"
+                                                <div class="absolute" :style="`left: ${rung.pct}%`">
+                                                    <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tabular-nums" :class="rung.filled ? 'text-fg-1' : 'text-fg-3'" x-text="`L${rung.n}`"></span>
+                                                    <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip"
+                                                          :style="rung.filled ? 'background: var(--accent)' : 'background: var(--fg-mute); opacity: .6'"></span>
+                                                    <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] tabular-nums whitespace-nowrap" :class="rung.filled ? 'text-fg-1 font-semibold' : 'text-fg-3'"
                                                           x-text="fmtPrice(rung.price)"></span>
                                                 </div>
                                             </template>
 
-                                            {{-- live price marker at alpha-path % --}}
-                                            <div class="absolute flex flex-col items-center -translate-x-1/2 z-[1]" :style="`left: ${Math.min(100, Math.max(0, pos.ladder.price_pct))}%; top: 0; bottom: 0`">
-                                                <span class="font-mono text-[8.5px] font-bold tabular-nums whitespace-nowrap" :style="`color: ${bandColor(pos.band)}`"
+                                            {{-- live price marker, dot dead-centre on the track --}}
+                                            <div class="absolute z-[1]" :style="`left: ${Math.min(100, Math.max(0, pos.ladder.price_pct))}%`">
+                                                <span class="absolute -translate-x-1/2 top-[13px] font-mono text-[12px] font-bold tabular-nums whitespace-nowrap px-1.5 py-px rounded-chip"
+                                                      :style="`color: ${bandColor(pos.band)}; background: var(--surface)`"
                                                       x-text="pos.ladder.mark_price === null ? '' : fmtPrice(pos.ladder.mark_price)"></span>
-                                                <span class="w-[9px] h-[9px] rounded-chip border-2 mt-[16px]"
-                                                      :style="`background: ${bandColor(pos.band)}; border-color: var(--surface, #fff)`"
+                                                <span class="absolute -translate-x-1/2 top-[30px] w-[12px] h-[12px] rounded-chip border-2"
+                                                      :style="`background: ${bandColor(pos.band)}; border-color: var(--surface)`"
                                                       :class="pos.band !== 'green' && 'animate-pulse'"></span>
                                             </div>
                                         </div>
                                     </template>
-                                    <div x-show="!pos.ladder" class="font-mono text-[10px] text-fg-mute py-3">No live ladder to draw (rungs not placed yet).</div>
+                                    <div x-show="!pos.ladder" class="font-mono text-[11px] text-fg-mute py-3">No live ladder to draw (rungs not placed yet).</div>
 
-                                    {{-- stats strip --}}
-                                    <div class="flex items-center gap-4 pt-2 border-t border-line-soft font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-mute">
-                                        <span>Rungs <span class="text-fg-1 font-bold" x-text="`${pos.rungs_filled}/${pos.rungs_total}`"></span></span>
-                                        <span>Alpha path <span class="font-bold" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span></span>
-                                        <span>Next rung <span class="text-fg-1 font-bold" x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span></span>
+                                    {{-- stats strip — MARK refreshes with every sync --}}
+                                    <div class="flex items-center gap-4 flex-wrap pt-2.5 border-t border-line-soft font-mono text-[10.5px] tracking-[0.05em] uppercase text-fg-3">
+                                        <span>Mark <span class="text-fg-1 font-bold tabular-nums" x-text="pos.ladder?.mark_price ? fmtPrice(pos.ladder.mark_price) : '—'"></span></span>
+                                        <span>Rungs <span class="text-fg-1 font-bold tabular-nums" x-text="`${pos.rungs_filled}/${pos.rungs_total}`"></span></span>
+                                        <span>Alpha path <span class="font-bold tabular-nums" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span></span>
+                                        <span>Next rung <span class="text-fg-1 font-bold tabular-nums" x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span></span>
                                     </div>
                                 </div>
                             </template>

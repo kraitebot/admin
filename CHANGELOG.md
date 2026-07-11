@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.3] — 2026-07-11
+
+### Improvements
+- **Position tiles readable at a glance.** The ladder drawing moved to fixed geometry: bigger, brighter price labels (pending rungs no longer fade into the background), the live price dot now sits dead-centre on the track, and the corridor is inset so the last rung's label never clips at the tile edge. The mark price itself is now on the tile — as a pill above the price marker and as the first entry in the stats strip — refreshing with every 10-second sync. Token name and PnL in the tile header grew a size.
+
 ## [0.16.2] — 2026-07-11
 
 ### Improvements
