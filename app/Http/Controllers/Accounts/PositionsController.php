@@ -8,7 +8,9 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\ApiSnapshot;
 use Kraite\Core\Models\Position;
 
 class PositionsController extends Controller
@@ -42,6 +44,25 @@ class PositionsController extends Controller
     private const PAIR_STATUS_EXCHANGE_ONLY = 'exchange_only';
 
     private const PAIR_STATUS_TRANSIENT = 'transient';
+
+    /**
+     * "Can't verify from here" — the exchange-side picture for this row
+     * doesn't exist yet (no snapshot at all, or the row's order type lives
+     * on an exchange endpoint the engine doesn't snapshot yet). Explicitly
+     * NOT drift: the comparator refuses to claim desync it can't prove.
+     */
+    private const PAIR_STATUS_UNVERIFIED = 'unverified';
+
+    /**
+     * Kraite order types that exist ONLY on the exchange's algo/plan
+     * endpoint (post Dec-2025 Binance algo migration) — absent from the
+     * open-orders snapshot BY DESIGN. Without an algo snapshot their
+     * absence proves nothing.
+     */
+    private const ALGO_ENDPOINT_TYPES = ['STOP-LIMIT', 'STOP-MARKET', 'TRAILING-STOP', 'PROFIT-MARKET'];
+
+    /** Whether the account has an algo-orders snapshot (any content). */
+    private bool $algoSnapshotPresent = false;
 
     /**
      * Kraite's internal type labels ↔ the broader set of labels an exchange
@@ -428,57 +449,27 @@ class PositionsController extends Controller
         $dbPositions = $account->positions()
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->select('positions.*')
-            ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago')
+            ->selectRaw(DB::connection()->getDriverName() === 'mysql'
+                ? 'TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago'
+                // SQLite (test suite) can't parse the MySQL form at all.
+                : "CAST(strftime('%s','now') - strftime('%s', COALESCE(opened_at, created_at)) AS INTEGER) as opened_seconds_ago")
             ->with([
                 'exchangeSymbol.symbol',
                 'orders' => fn ($q) => $q->whereIn('status', self::COMPARATOR_ORDER_STATUSES),
             ])
             ->get();
 
-        $exchangePositions = [];
-        $exchangeOrders = [];
+        // Exchange truth comes from the ENGINE'S snapshots, written by the
+        // whitelisted trading fleet on every lifecycle pass. The web box
+        // deliberately has no exchange egress — its IP is outside the
+        // allowlist, so a direct call from here can only ever 401 with
+        // -2015 (exactly what previously made this page mislabel every
+        // position "out of sync"). Symbol configs (leverage/marginType)
+        // have no snapshot source yet; the comparator already treats a
+        // missing exchange-side value as "no signal", never drift.
+        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent] =
+            $this->exchangeStateFromSnapshots($account);
         $symbolConfigs = [];
-        $apiError = null;
-
-        try {
-            $positionsResult = $account->apiQueryPositions()->result ?? [];
-            $exchangePositions = collect($positionsResult)
-                ->filter(fn ($pos) => abs((float) ($pos['positionAmt'] ?? $pos['size'] ?? $pos['contracts'] ?? 0)) > 0)
-                ->values()
-                ->all();
-
-            $exchangeOrders = $account->apiQueryOpenOrders()->result ?? [];
-        } catch (\Throwable $e) {
-            $apiError = $e->getMessage();
-        }
-
-        // Per-symbol leverage + marginType. Binance's v3 positionRisk stopped
-        // returning these fields, so we need a separate endpoint; other
-        // exchanges expose the same info and normalize to the same shape.
-        if (method_exists($account, 'apiQuerySymbolConfig')) {
-            try {
-                $symbolConfigs = $account->apiQuerySymbolConfig()->result ?? [];
-            } catch (\Throwable $e) {
-                // Endpoint not supported or transient failure — treat as "no signal".
-            }
-        }
-
-        // Algo / plan / stop orders live on separate endpoints per exchange.
-        // Not all exchanges support all of them — fail silently and merge
-        // whatever we get into the exchange-orders list.
-        foreach (['apiQueryAlgoOrders', 'apiQueryPlanOrders', 'apiQueryStopOrders'] as $method) {
-            if (! method_exists($account, $method)) {
-                continue;
-            }
-            try {
-                $extra = $account->{$method}()->result ?? [];
-                if (is_array($extra) && ! empty($extra)) {
-                    $exchangeOrders = array_merge($exchangeOrders, $extra);
-                }
-            } catch (\Throwable $e) {
-                // Endpoint not supported by this exchange / mapper — skip.
-            }
-        }
 
         // Pre-build a per-pair token info map (icon + display token) from
         // the eager-loaded ExchangeSymbol→Symbol chain on the DB positions.
@@ -500,6 +491,23 @@ class PositionsController extends Controller
         [$pairs, $matchedExchangeOrderIds] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, $symbolConfigs, $tokenInfoBySymbol);
         $orphanOrders = $this->buildOrphanOrders($exchangeOrders, $matchedExchangeOrderIds);
 
+        // No snapshots at all (brand-new account, or the engine has never
+        // run for it): an empty exchange side proves nothing. Every pair
+        // reads UNVERIFIED — never fake "db_only" drift.
+        if (! $snapshotsPresent) {
+            $pairs = array_map(function (array $p): array {
+                $p['status'] = self::PAIR_STATUS_UNVERIFIED;
+                $p['position_drift_fields'] = [];
+                $p['orders'] = array_map(
+                    fn (array $o): array => array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]),
+                    $p['orders'],
+                );
+                $p['order_counts'] = $this->countStatuses($p['orders']);
+
+                return $p;
+            }, $pairs);
+        }
+
         // Sort open positions newest → oldest by DB opened_at. Pairs without a
         // DB side (exchange-only) lack an age; push them to the bottom.
         $pairs = collect($pairs)
@@ -516,8 +524,54 @@ class PositionsController extends Controller
             ],
             'pairs' => $pairs,
             'orphan_orders' => $orphanOrders,
-            'api_error' => $apiError,
+            // Age of the exchange picture (oldest of the snapshots used),
+            // computed on the DB clock — session-tz writes vs UTC reads.
+            'exchange_as_of_seconds' => $exchangeAsOfSeconds,
+            'exchange_snapshots_missing' => ! $snapshotsPresent,
         ]);
+    }
+
+    /**
+     * The exchange-side picture from the engine's api_snapshots: open
+     * positions (keyed map → list), open orders merged with algo orders
+     * when that snapshot exists, and the age of the oldest snapshot used.
+     *
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: int|null, 3: bool}
+     */
+    private function exchangeStateFromSnapshots(Account $account): array
+    {
+        $positions = ApiSnapshot::getFrom($account, 'account-positions');
+        $openOrders = ApiSnapshot::getFrom($account, 'account-open-orders');
+        $algoOrders = ApiSnapshot::getFrom($account, 'account-algo-orders');
+
+        $this->algoSnapshotPresent = is_array($algoOrders);
+        $snapshotsPresent = is_array($positions) || is_array($openOrders);
+
+        $exchangePositions = collect(is_array($positions) ? array_values($positions) : [])
+            ->filter(fn ($pos) => abs((float) ($pos['positionAmt'] ?? $pos['size'] ?? $pos['contracts'] ?? 0)) > 0)
+            ->values()
+            ->all();
+
+        $exchangeOrders = is_array($openOrders) ? array_values($openOrders) : [];
+        if (is_array($algoOrders)) {
+            $exchangeOrders = array_merge($exchangeOrders, array_values($algoOrders));
+        }
+
+        $age = null;
+        if ($snapshotsPresent) {
+            // Snapshot rows are written in the DB session tz by the trading
+            // boxes while this app reads UTC — diff on the DB clock (MySQL);
+            // the SQLite test connection writes UTC, so a plain diff is right.
+            $age = rescue(fn () => $account->apiSnapshots()
+                ->whereIn('canonical', ['account-positions', 'account-open-orders'])
+                ->selectRaw(DB::connection()->getDriverName() === 'mysql'
+                    ? 'MAX(TIMESTAMPDIFF(SECOND, updated_at, NOW())) as age'
+                    : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
+                ->value('age'), null, false);
+            $age = $age !== null ? max(0, (int) $age) : null;
+        }
+
+        return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent];
     }
 
     private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
@@ -677,7 +731,11 @@ class PositionsController extends Controller
             unset($o);
         }
 
-        $anyOrderDrift = collect($orders)->contains(fn ($o) => $o['status'] !== self::PAIR_STATUS_SYNCED);
+        // Unverified rows (no snapshot source to check against) never
+        // count as drift — the comparator only alarms on what it can prove.
+        $anyOrderDrift = collect($orders)->contains(
+            fn ($o) => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
+        );
         $positionDrift = ! empty($positionDriftFields);
 
         if ($dbPosData && ! $dbIsActive) {
@@ -714,6 +772,15 @@ class PositionsController extends Controller
             // open-orders endpoint. Their absence is expected, not drift.
             if (strtoupper((string) ($db['status'] ?? '')) === 'FILLED') {
                 return ['status' => self::PAIR_STATUS_SYNCED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+            }
+
+            // Algo-endpoint types (stop-losses etc.) can't appear in the
+            // open-orders snapshot at all. With no algo snapshot to check
+            // against, their absence proves nothing — mark unverified.
+            // Once an algo snapshot exists (even empty), absence is real.
+            if (! $this->algoSnapshotPresent
+                && in_array(strtoupper((string) ($db['type'] ?? '')), self::ALGO_ENDPOINT_TYPES, true)) {
+                return ['status' => self::PAIR_STATUS_UNVERIFIED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
             }
 
             return ['status' => self::PAIR_STATUS_DB_ONLY, 'db' => $db, 'exchange' => null, 'drift_fields' => []];

@@ -159,7 +159,7 @@
             _recTimer: null,
             init() {
                 if (! window.Alpine.store('reconcile')) {
-                    window.Alpine.store('reconcile', { drift: {}, orderDrift: {}, orphans: 0, checking: false, lastAt: null, apiError: null });
+                    window.Alpine.store('reconcile', { drift: {}, orderDrift: {}, orphans: 0, checking: false, lastAt: null, asOfSeconds: null, snapshotsMissing: false });
                 }
                 if (this.$refs.content) {
                     this._timer = setInterval(() => this.refresh(), 10000);
@@ -206,7 +206,13 @@
                 const drift = {};
                 const orderDrift = {};
                 let orphans = 0;
-                let apiError = null;
+                let asOfSeconds = null;
+                let snapshotsMissing = false;
+                // Only PROVEN mismatches count. 'transient' (mid-flight) and
+                // 'unverified' (no snapshot source to check against) are
+                // explicitly not drift — the old catch-all `!== 'synced'`
+                // is how an unreachable exchange read as "12 out of sync".
+                const bad = ['drift', 'db_only', 'exchange_only'];
                 try {
                     for (const id of this.accountIds) {
                         const res = await fetch(`${this.dataUrl}?account_id=${id}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
@@ -216,8 +222,8 @@
                         const json = await res.json();
                         (json.pairs || []).forEach((pair) => {
                             const posFields = pair.position_drift_fields || [];
-                            const driftingOrders = (pair.orders || []).filter((o) => o.status && o.status !== 'synced');
-                            const misaligned = (pair.status && pair.status !== 'synced') || posFields.length > 0 || driftingOrders.length > 0;
+                            const driftingOrders = (pair.orders || []).filter((o) => bad.includes(o.status));
+                            const misaligned = bad.includes(pair.status) || posFields.length > 0 || driftingOrders.length > 0;
                             // Position-level drift, keyed by DB position id (lines up with rowId).
                             if (misaligned && pair.db && pair.db.id) {
                                 drift[pair.db.id] = { status: pair.status, posFields, orderDrift: driftingOrders.length };
@@ -231,14 +237,18 @@
                             });
                         });
                         orphans += (json.orphan_orders || []).length;
-                        if (json.api_error) {
-                            apiError = json.api_error;
+                        if (json.exchange_snapshots_missing) {
+                            snapshotsMissing = true;
+                        }
+                        if (json.exchange_as_of_seconds !== null && json.exchange_as_of_seconds !== undefined) {
+                            asOfSeconds = Math.max(asOfSeconds ?? 0, json.exchange_as_of_seconds);
                         }
                     }
                     store.drift = drift;
                     store.orderDrift = orderDrift;
                     store.orphans = orphans;
-                    store.apiError = apiError;
+                    store.asOfSeconds = asOfSeconds;
+                    store.snapshotsMissing = snapshotsMissing;
                     store.lastAt = Date.now();
                 } finally {
                     store.checking = false;
@@ -267,10 +277,19 @@
                 <template x-if="$store.reconcile?.checking">
                     <span class="inline-flex items-center gap-[6px]"><span class="w-1.5 h-1.5 rounded-chip animate-pulse-soft" style="background: var(--info)"></span>Reconciling…</span>
                 </template>
-                <template x-if="!$store.reconcile?.checking">
+                <template x-if="!$store.reconcile?.checking && $store.reconcile?.snapshotsMissing">
+                    <span class="inline-flex items-center gap-[6px] text-fg-mute">
+                        <span class="w-1.5 h-1.5 rounded-chip" style="background: var(--fg-mute)"></span>
+                        <span>No exchange picture yet — nothing to compare against</span>
+                    </span>
+                </template>
+                <template x-if="!$store.reconcile?.checking && !$store.reconcile?.snapshotsMissing">
                     <span class="inline-flex items-center gap-[6px]">
                         <span class="w-1.5 h-1.5 rounded-chip" :style="`background: ${(Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) ? 'var(--warn)' : 'var(--pnl-up-fg)'}`"></span>
                         <span x-text="(Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) ? ((Object.keys($store.reconcile?.drift || {}).length + ($store.reconcile?.orphans || 0)) + ' out of sync') : 'In sync with exchange'"></span>
+                        {{-- age of the engine's exchange snapshot the comparison ran against --}}
+                        <span x-show="$store.reconcile?.asOfSeconds !== null" class="text-fg-mute"
+                              x-text="'· exchange picture ' + ($store.reconcile.asOfSeconds < 60 ? $store.reconcile.asOfSeconds + 's' : Math.floor($store.reconcile.asOfSeconds / 60) + 'm') + ' old'"></span>
                     </span>
                 </template>
             </span>

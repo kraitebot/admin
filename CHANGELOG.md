@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.3] — 2026-07-11
+
+### Fixes
+- **Positions page no longer cries wolf — "12 out of sync" was a false alarm.** The DB↔exchange comparator fetched live exchange state from the web server, whose IP is deliberately outside the egress allowlist — the exchange rejected every call and the resulting empty picture rendered as full-page drift. The comparator now reads the trading engine's own exchange snapshots (written continuously by the whitelisted fleet) and says what it knows: the ribbon shows how old the exchange picture is, "No exchange picture yet" replaces fake alarms when snapshots don't exist, stop-loss orders (on an exchange endpoint the engine doesn't snapshot yet) read "unverified" instead of drifting, and mid-flight positions no longer count as out-of-sync. The web box now makes zero exchange calls from this page. 3 new tests pin the behavior.
+
 ## [0.17.2] — 2026-07-11
 
 ### Fixes
