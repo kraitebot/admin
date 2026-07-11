@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.17.0] — 2026-07-11
+
+### Added
+- **Server connectivity card on the trader dashboard is live.** It answers "can every Kraite server operate my exchange account right now?" — idle state lists the API-calling fleet; "Run check" fires the engine's real connectivity workflow, testing the account's saved key from every server's own IP. Each row resolves to CONNECTED or BLOCKED (a forgotten IP whitelist shows red, naming the exact IP to add, with a fix hint). The last result is remembered per account and re-hydrated on the next visit; re-checks are one click. No new engine machinery — the card drives the same owner-guarded workflow used at registration.
+
 ## [0.16.11] — 2026-07-11
 
 ### Improvements

@@ -15,6 +15,7 @@ use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Position;
+use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
@@ -142,8 +143,33 @@ class DashboardController extends Controller
             'bscs' => $this->bscsBadge(),
             'positions' => $positions,
             'activity' => $this->activityFeed($account),
+            'connectivity_servers' => $this->connectivityServers(),
             'generated_at' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * The apiable-server roster the connectivity card lists in its idle
+     * state — the same fleet the on-demand check fans out to (the check
+     * itself runs through the engine's existing connectivity workflow via
+     * the core API endpoints; this is just the "what will be tested" list).
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function connectivityServers(): array
+    {
+        return rescue(
+            fn (): array => app(AccountServerConnectivityService::class)
+                ->apiConnectivityServers()
+                ->map(fn ($server): array => [
+                    'id' => (int) $server->id,
+                    'hostname' => $server->hostname,
+                    'ip_address' => $server->ip_address,
+                ])
+                ->values()
+                ->all(),
+            [],
+        );
     }
 
     /**

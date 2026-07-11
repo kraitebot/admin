@@ -9,7 +9,7 @@
 <x-app-layout active="dashboard" :title="'Kraite — Dashboard'">
 
     <script>
-        window.dashPage = (initial, accounts, initialAccountId, dataUrl) => ({
+        window.dashPage = (initial, accounts, initialAccountId, dataUrl, connUrls) => ({
             d: initial,
             accounts: accounts,
             accountId: initialAccountId,
@@ -35,6 +35,7 @@
                 };
                 this._onResize();
                 window.addEventListener('resize', this._onResize);
+                this.hydrateConn();
             },
             // wire:navigate swaps the body but JS timers outlive the DOM —
             // without this, every dashboard visit leaves a zombie 10s poller
@@ -43,6 +44,7 @@
                 this._timers.forEach(clearInterval);
                 this._timers = [];
                 if (this._settleTimer) { clearTimeout(this._settleTimer); this._settleTimer = null; }
+                if (this._connTimer) { clearTimeout(this._connTimer); this._connTimer = null; }
                 if (this._onResize) window.removeEventListener('resize', this._onResize);
             },
             // Page size follows the viewport: two grid rows per page on
@@ -87,6 +89,7 @@
                 this.page = 0;
                 this.syncDot();
                 this.refresh();
+                this.hydrateConn();
             },
             account() { return this.accounts.find(a => a.id === this.accountId) || null; },
             syncAgo() {
@@ -233,10 +236,76 @@
                 const all = this.d?.activity || [];
                 return this.activeOnly ? all.filter(e => e.active) : all;
             },
+
+            // ---- server connectivity (on-demand engine check) ----
+            // Fires the engine's existing connectivity workflow: one test of
+            // THIS account's saved key from every API-calling server, so a
+            // forgotten IP whitelist shows up as a red row naming the IP.
+            // Last result is remembered per account (localStorage block id)
+            // and re-hydrated on page load.
+            conn: { rows: null, block: null, testing: false, checkedAt: null, error: null },
+            _connTimer: null,
+            connKey() { return `kraite.connCheck.${this.accountId}`; },
+            connRows() {
+                // Live/last results when we have them; otherwise the idle
+                // roster (grey rows) from the payload.
+                if (this.conn.rows) return this.conn.rows;
+                return (this.d?.connectivity_servers || []).map(s => ({ ...s, status: 'idle' }));
+            },
+            connMeta(status) {
+                if (status === 'connected') return { label: 'CONNECTED', color: 'var(--pnl-up-fg)' };
+                if (status === 'not_connected') return { label: 'BLOCKED', color: 'var(--danger)' };
+                if (status === 'testing') return { label: 'TESTING', color: 'var(--warn)' };
+                return { label: 'NOT CHECKED', color: 'var(--fg-mute)' };
+            },
+            connBlockedCount() { return (this.conn.rows || []).filter(r => r.status === 'not_connected').length; },
+            async runConnCheck() {
+                if (this.conn.testing || !this.accountId) return;
+                this.conn.error = null;
+                this.conn.testing = true;
+                const res = await hubUiFetch(connUrls.start.replace('__ID__', this.accountId), { body: {} });
+                if (!res.ok) {
+                    this.conn.testing = false;
+                    this.conn.error = res.status === 429 ? 'Too many checks — wait a minute and retry.' : (res.data?.error || 'Could not start the check.');
+                    return;
+                }
+                this.conn.block = res.data.block_uuid;
+                this.conn.rows = res.data.servers;
+                try { localStorage.setItem(this.connKey(), this.conn.block); } catch (_) {}
+                this.pollConn();
+            },
+            async pollConn() {
+                if (this._connTimer) { clearTimeout(this._connTimer); this._connTimer = null; }
+                const block = this.conn.block, forAccount = this.accountId;
+                if (!block) return;
+                const res = await hubUiFetch(connUrls.status.replace('__UUID__', block), { signal: AbortSignal.timeout(8000) });
+                // Account switched mid-poll — drop this loop, the new account rehydrates its own.
+                if (this.accountId !== forAccount || this.conn.block !== block) return;
+                if (res.ok) {
+                    this.conn.rows = res.data.servers;
+                    if (res.data.is_complete) {
+                        this.conn.testing = false;
+                        this.conn.checkedAt = Date.now();
+                        return;
+                    }
+                    this.conn.testing = true;
+                }
+                this._connTimer = setTimeout(() => this.pollConn(), 3000);
+            },
+            hydrateConn() {
+                this.conn = { rows: null, block: null, testing: false, checkedAt: null, error: null };
+                if (this._connTimer) { clearTimeout(this._connTimer); this._connTimer = null; }
+                let block = null;
+                try { block = localStorage.getItem(this.connKey()); } catch (_) {}
+                if (block) { this.conn.block = block; this.pollConn(); }
+            },
         });
     </script>
 
-    <div x-data="dashPage(@js($initialPayload), @js($accounts), @js($initialAccountId), @js(route('dashboard.data')))">
+    <div x-data="dashPage(@js($initialPayload), @js($accounts), @js($initialAccountId), @js(route('dashboard.data')), @js([
+            'start' => route('connectivity-test.accounts.start', '__ID__'),
+            'status' => route('connectivity-test.status', '__UUID__'),
+        ]))">
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -787,17 +856,51 @@
                     </div>
                 </div>
 
-                {{-- Server connectivity — placeholder until a heartbeat source exists --}}
+                {{-- Server connectivity — on-demand engine check: tests THIS
+                     account's saved key from every API-calling server, so a
+                     forgotten IP whitelist shows as a red row naming the IP --}}
                 <div class="card flex-1 flex flex-col">
                     <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
                         <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
                             <x-feathericon-server class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Server connectivity
                         </div>
+                        <span x-show="connBlockedCount() > 0" x-cloak
+                              class="font-mono text-[9.5px] font-bold tracking-[0.07em] uppercase py-[3px] px-2 rounded-chip"
+                              style="color: var(--danger); background: color-mix(in srgb, var(--danger) 14%, transparent)"
+                              x-text="`${connBlockedCount()} BLOCKED`"></span>
                     </div>
-                    <div class="flex-1 flex flex-col items-center justify-center text-center py-[40px] px-5">
-                        <div class="w-12 h-12 rounded-control border border-line flex items-center justify-center text-fg-mute mb-4"><x-feathericon-server class="w-6 h-6" stroke-width="1.75"/></div>
-                        <h4 class="font-sans font-semibold text-[15px] text-fg-1 mb-1.5">Heartbeat wiring pending</h4>
-                        <p class="text-[12.5px] text-fg-3 max-w-[280px]">Per-server link state appears here once the fleet heartbeat is exposed to the trader surface.</p>
+
+                    <div class="flex-1 flex flex-col">
+                        <template x-for="row in connRows()" :key="row.hostname">
+                            <div class="flex items-center gap-2.5 py-[8px] px-5 border-b border-line-soft min-w-0">
+                                <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0"
+                                      :class="row.status === 'testing' && 'animate-pulse'"
+                                      :style="`background: ${connMeta(row.status).color}`"></span>
+                                <span class="flex flex-col leading-[1.25] min-w-0 flex-1">
+                                    <span class="font-mono text-[11.5px] font-semibold text-fg-1" x-text="row.hostname"></span>
+                                    <span class="font-mono text-[10px] text-fg-mute tabular-nums" x-text="row.ip_address"></span>
+                                </span>
+                                <span class="font-mono text-[9px] font-bold tracking-[0.07em] uppercase whitespace-nowrap"
+                                      :style="`color: ${connMeta(row.status).color}`" x-text="connMeta(row.status).label"></span>
+                            </div>
+                        </template>
+
+                        {{-- red rows carry the fix: whitelist that IP on the exchange key --}}
+                        <div x-show="connBlockedCount() > 0" x-cloak class="flex items-start gap-2 py-2.5 px-5 text-[11.5px] leading-snug text-warn">
+                            <x-feathericon-alert-triangle class="w-[13px] h-[13px] flex-shrink-0 mt-px" stroke-width="1.75"/>
+                            <span>Your exchange API key is not accepting calls from the blocked servers — add their IPs to the key's whitelist, then re-check.</span>
+                        </div>
+                        <div x-show="conn.error" x-cloak class="py-2.5 px-5 text-[11.5px] text-pnldown" x-text="conn.error"></div>
+                    </div>
+
+                    <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
+                        <span class="font-mono text-[10px] tracking-[0.05em] uppercase text-fg-mute"
+                              x-text="conn.testing ? 'Testing from every server…' : (conn.checkedAt ? 'Checked ' + Math.max(0, Math.round((nowTick - conn.checkedAt) / 1000)) + 's ago' : (conn.rows ? 'Last result' : 'Not checked yet'))"></span>
+                        <button type="button" @click="runConnCheck()" :disabled="conn.testing"
+                                class="appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[6px] whitespace-nowrap transition-colors duration-fast ease-out h-[28px] px-2.5 text-[11.5px] bg-transparent text-fg-1 border-line-strong hover:bg-hover disabled:opacity-50 disabled:cursor-default">
+                            <span class="inline-flex" :class="conn.testing ? 'animate-spin' : ''"><x-feathericon-refresh-cw class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
+                            <span x-text="conn.testing ? 'Testing…' : (conn.rows ? 'Re-check' : 'Run check')"></span>
+                        </button>
                     </div>
                 </div>
             </div>
