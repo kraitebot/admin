@@ -114,8 +114,21 @@ class PositionsController extends Controller
 
             $balance = $balances->get($accountId);
             $marginBalance = (float) ($balance->total_margin_balance ?? 0);
-            $marginRatio = $marginBalance > 0.0
-                ? round(((float) $balance->total_maintenance_margin / $marginBalance) * 100, 2)
+
+            // Exchange-reported maintenance margin when the snapshot carries
+            // it; otherwise estimate it ourselves from the open positions —
+            // the same bracket formula every venue uses (mark notional ×
+            // bracket rate − bracket deduction). Mark staleness makes the
+            // estimate approximate, which is fine for a triage glance.
+            $maintenance = (float) ($balance->total_maintenance_margin ?? 0);
+            if ($maintenance <= 0.0) {
+                $maintenance = (float) $accountPositions->sum(
+                    fn (Position $p): float => $this->estimatedMaintenanceMargin($p)
+                );
+            }
+
+            $marginRatio = $marginBalance > 0.0 && $maintenance > 0.0
+                ? round(($maintenance / $marginBalance) * 100, 2)
                 : null;
 
             $worstAlpha = (float) $accountPositions->max(fn (Position $p): float => $this->alphaPct($p));
@@ -316,6 +329,40 @@ class PositionsController extends Controller
             : ((float) $next - (float) $mark) / (float) $mark;
 
         return round(max(0.0, $distance) * 100, 1);
+    }
+
+    /**
+     * Per-position maintenance margin from the symbol's stored leverage
+     * brackets: mark notional × the matching bracket's maintenance rate,
+     * minus the bracket's cumulative deduction — exactly how the exchange
+     * computes it. 0 when mark or brackets are missing (the position then
+     * simply doesn't contribute to the estimate).
+     */
+    private function estimatedMaintenanceMargin(Position $p): float
+    {
+        $mark = $p->exchangeSymbol?->mark_price;
+        $brackets = $p->exchangeSymbol?->leverage_brackets ?? [];
+
+        if ($mark === null || $brackets === []) {
+            return 0.0;
+        }
+
+        $notional = abs((float) $p->quantity) * (float) $mark;
+
+        foreach ($brackets as $bracket) {
+            if (($bracket['maintMarginRatio'] ?? null) === null) {
+                continue;
+            }
+
+            $floor = (float) ($bracket['notionalFloor'] ?? 0);
+            $cap = $bracket['notionalCap'] ?? null;
+
+            if ($notional >= $floor && ($cap === null || $notional < (float) $cap)) {
+                return max(0.0, $notional * (float) $bracket['maintMarginRatio'] - (float) ($bracket['cum'] ?? 0));
+            }
+        }
+
+        return 0.0;
     }
 
     /**

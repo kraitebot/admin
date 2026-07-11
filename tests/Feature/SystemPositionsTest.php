@@ -40,6 +40,8 @@ function stubPositionTables(): void
         // api_format_price() reads these when the engine formats PnL.
         $t->unsignedTinyInteger('price_precision')->default(2);
         $t->decimal('tick_size', 20, 8)->nullable();
+        // Margin-ratio estimate reads the stored bracket table.
+        $t->text('leverage_brackets')->nullable();
     });
     Schema::create('positions', function (Blueprint $t): void {
         $t->id();
@@ -157,6 +159,27 @@ it('lists only accounts holding open positions, with exact margin ratio, pnl and
         // Corridor math: TP 100 → deepest 80, mark 82 = 90% walked → red.
         ->assertJsonPath('accounts.0.worst_alpha_pct', 90)
         ->assertJsonPath('accounts.0.band', 'red');
+});
+
+it('estimates margin ratio from leverage brackets when the snapshot has no maintenance margin', function (): void {
+    stubPositionTables();
+    $admin = User::factory()->create(['is_admin' => true, 'email' => 'pos-mm@kraite.test']);
+    $owner = User::factory()->create(['email' => 'pos-mm-owner@kraite.test']);
+    seedRedAccount($owner->id);
+
+    // Binance-style snapshot: maintenance margin absent (stored as 0).
+    DB::table('account_balance_history')->update(['total_maintenance_margin' => 0]);
+    // Bracket table on the symbol: notional 2 × 82 = 164 lands in bracket 1
+    // → 164 × 0.004 − 0 = 0.656 maintenance over 1000 balance = 0.07%.
+    DB::table('exchange_symbols')->update(['leverage_brackets' => json_encode([
+        ['bracket' => 1, 'notionalFloor' => 0, 'notionalCap' => 300000, 'maintMarginRatio' => 0.004, 'cum' => 0],
+        ['bracket' => 2, 'notionalFloor' => 300000, 'notionalCap' => 800000, 'maintMarginRatio' => 0.005, 'cum' => 300],
+    ])]);
+
+    $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/positions/data')
+        ->assertSuccessful()
+        ->assertJsonPath('accounts.0.margin_ratio', 0.07);
 });
 
 it('splits an expanded account into longs and shorts with exact rung and alpha figures', function (): void {

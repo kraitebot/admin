@@ -229,11 +229,9 @@
                                                 </div>
                                             </template>
 
-                                            {{-- live price marker, dot dead-centre on the track --}}
+                                            {{-- live price marker, dot dead-centre on the track;
+                                                 the mark VALUE lives in the stats strip below --}}
                                             <div class="absolute z-[1]" :style="`left: ${Math.min(100, Math.max(0, pos.ladder.price_pct))}%`">
-                                                <span class="absolute -translate-x-1/2 top-[13px] font-mono text-[12px] font-bold tabular-nums whitespace-nowrap px-1.5 py-px rounded-chip"
-                                                      :style="`color: ${bandColor(pos.band)}; background: var(--surface)`"
-                                                      x-text="pos.ladder.mark_price === null ? '' : fmtPrice(pos.ladder.mark_price)"></span>
                                                 <span class="absolute -translate-x-1/2 top-[30px] w-[12px] h-[12px] rounded-chip border-2"
                                                       :style="`background: ${bandColor(pos.band)}; border-color: var(--surface)`"
                                                       :class="pos.band !== 'green' && 'animate-pulse'"></span>

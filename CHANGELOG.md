@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.16.5] — 2026-07-11
+
+### Fixes
+- **Margin ratio no longer reads 0.00%.** The exchange balance snapshot carries no maintenance-margin figure (Binance's balance endpoint simply doesn't have one), so the ratio always computed to zero. The page now estimates maintenance margin itself from each open position — mark notional × the symbol's stored bracket rate minus the bracket deduction, the exact formula the exchange uses — and divides by the snapshot's margin balance. Exchange-agnostic (works off stored bracket tables, no per-venue API quirk) and refreshes with the mark price on every sync; shows an honest — when it genuinely can't be computed instead of a misleading 0.00%.
+
+### Improvements
+- **Mark price pill removed from the ladder** — the moving label crowded the drawing; the dot alone marks the price, and the exact mark value lives in the stats strip below (still refreshing every sync).
+
 ## [0.16.4] — 2026-07-11
 
 ### Improvements
