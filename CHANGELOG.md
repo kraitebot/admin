@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.18.0] — 2026-07-13
+
+### Features
+- [NEW FEATURE] **Registration handoff endpoint.** `/register-handoff/{token}` consumes the one-time, sha256-hashed login token minted by kraite.com's new public registration wizard: logs the fresh trader in, clears the token, and shows a welcome popup on the dashboard.
+
+### Removed
+- [REMOVED] **Invite-based registration surface deleted.** Registration now lives on kraite.com. The `/register/{uuid}` routes, RegistrationController, both form requests, all six `App\Support\Registration` classes and their tests are gone. Draft connectivity-test accounts keep the same naming convention, so account-list filtering is unaffected.
+
 ## [0.17.5] — 2026-07-12
 
 ### Fixes

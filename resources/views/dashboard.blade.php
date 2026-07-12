@@ -316,6 +316,29 @@
             'status' => route('accounts.connectivity.status', '__UUID__'),
         ]))">
 
+        @if (session('registration_welcome'))
+            {{-- One-shot welcome popup after the kraite.com registration handoff --}}
+            <div x-data="{ open: true }" x-show="open" x-cloak
+                 class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                 style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(3px);">
+                <div @click.outside="open = false"
+                     class="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl p-8 text-center">
+                    <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                        <x-feathericon-check class="w-7 h-7 text-emerald-600" stroke-width="2.5"/>
+                    </div>
+                    <h2 class="font-sans font-bold text-[22px] tracking-[-0.02em] text-gray-900 mb-2">Welcome to your dashboard!</h2>
+                    <p class="text-[14px] text-gray-600 leading-relaxed mb-6">
+                        Your 7-day free trial is running and the engine picks you up on its next trading cycle.
+                        Everything the bot does on your account shows up here — live.
+                    </p>
+                    <button type="button" @click="open = false"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-[14px] text-white bg-emerald-600 hover:bg-emerald-700 transition">
+                        Let's go
+                    </button>
+                </div>
+            </div>
+        @endif
+
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
             <div>

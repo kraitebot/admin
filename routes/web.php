@@ -2,13 +2,13 @@
 
 use App\Http\Controllers\Accounts\AccountController;
 use App\Http\Controllers\Accounts\PositionsController;
+use App\Http\Controllers\Auth\RegistrationHandoffController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\BscsController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\NowPaymentsWebhookController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ProjectionsController;
-use App\Http\Controllers\RegistrationController;
 use App\Http\Middleware\VerifyNowPaymentsSignature;
 use Illuminate\Support\Facades\Route;
 
@@ -41,23 +41,11 @@ Route::post('/webhooks/payments', [NowPaymentsWebhookController::class, 'handle'
 
 Route::domain(config('domains.admin'))->group(function () {
 
-    Route::middleware('throttle:10,1')->group(function () {
-        Route::get('/register/{uuid}', [RegistrationController::class, 'show'])
-            ->whereUuid('uuid')
-            ->name('register.show');
-        Route::post('/register/{uuid}/connectivity', [RegistrationController::class, 'testConnectivity'])
-            ->whereUuid('uuid')
-            ->name('register.connectivity');
-        Route::post('/register/{uuid}', [RegistrationController::class, 'store'])
-            ->whereUuid('uuid')
-            ->name('register.store');
-    });
-
-    Route::get('/register/{uuid}/connectivity/{blockUuid}', [RegistrationController::class, 'connectivityStatus'])
-        ->middleware('throttle:60,1')
-        ->whereUuid('uuid')
-        ->whereUuid('blockUuid')
-        ->name('register.connectivity.status');
+    // One-time auto-login handoff from the kraite.com registration wizard.
+    Route::get('/register-handoff/{token}', RegistrationHandoffController::class)
+        ->middleware('throttle:10,1')
+        ->where('token', '[A-Za-z0-9]{64}')
+        ->name('register.handoff');
 
     Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
 
