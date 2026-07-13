@@ -15,6 +15,66 @@ window.Alpine = Alpine;
 // ---------------------------------------------------------------------------
 Alpine.store('rail', { activeId: null, hl: null, drawerOpen: false });
 
+// ---------------------------------------------------------------------------
+// Global help/explainer store. Backs the reusable `<x-ui.help-dot>` [?] dots
+// and the single `<x-ui.help-modal>` rendered once in the app layout — so any
+// page gets a help popup with zero per-page boilerplate. Two content modes:
+//   - inline:   $store.help.showInline(title, body)   (help-dot title/body props)
+//   - registry: page calls register({ key: {t,s,b} }), help-dot topic="key"
+// `renderMd` is the same lightweight markdown renderer the backtesting console
+// used before it was hoisted here.
+// ---------------------------------------------------------------------------
+Alpine.store('help', {
+    open: false,
+    title: '',
+    body: '',
+    registry: {},
+    register(map) { Object.assign(this.registry, map || {}); },
+    show(topic) {
+        const m = this.registry[topic];
+        if (!m) { return; }
+        this.title = m.t || '';
+        this.body = m.b || '';
+        this.open = true;
+    },
+    showInline(title, body) {
+        this.title = title || '';
+        this.body = body || '';
+        this.open = true;
+    },
+    close() { this.open = false; },
+    renderMd(src) {
+        if (!src) return '';
+        const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const inl = (t) => esc(t)
+            .replace(/`([^`]+)`/g, '<code class="font-mono text-[11.5px] px-1 py-[1px] rounded-r2 bg-surface-3 text-accent">$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-fg-1">$1</strong>')
+            .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em class="italic text-fg-2">$2</em>')
+            .replace(/_([^_]+)_/g, '<em class="italic text-fg-mute">$1</em>');
+        const li = (body) => {
+            const m = body.match(/^\*\*([^*]+?):?\*\*\s*[—–:-]?\s*([\s\S]*)$/);
+            if (m && m[2].trim()) {
+                return '<li class="flex gap-2.5"><span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-3 leading-tight mt-[3px] w-[74px] flex-shrink-0">' + esc(m[1]) + '</span><span class="text-[12.5px] text-fg-2 leading-normal min-w-0">' + inl(m[2]) + '</span></li>';
+            }
+            return '<li class="flex gap-2"><span class="text-accent flex-shrink-0 mt-[1px]">·</span><span class="text-[12.5px] text-fg-2 leading-normal min-w-0">' + inl(body) + '</span></li>';
+        };
+        const lines = src.split('\n'); const out = []; let list = null;
+        const flush = () => { if (list) { out.push('<ul class="flex flex-col gap-[5px] mt-1 mb-2 pl-0.5">' + list.join('') + '</ul>'); list = null; } };
+        lines.forEach((raw) => {
+            const ln = raw.replace(/^[ \t]+/, '');
+            if (/^(\s*[-*_]){3,}\s*$/.test(ln)) { flush(); out.push('<div class="my-3 border-t border-line-soft"></div>'); }
+            else if (/^###\s+/.test(ln)) { flush(); out.push('<h5 class="font-mono text-[10px] font-bold tracking-[0.1em] uppercase text-fg-mute mt-3 mb-1">' + inl(ln.replace(/^###\s+/, '')) + '</h5>'); }
+            else if (/^##\s+/.test(ln)) { flush(); out.push('<h4 class="font-sans font-bold text-[14px] text-fg-1 mt-4 first:mt-0 mb-2 pb-1 border-b border-line-soft">' + inl(ln.replace(/^##\s+/, '')) + '</h4>'); }
+            else if (/^\d+\.\s+/.test(ln)) { flush(); const m = ln.match(/^(\d+)\.\s+(.*)$/); out.push('<div class="flex gap-2.5 items-baseline mt-3 first:mt-0"><span class="font-mono text-[11px] font-bold text-accent flex-shrink-0">' + m[1] + '</span><span class="text-[12.5px] font-semibold text-fg-1 leading-snug min-w-0">' + inl(m[2]) + '</span></div>'); }
+            else if (/^[-*]\s+/.test(ln)) { list = list || []; list.push(li(ln.replace(/^[-*]\s+/, ''))); }
+            else if (ln.trim() === '') { flush(); }
+            else { flush(); out.push('<p class="text-[12.5px] text-fg-2 leading-normal my-1.5">' + inl(ln) + '</p>'); }
+        });
+        flush();
+        return out.join('');
+    },
+});
+
 const railNav = () => document.querySelector('nav[data-rail]');
 
 const railMeasure = (el) => {

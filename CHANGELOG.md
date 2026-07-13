@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.19.0] — 2026-07-14
+
+### Features
+- [NEW FEATURE] **Reusable help popups.** A global `<x-ui.help-dot>` "[?]" affordance plus one shared explainer modal (blurred backdrop, fade in/out, Alpine `help` store) — drop it on any page with no per-page boilerplate. Added to the projections month-type badge and the four dashboard position-card metrics (price direction, path, limit, live price), written in plain beginner language. The backtesting console's help was migrated onto the same shared system.
+- [NEW FEATURE] **Out-of-sync fields are highlighted.** On the positions detail, the exact position field that drifts from the exchange (quantity / leverage / margin / opening price) lights up amber with a ⚠ marker so the eye lands on it — the banner previously only named the field.
+- [IMPROVED] **Daily PnL calendar shows 2-decimal precision** (e.g. `+$3.14`) instead of rounded whole dollars, matching the exchange.
+
+### Changed
+- [CHANGED] **Timezone handling simplified.** The admin DB connection is pinned to UTC (`+00:00`) and the home-grown clock-skew / whole-hour age band-aids were removed, now that the engine records true UTC. The dashboard no longer masks a future timestamp as "just now" — a genuine clock/timezone regression now surfaces loudly instead of hiding.
+
 ## [0.18.0] — 2026-07-13
 
 ### Features

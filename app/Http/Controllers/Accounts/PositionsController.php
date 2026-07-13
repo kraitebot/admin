@@ -442,10 +442,8 @@ class PositionsController extends Controller
 
         $account = $query->firstOrFail();
 
-        // MySQL stores opened_at in the session tz (SYSTEM) but Laravel
-        // reads datetimes as UTC, so Carbon diffs drift by the local tz
-        // offset. Let MySQL compute the age in seconds — both sides stay in
-        // the same tz, so the number is correct regardless of the mismatch.
+        // Age computed DB-side (opened_at vs NOW()). The connection is pinned
+        // to UTC and engine timestamps are true UTC, so the diff is correct.
         $dbPositions = $account->positions()
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->select('positions.*')
@@ -614,37 +612,10 @@ class PositionsController extends Controller
                     ? 'MAX(TIMESTAMPDIFF(SECOND, updated_at, NOW())) as age'
                     : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
                 ->value('age'), null, false);
-            $age = $this->normalizeAge($age !== null ? (int) $age : null);
+            $age = $age !== null ? (int) $age : null;
         }
 
         return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent, $oldestAt];
-    }
-
-    /**
-     * Ages diffed against the DB clock can come out negative by WHOLE
-     * HOURS: the trading apps stamp rows in their own timezone while the
-     * DB clock runs UTC. Normalize by adding whole hours until the age is
-     * non-negative (a small negative from ordinary clock skew clamps to
-     * 0). Ceiling: a real age beyond one hour can be under-reported when
-     * the writer's offset is unknown — anything that old already reads as
-     * a stale picture, which is the operative signal.
-     */
-    private function normalizeAge(?int $raw): ?int
-    {
-        if ($raw === null) {
-            return null;
-        }
-        if ($raw >= 0) {
-            return $raw;
-        }
-        if ($raw > -60) {
-            return 0;
-        }
-        while ($raw < 0) {
-            $raw += 3600;
-        }
-
-        return $raw;
     }
 
     private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
@@ -931,9 +902,7 @@ class PositionsController extends Controller
             'leverage' => (string) $pos->leverage,
             'margin' => (string) $pos->margin,
             'margin_mode' => $accountMarginMode,
-            // Normalized: workers stamp opened_at in their app tz while the
-            // DB clock runs UTC, so the raw diff can read negative ("-1200").
-            'opened_seconds_ago' => $this->normalizeAge($pos->opened_seconds_ago !== null ? (int) $pos->opened_seconds_ago : null),
+            'opened_seconds_ago' => $pos->opened_seconds_ago !== null ? (int) $pos->opened_seconds_ago : null,
             'unrealized_pnl' => null,
         ];
     }

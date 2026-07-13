@@ -44,6 +44,15 @@
         </div>
     @endisset
 
+    @php
+        // Position-level drift highlight. The 5-min reconcile reports which
+        // POSITION fields differ from the exchange (posFields: quantity,
+        // entry_price, leverage, margin, margin_mode). $driftHas() returns an
+        // Alpine expression that lights the matching row amber, so the eye
+        // lands on the exact drifted value — the banner only names it.
+        $driftHas = fn (string $field) => "((\$store.reconcile?.drift[".$p['rowId']."]?.posFields) || []).includes('".$field."')";
+    @endphp
+
     {{-- Summary groups --}}
     <div class="grid grid-cols-4 gap-3 max-[1100px]:grid-cols-2 max-[620px]:grid-cols-1">
 
@@ -82,9 +91,9 @@
                 <x-feathericon-database class="w-3 h-3" stroke-width="1.75"/>Sizing
             </div>
             <div class="px-3.5 py-2.5">
-                <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Leverage</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $d['leverage'] }}</span></div>
-                <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Margin</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $usd0($d['margin']) }}</span></div>
-                <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Quantity</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $d['qty'] }}</span></div>
+                <div class="{{ $kvRow }}" :style="{!! $driftHas('leverage') !!} ? 'background: color-mix(in srgb, var(--warn) 13%, transparent); border-radius: 4px' : ''"><span class="{{ $kvLabel }}" :class="{!! $driftHas('leverage') !!} ? '!text-warn' : ''">Leverage</span><span class="font-mono tabular-nums {{ $kvValue }} inline-flex items-center gap-1" :class="{!! $driftHas('leverage') !!} ? 'text-warn font-bold' : 'text-fg-1'">{{ $d['leverage'] }}<template x-if="{!! $driftHas('leverage') !!}"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="2.25"/></template></span></div>
+                <div class="{{ $kvRow }}" :style="{!! $driftHas('margin') !!} ? 'background: color-mix(in srgb, var(--warn) 13%, transparent); border-radius: 4px' : ''"><span class="{{ $kvLabel }}" :class="{!! $driftHas('margin') !!} ? '!text-warn' : ''">Margin</span><span class="font-mono tabular-nums {{ $kvValue }} inline-flex items-center gap-1" :class="{!! $driftHas('margin') !!} ? 'text-warn font-bold' : 'text-fg-1'">{{ $usd0($d['margin']) }}<template x-if="{!! $driftHas('margin') !!}"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="2.25"/></template></span></div>
+                <div class="{{ $kvRow }}" :style="{!! $driftHas('quantity') !!} ? 'background: color-mix(in srgb, var(--warn) 13%, transparent); border-radius: 4px' : ''"><span class="{{ $kvLabel }}" :class="{!! $driftHas('quantity') !!} ? '!text-warn' : ''">Quantity</span><span class="font-mono tabular-nums {{ $kvValue }} inline-flex items-center gap-1" :class="{!! $driftHas('quantity') !!} ? 'text-warn font-bold' : 'text-fg-1'">{{ $d['qty'] }}<template x-if="{!! $driftHas('quantity') !!}"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="2.25"/></template></span></div>
                 <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Limit orders</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $d['total'] }}</span></div>
             </div>
         </div>
@@ -94,7 +103,7 @@
                 <x-feathericon-activity class="w-3 h-3" stroke-width="1.75"/>Performance
             </div>
             <div class="px-3.5 py-2.5">
-                <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Opening price</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $d['openPrice'] }}</span></div>
+                <div class="{{ $kvRow }}" :style="{!! $driftHas('entry_price') !!} ? 'background: color-mix(in srgb, var(--warn) 13%, transparent); border-radius: 4px' : ''"><span class="{{ $kvLabel }}" :class="{!! $driftHas('entry_price') !!} ? '!text-warn' : ''">Opening price</span><span class="font-mono tabular-nums {{ $kvValue }} inline-flex items-center gap-1" :class="{!! $driftHas('entry_price') !!} ? 'text-warn font-bold' : 'text-fg-1'">{{ $d['openPrice'] }}<template x-if="{!! $driftHas('entry_price') !!}"><x-feathericon-alert-triangle class="w-3 h-3" stroke-width="2.25"/></template></span></div>
                 <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">{{ $d['closed'] ? 'Closing price' : 'Mark price' }}</span><span class="font-mono tabular-nums {{ $kvValue }} text-fg-1">{{ $d['markPrice'] }}</span></div>
                 <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">{{ $d['closed'] ? 'Realized P&L' : 'Net P&L' }}</span><span class="font-mono tabular-nums {{ $kvValue }} {{ $d['pnl'] >= 0 ? 'text-pnlup' : 'text-pnldown' }}">{{ $usdSigned($d['pnl']) }}</span></div>
                 <div class="{{ $kvRow }}"><span class="{{ $kvLabel }}">Profit target</span><span class="font-mono tabular-nums {{ $kvValue }} text-pnlup">+{{ number_format($d['tpPct'], 1) }}%</span></div>

@@ -366,26 +366,6 @@ class DashboardController extends Controller
     }
 
     /**
-     * Seconds the DB wall clock runs ahead of UTC. Local ingestion stamps
-     * rows in the machine's local time while the app runs UTC — measuring
-     * the skew straight from the DB corrects every human-readable age
-     * (and is zero on a UTC-clocked production DB). Cached per request.
-     */
-    private ?int $dbClockSkew = null;
-
-    private function dbClockSkew(): int
-    {
-        // TIMESTAMPDIFF / UTC_TIMESTAMP are MySQL-only; on any other driver
-        // (e.g. the SQLite test connection) the skew is both unmeasurable and
-        // irrelevant, so treat the clock as aligned.
-        if (DB::connection()->getDriverName() !== 'mysql') {
-            return 0;
-        }
-
-        return $this->dbClockSkew ??= (int) DB::scalar('SELECT TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), NOW())');
-    }
-
-    /**
      * Minutes until the next BSCS recompute, humanized. The ingestion app
      * schedules kraite:cron-compute-market-regime hourlyAt(50) — minute-of-
      * hour is timezone-proof, so the countdown needs no skew correction.
@@ -399,8 +379,10 @@ class DashboardController extends Controller
     }
 
     /**
-     * Skew-corrected "Xm ago" for a DB timestamp; residual future stamps
-     * still clamp to "just now" rather than showing "X from now".
+     * "Xm ago" for a DB timestamp. The connection is pinned to UTC and all
+     * engine timestamps are true UTC, so no skew correction is needed. A
+     * genuinely future stamp renders as "X from now" — surfaced, not masked —
+     * so a clock/timezone regression can't silently read "just now" again.
      */
     private function humanAgo(mixed $ts): ?string
     {
@@ -408,16 +390,14 @@ class DashboardController extends Controller
             return null;
         }
 
-        $at = CarbonImmutable::parse($ts)->subSeconds($this->dbClockSkew());
-
-        return $at->isFuture() ? 'just now' : $at->diffForHumans(['short' => true]);
+        return CarbonImmutable::parse($ts)->diffForHumans(['short' => true]);
     }
 
     /**
-     * Skew-corrected "Xh Ym" until a future DB timestamp (e.g. a cooldown
-     * expiry). Returns null when the moment is already past. Mirror of
-     * humanAgo for the forward direction; absolute syntax drops the
-     * "from now" suffix so callers can phrase it ("resumes in …").
+     * "Xh Ym" until a future DB timestamp (e.g. a cooldown expiry). Returns
+     * null when the moment is already past. Mirror of humanAgo for the forward
+     * direction; absolute syntax drops the "from now" suffix so callers can
+     * phrase it ("resumes in …").
      */
     private function humanUntil(mixed $ts): ?string
     {
@@ -425,7 +405,7 @@ class DashboardController extends Controller
             return null;
         }
 
-        $at = CarbonImmutable::parse($ts)->subSeconds($this->dbClockSkew());
+        $at = CarbonImmutable::parse($ts);
 
         if (! $at->isFuture()) {
             return null;
@@ -595,7 +575,7 @@ class DashboardController extends Controller
             'pause_reason' => $pauseReason,
             'cooldown_active' => $index->isCooldownActive(),
             'cooldown_remaining' => $this->humanUntil($cooldownUntil),
-            'cooldown_until' => $cooldownUntil ? $cooldownUntil->subSeconds($this->dbClockSkew())->toIso8601String() : null,
+            'cooldown_until' => $cooldownUntil ? $cooldownUntil->toIso8601String() : null,
             'status' => $statusLine,
             'is_stale' => $index->isStale(),
             'block_threshold' => $index->blockThreshold(),

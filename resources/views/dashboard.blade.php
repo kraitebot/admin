@@ -608,10 +608,17 @@
                                             </span>
                                         </div>
                                     </div>
+                                    @php
+                                        $dotsHelp = "These little dots show which way the price is moving, checked over a few different time spans (short and long).\n\n- **Green** — price is going up.\n- **Red** — price is going down.\n\nAll green means the price is rising almost everywhere. All red means it is falling. A mix means there is no clear direction yet.";
+                                        $pathHelp = "A simple 'how much trouble is this trade in?' meter.\n\n- **Near 0%** — good. The price is close to where the bot would happily take its profit.\n- **Near 100%** — the price has moved a long way the wrong direction, so the trade is deep in the red.\n\nLower is better. The higher it climbs, the further the price has drifted against the trade.";
+                                        $limitHelp = "The bot keeps a few backup buy orders waiting at lower prices. If the price drops to one, the bot buys a little more to improve its average price.\n\nThis shows how close the price is to hitting the **next** backup buy:\n\n- **0%** — still far away.\n- **100%** — about to trigger the next buy.";
+                                        $pxHelp = "**PX** is the live price right now.\n\nThe number next to it is how much this trade is up or down at this exact moment — **green** if it is winning, **red** if it is losing.\n\nIt keeps changing with the market, and it is not final until the trade actually closes.";
+                                    @endphp
                                     <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]">
                                         <template x-for="dot in p.timeframe_dots" :key="dot.timeframe">
                                             <i class="block w-1.5 h-1.5 rounded-chip" :style="`background: ${dotColor(dot.direction)}`" :title="dot.timeframe"></i>
                                         </template>
+                                        <x-ui.help-dot title="Price direction" :body="$dotsHelp" tip="Which way the price is moving — green up, red down." />
                                     </div>
                                 </div>
 
@@ -645,13 +652,13 @@
                                 <div class="grid grid-cols-3 gap-2">
                                     <div>
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-flag class="w-[11px] h-[11px]" stroke-width="1.75"/>Path
+                                            <x-feathericon-flag class="w-[11px] h-[11px]" stroke-width="1.75"/>Path<x-ui.help-dot title="Path" :body="$pathHelp" tip="How much trouble the trade is in — lower is better." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="(p.alpha_path_pct ?? '0.0') + '%'"></div>
                                     </div>
                                     <div class="text-center">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-arrow-right class="w-[11px] h-[11px]" stroke-width="1.75"/>Limit
+                                            <x-feathericon-arrow-right class="w-[11px] h-[11px]" stroke-width="1.75"/>Limit<x-ui.help-dot title="Limit" :body="$limitHelp" tip="How close the price is to the bot's next backup buy." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1" x-text="(p.alpha_limit_pct ?? '0.0') + '%'"></div>
                                     </div>
@@ -689,7 +696,7 @@
 
                                 {{-- footer: live mark + unrealized PnL (real-data extra) --}}
                                 <div class="flex items-center justify-between pt-2.5 mt-[13px] border-t border-line-soft">
-                                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span></span>
+                                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px]">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span><x-ui.help-dot title="Live price" :body="$pxHelp" tip="The live price, and how much the trade is up or down right now." /></span>
                                     <span class="font-mono text-[12px] font-semibold tabular-nums"
                                           :class="p.pnl === null || p.pnl === undefined ? 'text-fg-mute' : (Number(p.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown')"
                                           x-text="p.pnl === null || p.pnl === undefined ? 'PNL —' : usdSigned(p.pnl)"></span>

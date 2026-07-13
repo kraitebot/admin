@@ -58,5 +58,9 @@
         </div>
     </div>
 </div>
+
+{{-- Global help/explainer modal — one instance for the whole app; opened by any
+     <x-ui.help-dot> via the `help` Alpine store. --}}
+<x-ui.help-modal/>
 </body>
 </html>

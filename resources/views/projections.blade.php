@@ -35,7 +35,9 @@
             // ---- formatters ----
             const fmtAbs = (a) => {
                 if (!isFinite(a)) return '$∞';
-                if (a < 1000) return '$' + Math.round(a).toLocaleString('en-US');
+                // Daily calendar cells: 2-decimal precision (Binance-style) for
+                // sub-$1000 values — a day's PnL is small, so cents matter.
+                if (a < 1000) return '$' + a.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
                 if (a >= 1e15) return '$' + a.toExponential(2).replace('e+', 'e');
                 for (const [u, v] of [['T', 1e12], ['B', 1e9], ['M', 1e6], ['K', 1e3]]) if (a >= v) return '$' + (a / v).toFixed(2) + u;
                 return '$' + Math.round(a).toLocaleString('en-US');
@@ -480,6 +482,10 @@
                                       ? 'color: var(--fg-mute); background: var(--bg-elev-3)'
                                       : `color: ${tone().css}; background: ${mix(13, 'transparent')}`"
                                   x-text="typeBadge()"></span>
+                            @php
+                                $monthTypeHelp = "The badge shows what kind of data this month's calendar is made of, relative to today.\n\n- **Realized** — a month fully in the past. Every day is actual PnL from closed positions; no projection is applied.\n- **Projected** — a month fully in the future. Every day is an estimate, compounded forward from today's wallet at the selected daily rate (pessimistic / neutral / optimistic).\n- **Hybrid** — the current month. Days up to today show **real** realized PnL; days after today show **projected** estimates. Part actual, part forecast — because the month isn't over yet.";
+                            @endphp
+                            <span class="inline-flex items-center ml-1"><x-ui.help-dot title="Month type" :body="$monthTypeHelp" tip="Whether this month is realized, projected, or a mix of both." /></span>
                         </div>
                         <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.04em] max-[640px]:hidden" x-text="acct().ex + ' · ' + acct().tag"></span>
                     </div>

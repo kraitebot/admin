@@ -87,7 +87,6 @@
             dirFilter: 'all',
 
             // ---- overlays ----
-            help: null,                          // active help-modal topic key (HELP_META)
             toast: null,
             _toastTimer: null,
 
@@ -128,6 +127,10 @@
             // (full selectToken reset), or clear it when nothing matches.
             // Search typing (`query`) deliberately does NOT re-select.
             init() {
+                // Publish this console's help topics to the global help store so
+                // the shared <x-ui.help-dot> / <x-ui.help-modal> can render them.
+                this.$store.help.register(this.HELP_META);
+
                 this.$watch('filters', () => {
                     if (this.selId === null || this.tokenLocked) return;
                     if (this.filteredSymbols.some((s) => s.id === this.selId)) return;
@@ -387,9 +390,6 @@
                 }
                 this.ai = { loading: false, text: data.insights, model: data.model };
             },
-
-            // ================= approval =================
-            openHelp(key) { this.help = key; },
 
             // ================= smart adjustment (5–10 bad band) =================
             // Tries small gap / SL bumps (+0.5 / +1.0 / +1.5%) server-side and
@@ -1226,27 +1226,6 @@
                 </template>
             </div>
         </div>
-
-        {{-- ===================== HELP MODAL ===================== --}}
-        {{-- Per-label explainer. The "[?]" dots set `help` to a HELP_META key;
-             the body markdown renders through the same renderMd() the AI panel uses. --}}
-        <template x-if="help">
-            <div class="fixed inset-0 z-[80] flex items-center justify-center p-4 animate-dd-in" style="background: rgba(0,0,0,0.55)"
-                 x-on:mousedown="help = null" x-on:keydown.escape.window="help = null">
-                <div class="w-[480px] max-w-full bg-surface border border-line-strong rounded-control shadow-3 overflow-hidden" x-on:mousedown.stop>
-                    <div class="flex items-center gap-2.5 py-3 px-5 bg-surface-2 border-b border-line-soft">
-                        <span class="w-[28px] h-[28px] rounded-control flex items-center justify-center flex-shrink-0" style="background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent)">
-                            <x-feathericon-help-circle class="w-[16px] h-[16px]" stroke-width="1.75"/>
-                        </span>
-                        <h4 class="font-sans font-bold text-[15px] text-fg-1" x-text="(HELP_META[help] || {}).t"></h4>
-                        <button type="button" x-on:click="help = null" class="appearance-none bg-transparent border-0 p-0 ml-auto w-[28px] h-[28px] rounded-control inline-flex items-center justify-center text-fg-mute hover:text-fg-1 hover:bg-hover transition-colors duration-fast cursor-pointer">
-                            <x-feathericon-x class="w-4 h-4" stroke-width="2"/>
-                        </button>
-                    </div>
-                    <div class="p-5 max-h-[60vh] overflow-y-auto" x-html="renderMd((HELP_META[help] || {}).b)"></div>
-                </div>
-            </div>
-        </template>
 
         {{-- ===================== TOAST ===================== --}}
         <template x-if="toast">

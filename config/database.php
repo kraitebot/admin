@@ -55,6 +55,11 @@ return [
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
+            // Pin the session to UTC so datetime reads never depend on the DB
+            // server's SYSTEM timezone. Uses the numeric offset, not 'UTC' —
+            // the shared DB host has no MySQL named-timezone tables loaded, so
+            // `SET time_zone='UTC'` would error; '+00:00' always resolves.
+            'timezone' => env('DB_TIMEZONE', '+00:00'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
