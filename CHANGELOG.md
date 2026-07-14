@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.20.0] — 2026-07-14
+
+### Features
+- [NEW FEATURE] **Account connectivity is now a real fleet test.** The account editor loads the eligible API-calling servers from the live `servers` table, starts the existing per-server connectivity workflow, polls each result, and only reports Connected after that server succeeds. Saved credentials can be re-tested without exposing them; replacement credentials are isolated in a draft and saved only after the completed result is applied.
+
+### Fixed
+- [FIXED] **Stale connectivity results cannot enable untested credentials.** Saved credentials are snapshotted for the test and the result is rejected if the account keys change before application.
+- [FIXED] **Backtesting page compiles again.** Component-like text inside a JavaScript comment no longer gets parsed by Blade as two unclosed components.
+
 ## [0.19.3] — 2026-07-14
 
 ### Changed

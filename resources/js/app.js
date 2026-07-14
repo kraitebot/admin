@@ -272,4 +272,285 @@ window.hubUiFetch = async (url, options = {}) => {
     }
 };
 
+window.acctCard = (init) => ({
+    tab: init.hasCredentials && !init.cfg.canTrade ? 'connectivity' : 'general',
+    phase: init.hasCredentials ? 'idle' : 'empty',
+    hasCredentials: init.hasCredentials,
+    creds: { key: '', secret: '', pass: '' },
+    rows: init.servers.map((server) => ({ ...server, status: 'idle' })),
+    cfg: { ...init.cfg },
+    cfgSaved: 'idle',
+    connDone: false,
+    connError: null,
+    connSaving: false,
+    blockUuid: null,
+    testedBlockUuid: null,
+    testedMode: null,
+    _pollTimer: null,
+    _feedbackTimer: null,
+
+    tested() {
+        return this.phase === 'ok' || this.phase === 'fail';
+    },
+    testing() {
+        return this.phase === 'testing';
+    },
+    credentialsDirty() {
+        return this.creds.key.trim() !== ''
+            || this.creds.secret.trim() !== ''
+            || this.creds.pass.trim() !== '';
+    },
+    replacementCredentialsComplete() {
+        return this.creds.key.trim() !== ''
+            && this.creds.secret.trim() !== ''
+            && (!init.needsPass || this.creds.pass.trim() !== '');
+    },
+    canTest() {
+        if (this.testing() || this.connSaving || this.rows.length === 0) {
+            return false;
+        }
+
+        return this.credentialsDirty()
+            ? this.replacementCredentialsComplete()
+            : this.hasCredentials;
+    },
+    canSave() {
+        return this.tested() && !this.testing() && !this.connSaving && this.testedBlockUuid !== null;
+    },
+    configLocked() {
+        return !this.hasCredentials;
+    },
+    connectionUsable() {
+        return this.phase === 'ok'
+            || (this.phase === 'idle' && this.hasCredentials && this.cfg.canTrade);
+    },
+    tradingDisabled() {
+        return this.hasCredentials && !this.cfg.canTrade;
+    },
+    tradingActive() {
+        return this.hasCredentials && this.cfg.canTrade;
+    },
+    connectedCount() {
+        return this.rows.filter((server) => server.status === 'connected').length;
+    },
+    status() {
+        if (this.testing()) {
+            return { kind: 'testing', c: 'var(--info)', t: 'Testing…', pulse: false };
+        }
+        if (this.phase === 'ok') {
+            return { kind: 'ok', c: 'var(--pnl-up-fg)', t: 'Connection verified', pulse: false };
+        }
+        if (this.phase === 'fail') {
+            return { kind: 'disabled', c: 'var(--danger)', t: 'Test failed', pulse: true };
+        }
+        if (this.tradingActive()) {
+            return { kind: 'saved', c: 'var(--pnl-up-fg)', t: 'Trading enabled', pulse: false };
+        }
+        if (this.tradingDisabled()) {
+            return { kind: 'disabled', c: 'var(--warn)', t: 'Trading disabled', pulse: true };
+        }
+
+        return { kind: 'none', c: 'var(--fg-mute)', t: 'Not connected', pulse: false };
+    },
+    resultColor(status) {
+        if (status === 'connected') {
+            return 'var(--pnl-up-fg)';
+        }
+        if (status === 'not_connected') {
+            return 'var(--danger)';
+        }
+        if (status === 'testing') {
+            return 'var(--info)';
+        }
+
+        return 'var(--fg-faint)';
+    },
+    resultLabel(status) {
+        if (status === 'connected') {
+            return 'Connected';
+        }
+        if (status === 'not_connected') {
+            return 'Blocked';
+        }
+        if (status === 'testing') {
+            return 'Testing';
+        }
+
+        return 'Not tested';
+    },
+    testButtonLabel() {
+        if (this.credentialsDirty()) {
+            return this.tested() ? 'Re-test replacement keys' : 'Test replacement keys';
+        }
+
+        return this.tested() ? 'Re-test saved connection' : 'Test saved connection';
+    },
+    saveButtonLabel() {
+        if (this.phase === 'fail') {
+            return this.testedMode === 'replacement' ? 'Save keys (trading stays off)' : 'Apply result (trading off)';
+        }
+
+        return this.testedMode === 'replacement' ? 'Save & enable trading' : 'Apply result & enable trading';
+    },
+    credentialPayload() {
+        if (!this.credentialsDirty()) {
+            return {};
+        }
+
+        return {
+            api_key: this.creds.key,
+            api_secret: this.creds.secret,
+            passphrase: this.creds.pass || null,
+        };
+    },
+    credChanged() {
+        if (this.testing()) {
+            return;
+        }
+
+        this.phase = this.hasCredentials ? 'idle' : 'empty';
+        this.testedBlockUuid = null;
+        this.testedMode = null;
+        this.connDone = false;
+        this.connError = null;
+        this.rows = init.servers.map((server) => ({ ...server, status: 'idle' }));
+    },
+    destroy() {
+        if (this._pollTimer) {
+            clearTimeout(this._pollTimer);
+        }
+        if (this._feedbackTimer) {
+            clearTimeout(this._feedbackTimer);
+        }
+    },
+    async runTest() {
+        if (!this.canTest()) {
+            return;
+        }
+
+        if (this._pollTimer) {
+            clearTimeout(this._pollTimer);
+            this._pollTimer = null;
+        }
+
+        this.phase = 'testing';
+        this.connError = null;
+        this.connDone = false;
+        this.blockUuid = null;
+        this.testedBlockUuid = null;
+        this.testedMode = null;
+        this.rows = init.servers.map((server) => ({ ...server, status: 'testing' }));
+
+        const response = await window.hubUiFetch(init.urls.start, {
+            body: {
+                account_id: init.accountId,
+                ...this.credentialPayload(),
+            },
+        });
+
+        if (!response.ok) {
+            this.phase = this.hasCredentials ? 'idle' : 'empty';
+            this.connError = response.data?.error || 'Could not start the connectivity test.';
+            this.rows = init.servers.map((server) => ({ ...server, status: 'idle' }));
+            return;
+        }
+
+        this.blockUuid = response.data.block_uuid;
+        this.testedMode = response.data.credentials_mode;
+        this.rows = response.data.servers || this.rows;
+        await this.pollConnectivity();
+    },
+    async pollConnectivity() {
+        if (this._pollTimer) {
+            clearTimeout(this._pollTimer);
+            this._pollTimer = null;
+        }
+
+        const blockUuid = this.blockUuid;
+        if (!blockUuid) {
+            return;
+        }
+
+        const response = await window.hubUiFetch(
+            init.urls.status.replace('__UUID__', blockUuid),
+            { signal: AbortSignal.timeout(8000) },
+        );
+
+        if (this.blockUuid !== blockUuid) {
+            return;
+        }
+
+        if (response.ok) {
+            this.rows = response.data.servers || [];
+
+            if (response.data.is_complete) {
+                this.phase = response.data.all_connected ? 'ok' : 'fail';
+                this.testedBlockUuid = blockUuid;
+                return;
+            }
+        } else if (response.status >= 400 && response.status < 500) {
+            this.phase = this.hasCredentials ? 'idle' : 'empty';
+            this.blockUuid = null;
+            this.testedMode = null;
+            this.connError = response.data?.error || 'The connectivity test is no longer available.';
+            this.rows = init.servers.map((server) => ({ ...server, status: 'idle' }));
+            return;
+        }
+
+        this._pollTimer = setTimeout(() => this.pollConnectivity(), 3000);
+    },
+    async saveConn() {
+        if (!this.canSave()) {
+            return;
+        }
+
+        this.connSaving = true;
+        this.connError = null;
+
+        const response = await window.hubUiFetch(init.urls.save, {
+            method: 'PATCH',
+            body: {
+                account_id: init.accountId,
+                tested_block_uuid: this.testedBlockUuid,
+                ...(this.testedMode === 'replacement' ? this.credentialPayload() : {}),
+            },
+        });
+
+        this.connSaving = false;
+
+        if (!response.ok) {
+            this.connError = response.data?.error || 'Could not apply the connectivity result.';
+            return;
+        }
+
+        this.hasCredentials = response.data.account.has_credentials;
+        this.cfg.canTrade = response.data.account.can_trade;
+        this.phase = response.data.account.can_trade ? 'ok' : 'fail';
+        this.creds = { key: '', secret: '', pass: '' };
+        this.testedBlockUuid = null;
+        this.testedMode = null;
+        this.connDone = true;
+
+        if (this._feedbackTimer) {
+            clearTimeout(this._feedbackTimer);
+        }
+        this._feedbackTimer = setTimeout(() => {
+            this.connDone = false;
+        }, 1900);
+    },
+    saveCfg() {
+        if (this.configLocked() || this.cfgSaved !== 'idle') {
+            return;
+        }
+
+        this.cfgSaved = 'saving';
+        setTimeout(() => {
+            this.cfgSaved = 'done';
+        }, 520);
+        setTimeout(() => {
+            this.cfgSaved = 'idle';
+        }, 2200);
+    },
+});
+
 Livewire.start();

@@ -18,6 +18,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Kraite\Core\Jobs\Lifecycles\Account\TestExchangeConnectivityStep;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\Server;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use StepDispatcher\Models\Step;
 use Throwable;
@@ -45,7 +46,7 @@ class AccountController extends Controller
         'margin_percentage_long', 'margin_percentage_short',
     ];
 
-    public function edit(): View
+    public function edit(AccountServerConnectivityService $connectivity): View
     {
         $isAdmin = (bool) Auth::user()->is_admin;
 
@@ -64,8 +65,18 @@ class AccountController extends Controller
             ->map(fn (Account $a) => $this->serialize($a))
             ->all();
 
+        $connectivityServers = $connectivity->apiConnectivityServers()
+            ->map(static fn (Server $server): array => [
+                'id' => $server->id,
+                'hostname' => $server->hostname,
+                'ip_address' => $server->ip_address,
+            ])
+            ->values()
+            ->all();
+
         return view('accounts.edit', [
             'accounts' => $accounts,
+            'connectivityServers' => $connectivityServers,
             'isAdmin' => $isAdmin,
         ]);
     }
@@ -158,26 +169,16 @@ class AccountController extends Controller
 
     public function saveCredentials(Request $request, AccountServerConnectivityService $connectivity): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'account_id' => ['required', 'integer'],
-        ]);
-
-        $account = $this->accountForCurrentUser((int) $request->input('account_id'));
-        $exchange = (string) $account->apiSystem?->canonical;
-
-        $data = $request->validate([
-            'api_key' => ['required', 'string', 'max:2000'],
-            'api_secret' => ['required', 'string', 'max:2000'],
-            'passphrase' => [
-                'nullable',
-                Rule::requiredIf(fn (): bool => in_array($exchange, ['kucoin', 'bitget'], true)),
-                'string',
-                'max:2000',
-            ],
             'tested_block_uuid' => ['required', 'uuid'],
         ]);
 
-        $testedAccount = $this->accountForBlock((string) $data['tested_block_uuid']);
+        $account = $this->accountForCurrentUser((int) $validated['account_id']);
+        $exchange = (string) $account->apiSystem?->canonical;
+        $credentials = $this->validateConnectivityCredentials($request, $exchange, false);
+        $testedAccount = $this->accountForBlock((string) $validated['tested_block_uuid']);
+        $usesSavedCredentials = ! $this->hasCredentialInput($credentials);
 
         if (! $this->isConnectivityDraftFor($testedAccount, $account)) {
             return response()->json([
@@ -185,13 +186,29 @@ class AccountController extends Controller
             ], 422);
         }
 
-        if (! $this->credentialsMatch($testedAccount, $exchange, $data)) {
-            return response()->json([
-                'message' => 'The API keys changed after the test. Test the new keys before saving.',
-            ], 422);
+        if ($usesSavedCredentials) {
+            if (! $this->hasRequiredCredentials($account)) {
+                return response()->json([
+                    'message' => 'This account has no saved API credentials to apply.',
+                ], 422);
+            }
+
+            if (! $this->credentialsMatch($testedAccount, $exchange, $this->credentialsForAccount($account, $exchange))) {
+                return response()->json([
+                    'message' => 'The saved API credentials changed during the test. Test them again.',
+                ], 422);
+            }
+        } else {
+            $credentials = $this->validateConnectivityCredentials($request, $exchange, true);
+
+            if (! $this->credentialsMatch($testedAccount, $exchange, $credentials)) {
+                return response()->json([
+                    'message' => 'The API keys changed after the test. Test the new keys before saving.',
+                ], 422);
+            }
         }
 
-        $payload = $this->augmentConnectivityPayload($connectivity->status((string) $data['tested_block_uuid']));
+        $payload = $this->augmentConnectivityPayload($connectivity->status((string) $validated['tested_block_uuid']));
 
         if (! (bool) $payload['is_complete']) {
             return response()->json([
@@ -200,18 +217,23 @@ class AccountController extends Controller
         }
 
         $allConnected = (bool) $payload['all_connected'];
-        $credentials = $this->credentialColumns(
-            exchange: $exchange,
-            apiKey: (string) $data['api_key'],
-            apiSecret: (string) $data['api_secret'],
-            passphrase: $data['passphrase'] ?? null,
-        );
+        $credentialColumns = $usesSavedCredentials
+            ? null
+            : $this->credentialColumns(
+                exchange: $exchange,
+                apiKey: (string) $credentials['api_key'],
+                apiSecret: (string) $credentials['api_secret'],
+                passphrase: $credentials['passphrase'] ?? null,
+            );
 
-        DB::transaction(function () use ($account, $allConnected, $credentials, $testedAccount): void {
-            $account->all_credentials = $credentials;
+        DB::transaction(function () use ($account, $allConnected, $credentialColumns, $testedAccount): void {
+            if ($credentialColumns !== null) {
+                $account->all_credentials = $credentialColumns;
+            }
+
             $account->forceFill([
                 'can_trade' => $allConnected,
-                'disabled_reason' => $allConnected ? null : 'Some Kraite IP addresses are not allowed in your exchange account.',
+                'disabled_reason' => $allConnected ? null : 'Connectivity failed from one or more Kraite servers.',
                 'disabled_at' => $allConnected ? null : now(),
             ])->save();
 
@@ -219,38 +241,48 @@ class AccountController extends Controller
         });
 
         return response()->json([
-            'message' => $allConnected
-                ? 'API keys saved. Trading is enabled for this account.'
-                : 'API keys saved. Trading stays disabled until the Kraite IP addresses are allowed in your exchange account.',
+            'message' => $usesSavedCredentials
+                ? ($allConnected
+                    ? 'Connectivity result applied. Trading is enabled for this account.'
+                    : 'Connectivity result applied. Trading stays disabled until every Kraite server connects.')
+                : ($allConnected
+                    ? 'API keys saved. Trading is enabled for this account.'
+                    : 'API keys saved. Trading stays disabled until connectivity succeeds from every Kraite server.'),
             'account' => $this->serialize($account->load(['apiSystem', 'user'])),
         ]);
     }
 
     public function testConnectivity(Request $request, AccountServerConnectivityService $connectivity): JsonResponse
     {
-        $request->validate([
+        $validated = $request->validate([
             'account_id' => ['required', 'integer'],
         ]);
 
-        $account = $this->accountForCurrentUser((int) $request->input('account_id'));
+        $account = $this->accountForCurrentUser((int) $validated['account_id']);
         $exchange = (string) $account->apiSystem?->canonical;
+        $credentials = $this->validateConnectivityCredentials($request, $exchange, false);
+        $credentialsMode = 'replacement';
 
-        $data = $request->validate([
-            'api_key' => ['required', 'string', 'max:2000'],
-            'api_secret' => ['required', 'string', 'max:2000'],
-            'passphrase' => [
-                'nullable',
-                Rule::requiredIf(fn (): bool => in_array($exchange, ['kucoin', 'bitget'], true)),
-                'string',
-                'max:2000',
-            ],
-        ]);
+        if (! $this->hasCredentialInput($credentials)) {
+            if (! $this->hasRequiredCredentials($account)) {
+                return response()->json([
+                    'message' => 'Enter API credentials before testing this account.',
+                ], 422);
+            }
+            $credentials = $this->credentialsForAccount($account, $exchange);
+            $credentialsMode = 'saved';
+        } else {
+            $credentials = $this->validateConnectivityCredentials($request, $exchange, true);
+        }
 
         $draft = $this->draftConnectivityAccountFor($account);
-        $this->fillDraftConnectivityAccount($draft, $account, $data);
+        $this->fillDraftConnectivityAccount($draft, $account, $credentials);
         $draft->save();
 
-        return response()->json($this->augmentConnectivityPayload($connectivity->start($draft)));
+        return response()->json(array_merge(
+            $this->augmentConnectivityPayload($connectivity->start($draft)),
+            ['credentials_mode' => $credentialsMode],
+        ));
     }
 
     public function connectivityStatus(string $blockUuid, AccountServerConnectivityService $connectivity): JsonResponse
@@ -376,6 +408,51 @@ class AccountController extends Controller
             && $draft->name === $this->connectivityDraftName($account)
             && (bool) $draft->is_active === false
             && (bool) $draft->can_trade === false;
+    }
+
+    /**
+     * @return array{api_key?: string|null, api_secret?: string|null, passphrase?: string|null}
+     */
+    private function validateConnectivityCredentials(Request $request, string $exchange, bool $required): array
+    {
+        $presenceRule = $required ? 'required' : 'nullable';
+
+        return $request->validate([
+            'api_key' => [$presenceRule, 'string', 'max:2000'],
+            'api_secret' => [$presenceRule, 'string', 'max:2000'],
+            'passphrase' => [
+                Rule::requiredIf($required && in_array($exchange, ['kucoin', 'bitget'], true)),
+                'nullable',
+                'string',
+                'max:2000',
+            ],
+        ]);
+    }
+
+    /**
+     * @param  array{api_key?: string|null, api_secret?: string|null, passphrase?: string|null}  $credentials
+     */
+    private function hasCredentialInput(array $credentials): bool
+    {
+        return filled($credentials['api_key'] ?? null)
+            || filled($credentials['api_secret'] ?? null)
+            || filled($credentials['passphrase'] ?? null);
+    }
+
+    /**
+     * @return array{api_key: string, api_secret: string, passphrase: string|null}
+     */
+    private function credentialsForAccount(Account $account, string $exchange): array
+    {
+        $credentials = $account->all_credentials;
+
+        return [
+            'api_key' => (string) ($credentials["{$exchange}_api_key"] ?? ''),
+            'api_secret' => (string) ($credentials["{$exchange}_api_secret"] ?? ''),
+            'passphrase' => isset($credentials["{$exchange}_passphrase"])
+                ? (string) $credentials["{$exchange}_passphrase"]
+                : null,
+        ];
     }
 
     /**

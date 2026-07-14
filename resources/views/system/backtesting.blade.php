@@ -128,7 +128,7 @@
             // Search typing (`query`) deliberately does NOT re-select.
             init() {
                 // Publish this console's help topics to the global help store so
-                // the shared <x-ui.help-dot> / <x-ui.help-modal> can render them.
+                // the shared x-ui.help-dot / x-ui.help-modal components can render them.
                 this.$store.help.register(this.HELP_META);
 
                 this.$watch('filters', () => {

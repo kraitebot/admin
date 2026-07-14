@@ -1,38 +1,5 @@
 @php
-    // Accounts — REAL DATA (display). The accordion is built from the
-    // AccountController::serialize payload: real accounts, real config
-    // values, phase derived from stored credential + trading state.
-    //
-    // STILL MOCK / flagged for the next pass:
-    //  - $ips: the Kraite egress IP allowlist has no real source yet.
-    //  - quote dropdowns show the stored value only (live asset list comes
-    //    from GET accounts.quotes against the exchange).
-    //  - per-IP connectivity results are approximated from phase (no stored
-    //    per-server result); the live test endpoint isn't wired here.
-    //  - the option ranges below are design defaults UNIONed with each
-    //    account's real value so the stored value always shows.
-
-    // Kraite egress IPs the user must allowlist — PLACEHOLDER list.
-    $ips = [
-        ['id' => 'kr-fra-01', 'region' => 'Frankfurt', 'ip' => '51.158.10.21'],
-        ['id' => 'kr-fra-02', 'region' => 'Frankfurt', 'ip' => '51.158.10.22'],
-        ['id' => 'kr-ldn-01', 'region' => 'London',    'ip' => '178.62.40.13'],
-        ['id' => 'kr-nyc-01', 'region' => 'New York',  'ip' => '159.65.20.44'],
-        ['id' => 'kr-sgp-01', 'region' => 'Singapore', 'ip' => '128.199.80.5'],
-        ['id' => 'kr-sgp-02', 'region' => 'Singapore', 'ip' => '128.199.80.6'],
-    ];
-    $failIds = [];
-
-    // Transform the serialized accounts into the accordion card shape.
-    $phaseOf = function (array $a): string {
-        if (! ($a['has_credentials'] ?? false)) {
-            return 'empty';                       // first-run: config locked
-        }
-
-        return ($a['can_trade'] ?? false) ? 'ok' : 'fail';   // fail = creds saved, trading off
-    };
-
-    $cards = collect($accounts)->map(function (array $a) use ($phaseOf) {
+    $cards = collect($accounts)->map(function (array $a) {
         $pq = $a['portfolio_quote'] ?: 'USDT';
         $tq = $a['trading_quote'] ?: 'USDT';
 
@@ -45,9 +12,9 @@
             'owner' => $a['owner'],
             'note' => $a['disabled_reason'] ?: ($a['is_active'] ? 'Active' : 'Inactive'),
             'equity' => '—',
+            'hasCredentials' => (bool) ($a['has_credentials'] ?? false),
             'needsPass' => (bool) ($a['requires_passphrase'] ?? false),
             'quotes' => array_values(array_unique(array_filter([$pq, $tq]))),
-            'phase' => $phaseOf($a),
             'cfg' => [
                 'cfgName' => $a['name'],
                 'canTrade' => (bool) ($a['can_trade'] ?? false),
@@ -81,84 +48,6 @@
 @endphp
 
 <x-app-layout active="accounts" :title="'Kraite — Accounts'">
-
-    <script>
-        // Per-account card controller — credential phase machine + the live
-        // progressive connectivity test. Phases: 'empty' (first-run, config
-        // locked) · 'idle' (creds edited, re-test required) · 'testing' ·
-        // 'ok' (connection usable) · 'fail' (keys saved, trading disabled).
-        window.acctCard = (init) => ({
-            tab: init.phase === 'fail' ? 'connectivity' : 'general',
-            phase: init.phase,
-            creds: { ...init.creds },
-            results: { ...init.results },
-            cfg: { ...init.cfg },
-            cfgSaved: 'idle',
-            connDone: false,
-            failIds: init.failIds,
-            servers: init.servers,
-            _timers: [],
-
-            tested() { return this.phase === 'ok' || this.phase === 'fail'; },
-            testing() { return this.phase === 'testing'; },
-            canTest() {
-                return !this.testing()
-                    && this.creds.key.trim() !== ''
-                    && this.creds.secret.trim() !== ''
-                    && (!init.needsPass || this.creds.pass.trim() !== '');
-            },
-            canSave() { return this.tested() && !this.testing(); },
-            configLocked() { return this.phase === 'empty'; },
-            connectionUsable() { return this.phase === 'ok'; },
-            tradingDisabled() { return this.phase === 'fail'; },
-            tradingActive() { return this.connectionUsable() && this.cfg.canTrade; },
-            okCount() { return Object.values(this.results).filter(v => v === 'ok').length; },
-            credChanged() { if (this.phase === 'ok' || this.phase === 'empty') this.phase = 'idle'; },
-            // wire:navigate swaps the body but timers outlive the DOM
-            destroy() {
-                this._timers.forEach(clearTimeout);
-                this._timers = [];
-            },
-
-            status() {
-                if (this.testing()) return { kind: 'testing', c: 'var(--info)', t: 'Testing…', pulse: false };
-                if (this.phase === 'ok') return { kind: 'ok', c: 'var(--pnl-up-fg)', t: 'Connection OK', pulse: false };
-                if (this.phase === 'fail') return { kind: 'disabled', c: 'var(--warn)', t: 'Trading disabled', pulse: true };
-                return { kind: 'none', c: 'var(--fg-mute)', t: 'Not connected', pulse: false };
-            },
-            resultColor(st) {
-                return st === 'ok' ? 'var(--pnl-up-fg)' : st === 'fail' ? 'var(--danger)' : st === 'testing' ? 'var(--info)' : 'var(--fg-faint)';
-            },
-
-            // live progressive test — servers resolve one-by-one; a previously
-            // failed account keeps failing on its blocked IPs (mock behavior)
-            runTest() {
-                const forceFail = init.phase === 'fail';
-                this._timers.forEach(clearTimeout); this._timers = [];
-                this.phase = 'testing';
-                this.servers.forEach(s => { this.results[s.id] = 'pending'; });
-                this.servers.forEach((s, i) => {
-                    this._timers.push(setTimeout(() => { this.results[s.id] = 'testing'; }, 220 + i * 540));
-                    this._timers.push(setTimeout(() => {
-                        this.results[s.id] = (forceFail && this.failIds.includes(s.id)) ? 'fail' : 'ok';
-                    }, 220 + i * 540 + 460));
-                });
-                this._timers.push(setTimeout(() => { this.phase = forceFail ? 'fail' : 'ok'; }, 220 + this.servers.length * 540 + 480));
-            },
-
-            saveConn() {
-                if (!this.canSave()) return;
-                this.connDone = true;
-                this._timers.push(setTimeout(() => { this.connDone = false; }, 1900));
-            },
-            saveCfg() {
-                if (this.configLocked() || this.cfgSaved !== 'idle') return;
-                this.cfgSaved = 'saving';
-                this._timers.push(setTimeout(() => { this.cfgSaved = 'done'; }, 520));
-                this._timers.push(setTimeout(() => { this.cfgSaved = 'idle'; }, 2200));
-            },
-        });
-    </script>
 
     {{-- ===================== PAGE HEADER ===================== --}}
     <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -197,24 +86,21 @@
                 @php
                     $key = $a['key'];
                     $cardInit = [
-                        'phase' => $a['phase'],
+                        'accountId' => $a['id'],
+                        'hasCredentials' => $a['hasCredentials'],
                         'needsPass' => $a['needsPass'],
-                        'creds' => [
-                            'key' => 'kx_live_8f3a…d21',
-                            'secret' => '••••••••••••••••',
-                            'pass' => $a['needsPass'] ? '••••••' : '',
-                        ],
-                        'results' => collect($ips)->mapWithKeys(fn ($s) => [
-                            $s['id'] => $a['phase'] === 'fail' && in_array($s['id'], $failIds, true) ? 'fail' : 'ok',
-                        ])->all(),
                         'cfg' => $a['cfg'],
-                        'failIds' => $failIds,
-                        'servers' => collect($ips)->map(fn ($s) => ['id' => $s['id']])->all(),
+                        'servers' => $connectivityServers,
+                        'urls' => [
+                            'start' => route('accounts.connectivity.test'),
+                            'status' => route('accounts.connectivity.status', '__UUID__'),
+                            'save' => route('accounts.connectivity.credentials'),
+                        ],
                     ];
                 @endphp
                 <div class="card card--flat overflow-hidden"
                      x-data="acctCard(@js($cardInit))"
-                     @if($a['phase'] === 'fail') style="border-color: color-mix(in srgb, var(--warn) 32%, var(--border));" @endif>
+                     @if($a['hasCredentials'] && ! $a['cfg']['canTrade']) style="border-color: color-mix(in srgb, var(--warn) 32%, var(--border));" @endif>
 
                     {{-- ---------- collapsed header ---------- --}}
                     <button type="button" @click="openIdx = openIdx === {{ $i }} ? -1 : {{ $i }}"
@@ -353,28 +239,34 @@
 
                                 {{-- ================= CONNECTIVITY ================= --}}
                                 <div x-show="tab === 'connectivity'" x-cloak>
-                                    {{-- trading-disabled banner --}}
-                                    <div x-show="tradingDisabled()" x-cloak
+                                    {{-- failed-test / stored-disabled banner --}}
+                                    <div x-show="phase === 'fail' || tradingDisabled()" x-cloak
                                          class="m-6 mb-0 rounded-control border px-4 py-3.5 flex items-start gap-3 max-[640px]:mx-4"
-                                         style="border-color: color-mix(in srgb, var(--warn) 42%, transparent); background: color-mix(in srgb, var(--warn) 11%, transparent);">
+                                        style="border-color: color-mix(in srgb, var(--warn) 42%, transparent); background: color-mix(in srgb, var(--warn) 11%, transparent);">
                                         <span class="flex-shrink-0 mt-px text-warn"><x-feathericon-alert-triangle class="w-[17px] h-[17px]" stroke-width="1.75"/></span>
                                         <div class="flex-1 min-w-0">
-                                            <div class="font-sans font-semibold text-[13px] text-fg-1 leading-tight">Trading is disabled on this account</div>
-                                            <div class="text-[12px] text-fg-3 mt-1 leading-snug">Some Kraite IP addresses are not allowlisted in your {{ $a['ex'] }} account. Keys are saved, but the bot will not open or manage positions here until the test passes from every server.</div>
+                                            <div x-show="phase === 'fail'">
+                                                <div class="font-sans font-semibold text-[13px] text-fg-1 leading-tight">Connectivity test failed</div>
+                                                <div class="text-[12px] text-fg-3 mt-1 leading-snug">At least one Kraite server could not use these {{ $a['ex'] }} credentials. Applying this result keeps trading disabled.</div>
+                                            </div>
+                                            <div x-show="phase !== 'fail'">
+                                                <div class="font-sans font-semibold text-[13px] text-fg-1 leading-tight">Trading is disabled on this account</div>
+                                                <div class="text-[12px] text-fg-3 mt-1 leading-snug">Run a successful test from every eligible Kraite server before enabling trading.</div>
+                                            </div>
                                         </div>
                                     </div>
 
                                     {{-- API credentials --}}
-                                    <x-form.group title="API credentials" icon="key">
+                                    <x-form.group title="API credentials" icon="key" :hint="$a['hasCredentials'] ? 'saved securely · leave blank to re-test' : 'required before first test'">
                                         <x-form.field label="API key" for="{{ $key }}-apikey">
-                                            <x-form.input model="creds.key" id="{{ $key }}-apikey" mono placeholder="Paste API key" disabledExpr="testing()" changed="credChanged()"/>
+                                            <x-form.input model="creds.key" id="{{ $key }}-apikey" mono :placeholder="$a['hasCredentials'] ? 'Paste only to replace saved key' : 'Paste API key'" disabledExpr="testing() || connSaving" changed="credChanged()"/>
                                         </x-form.field>
                                         <x-form.field label="API secret" for="{{ $key }}-apisecret">
-                                            <x-form.input model="creds.secret" id="{{ $key }}-apisecret" mono secret placeholder="Paste API secret" disabledExpr="testing()" changed="credChanged()"/>
+                                            <x-form.input model="creds.secret" id="{{ $key }}-apisecret" mono secret :placeholder="$a['hasCredentials'] ? 'Paste only to replace saved secret' : 'Paste API secret'" disabledExpr="testing() || connSaving" changed="credChanged()"/>
                                         </x-form.field>
                                         @if($a['needsPass'])
                                             <x-form.field label="API passphrase" for="{{ $key }}-apipass" help="Required by this exchange.">
-                                                <x-form.input model="creds.pass" id="{{ $key }}-apipass" mono secret placeholder="Paste passphrase" disabledExpr="testing()" changed="credChanged()"/>
+                                                <x-form.input model="creds.pass" id="{{ $key }}-apipass" mono secret :placeholder="$a['hasCredentials'] ? 'Paste only to replace saved passphrase' : 'Paste passphrase'" disabledExpr="testing() || connSaving" changed="credChanged()"/>
                                             </x-form.field>
                                         @endif
                                     </x-form.group>
@@ -386,9 +278,10 @@
                                                 <x-feathericon-shield class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Allowlist Kraite's IP addresses
                                             </h4>
                                             <button type="button"
-                                                    @click="navigator.clipboard?.writeText(@js(collect($ips)->pluck('ip')->implode("\n"))); copiedAll = true; setTimeout(() => copiedAll = false, 1400)"
+                                                    @click="navigator.clipboard?.writeText(@js(collect($connectivityServers)->pluck('ip_address')->implode("\n"))); copiedAll = true; setTimeout(() => copiedAll = false, 1400)"
+                                                    @disabled(count($connectivityServers) === 0)
                                                     :style="copiedAll ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
-                                                    class="appearance-none cursor-pointer inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[30px] px-3">
+                                                    class="appearance-none cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[30px] px-3">
                                                 <span x-show="!copiedAll"><x-feathericon-copy class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
                                                 <span x-show="copiedAll" x-cloak><x-feathericon-check class="w-[13px] h-[13px]" stroke-width="2"/></span>
                                                 <span x-text="copiedAll ? 'Copied' : 'Copy all'"></span>
@@ -396,22 +289,26 @@
                                         </div>
                                         <div class="py-5 px-6 max-[640px]:px-4">
                                             <p class="text-[12px] text-fg-3 mb-3 leading-snug max-w-[480px]">Add every address below to your {{ $a['ex'] }} API key's IP restriction. <span class="text-fg-2">Missing IPs are the #1 reason a test fails.</span></p>
-                                            <div class="grid grid-cols-2 gap-2 max-[700px]:grid-cols-1">
-                                                @foreach($ips as $ip)
+                                            @if(count($connectivityServers) === 0)
+                                                <div class="rounded-control border border-warn/40 bg-warn/10 px-4 py-3 text-[12px] text-warn">No eligible API servers are configured. Connectivity testing is unavailable.</div>
+                                            @else
+                                                <div class="grid grid-cols-2 gap-2 max-[700px]:grid-cols-1">
+                                                @foreach($connectivityServers as $server)
                                                     <div class="flex items-center gap-3 py-2 px-3 rounded-control border border-line-soft bg-surface-2">
-                                                        <span class="font-mono text-[12.5px] font-semibold text-fg-1 tabular-nums tracking-[0.02em]">{{ $ip['ip'] }}</span>
-                                                        <span class="font-mono text-[10px] tracking-[0.07em] uppercase text-fg-mute">{{ $ip['region'] }}</span>
+                                                        <span class="font-mono text-[12.5px] font-semibold text-fg-1 tabular-nums tracking-[0.02em]">{{ $server['ip_address'] }}</span>
+                                                        <span class="font-mono text-[10px] tracking-[0.07em] uppercase text-fg-mute">{{ $server['hostname'] }}</span>
                                                         <button type="button"
-                                                                @click="navigator.clipboard?.writeText('{{ $ip['ip'] }}'); copied = '{{ $ip['id'] }}'; setTimeout(() => copied = null, 1400)"
-                                                                :style="copied === '{{ $ip['id'] }}' ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
+                                                                @click="navigator.clipboard?.writeText(@js($server['ip_address'])); copied = {{ $server['id'] }}; setTimeout(() => copied = null, 1400)"
+                                                                :style="copied === {{ $server['id'] }} ? 'color: var(--pnl-up-fg); border-color: color-mix(in srgb, var(--pnl-up-fg) 40%, transparent)' : ''"
                                                                 class="ml-auto appearance-none cursor-pointer inline-flex items-center gap-1.5 rounded-[7px] border border-line bg-surface-3 text-fg-2 font-mono text-[10.5px] font-semibold tracking-[0.04em] transition-colors duration-fast hover:border-line-strong hover:text-fg-1 h-[26px] px-2.5">
-                                                            <span x-show="copied !== '{{ $ip['id'] }}'"><x-feathericon-copy class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
-                                                            <span x-show="copied === '{{ $ip['id'] }}'" x-cloak><x-feathericon-check class="w-[13px] h-[13px]" stroke-width="2"/></span>
-                                                            <span x-text="copied === '{{ $ip['id'] }}' ? 'Copied' : 'Copy'"></span>
+                                                            <span x-show="copied !== {{ $server['id'] }}"><x-feathericon-copy class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
+                                                            <span x-show="copied === {{ $server['id'] }}" x-cloak><x-feathericon-check class="w-[13px] h-[13px]" stroke-width="2"/></span>
+                                                            <span x-text="copied === {{ $server['id'] }} ? 'Copied' : 'Copy'"></span>
                                                         </button>
                                                     </div>
                                                 @endforeach
-                                            </div>
+                                                </div>
+                                            @endif
                                         </div>
                                     </div>
 
@@ -421,36 +318,39 @@
                                             <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
                                                 <x-feathericon-server class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Connectivity from Kraite servers
                                             </h4>
-                                            <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"><span x-text="okCount()"></span>/{{ count($ips) }} connected</span>
+                                            <span class="font-mono text-[10.5px] text-fg-mute tabular-nums"><span x-text="connectedCount()"></span>/<span x-text="rows.length"></span> connected</span>
                                         </div>
                                         <div class="py-5 px-6 max-[640px]:px-4">
                                             <div class="rounded-control border border-line-soft overflow-hidden bg-surface-2">
-                                                @foreach($ips as $s)
-                                                    <div class="flex items-center gap-3 py-2.5 px-3.5 border-b border-line-soft last:border-b-0">
+                                                <template x-for="server in rows" :key="server.id">
+                                                    <div class="flex items-center gap-3 py-2.5 px-3.5 border-b border-line-soft last:border-b-0 max-[700px]:flex-wrap">
                                                         <span class="w-[18px] flex items-center justify-center flex-shrink-0">
-                                                            <template x-if="results['{{ $s['id'] }}'] === 'testing'">
+                                                            <template x-if="server.status === 'testing'">
                                                                 <span class="w-[13px] h-[13px] rounded-full border-2 border-line-strong border-t-info animate-spin"></span>
                                                             </template>
-                                                            <template x-if="results['{{ $s['id'] }}'] === 'ok'">
+                                                            <template x-if="server.status === 'connected'">
                                                                 <span class="text-pnlup"><x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/></span>
                                                             </template>
-                                                            <template x-if="results['{{ $s['id'] }}'] === 'fail'">
+                                                            <template x-if="server.status === 'not_connected'">
                                                                 <span class="text-danger"><x-feathericon-wifi-off class="w-3.5 h-3.5" stroke-width="1.75"/></span>
                                                             </template>
-                                                            <template x-if="results['{{ $s['id'] }}'] === 'pending'">
+                                                            <template x-if="server.status === 'idle'">
                                                                 <span class="w-[7px] h-[7px] rounded-chip bg-fg-faint"></span>
                                                             </template>
                                                         </span>
-                                                        <span class="font-mono text-[12px] font-semibold text-fg-1 tracking-[0.02em]">{{ $s['id'] }}</span>
-                                                        <span class="font-mono text-[10.5px] tracking-[0.08em] uppercase text-fg-mute">{{ $s['region'] }}</span>
-                                                        <span class="font-mono text-[11px] text-fg-faint tabular-nums ml-auto">{{ $s['ip'] }}</span>
-                                                        <span class="font-mono text-[10px] font-bold tracking-[0.09em] uppercase w-[78px] text-right"
-                                                              :style="`color: ${resultColor(results['{{ $s['id'] }}'])}`"
-                                                              x-text="results['{{ $s['id'] }}'] === 'ok' ? 'Connected' : results['{{ $s['id'] }}'] === 'fail' ? 'Blocked' : results['{{ $s['id'] }}'] === 'testing' ? 'Testing' : 'Queued'"></span>
+                                                        <span class="font-mono text-[12px] font-semibold text-fg-1 tracking-[0.02em]" x-text="server.hostname"></span>
+                                                        <span class="font-mono text-[11px] text-fg-faint tabular-nums ml-auto max-[700px]:ml-0 max-[700px]:order-4 max-[700px]:w-full max-[700px]:pl-[30px]" x-text="server.ip_address"></span>
+                                                        <span class="font-mono text-[10px] font-bold tracking-[0.09em] uppercase w-[88px] text-right max-[700px]:ml-auto"
+                                                              :style="`color: ${resultColor(server.status)}`"
+                                                              x-text="resultLabel(server.status)"></span>
                                                     </div>
-                                                @endforeach
+                                                </template>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <div x-show="connError" x-cloak class="border-b border-line-soft px-6 py-3 max-[640px]:px-4">
+                                        <div class="rounded-control border border-danger/40 bg-danger/10 px-4 py-3 text-[12px] text-danger" x-text="connError"></div>
                                     </div>
 
                                     {{-- actions --}}
@@ -462,22 +362,25 @@
                                                 <span class="inline-flex items-center gap-[7px]"><span class="w-3.5 h-3.5 rounded-full border-2 border-line-strong border-t-fg-1 animate-spin"></span>Testing…</span>
                                             </template>
                                             <template x-if="!testing()">
-                                                <span class="inline-flex items-center gap-[7px]"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/><span x-text="tested() ? 'Re-test connection' : 'Test connection'"></span></span>
+                                                <span class="inline-flex items-center gap-[7px]"><x-feathericon-refresh-cw class="w-[15px] h-[15px]" stroke-width="1.75"/><span x-text="testButtonLabel()"></span></span>
                                             </template>
                                         </button>
                                         <button type="button" @click="saveConn()" :disabled="!canSave()"
                                                 :style="connDone ? 'background: var(--pnl-up-fg); color: #04140d' : ''"
                                                 :class="!canSave() ? 'opacity-40 cursor-not-allowed hover:bg-accent' : ''"
                                                 class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px h-[40px] px-4 text-[12px] bg-accent text-accent-on hover:bg-accent-hover">
+                                            <template x-if="connSaving">
+                                                <span class="inline-flex items-center gap-[7px]"><span class="w-3.5 h-3.5 rounded-full border-2 border-[rgba(4,20,13,.35)] border-t-[#04140d] animate-spin"></span>Applying…</span>
+                                            </template>
                                             <template x-if="connDone">
                                                 <span class="inline-flex items-center gap-[7px]"><x-feathericon-check class="w-4 h-4" stroke-width="2"/>Saved</span>
                                             </template>
-                                            <template x-if="!connDone">
-                                                <span class="inline-flex items-center gap-[7px]"><x-feathericon-shield class="w-[15px] h-[15px]" stroke-width="1.75"/><span x-text="tradingDisabled() ? 'Save keys (trading stays off)' : 'Save & enable trading'"></span></span>
+                                            <template x-if="!connDone && !connSaving">
+                                                <span class="inline-flex items-center gap-[7px]"><x-feathericon-shield class="w-[15px] h-[15px]" stroke-width="1.75"/><span x-text="saveButtonLabel()"></span></span>
                                             </template>
                                         </button>
-                                        <span x-show="!tested() && !testing()" x-cloak class="font-mono text-[10.5px] text-fg-mute tracking-[0.04em] max-[560px]:text-center">Save unlocks after a successful test</span>
-                                        <span x-show="phase === 'idle'" x-cloak class="font-mono text-[10.5px] tracking-[0.04em] text-warn max-[560px]:text-center">Credentials changed — re-test required</span>
+                                        <span x-show="!tested() && !testing() && !credentialsDirty()" x-cloak class="font-mono text-[10.5px] text-fg-mute tracking-[0.04em] max-[560px]:text-center" x-text="rows.length === 0 ? 'No eligible servers configured' : (hasCredentials ? 'Uses the saved credentials without exposing them' : 'Enter API credentials to run the first test')"></span>
+                                        <span x-show="!tested() && !testing() && credentialsDirty()" x-cloak class="font-mono text-[10.5px] tracking-[0.04em] text-warn max-[560px]:text-center">Replacement credentials must be tested before saving</span>
                                     </div>
                                 </div>
 
