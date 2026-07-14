@@ -612,7 +612,12 @@
                                         $dotsHelp = "These little dots show which way the price is moving, checked over a few different time spans (short and long).\n\n- **Green** — price is going up.\n- **Red** — price is going down.\n\nAll green means the price is rising almost everywhere. All red means it is falling. A mix means there is no clear direction yet.";
                                         $pathHelp = "A simple 'how much trouble is this trade in?' meter.\n\n- **Near 0%** — good. The price is close to where the bot would happily take its profit.\n- **Near 100%** — the price has moved a long way the wrong direction, so the trade is deep in the red.\n\nLower is better. The higher it climbs, the further the price has drifted against the trade.";
                                         $limitHelp = "The bot keeps a few backup buy orders waiting at lower prices. If the price drops to one, the bot buys a little more to improve its average price.\n\nThis shows how close the price is to hitting the **next** backup buy:\n\n- **0%** — still far away.\n- **100%** — about to trigger the next buy.";
-                                        $pxHelp = "**PX** is the live price right now.\n\nThe number next to it is how much this trade is up or down at this exact moment — **green** if it is winning, **red** if it is losing.\n\nIt keeps changing with the market, and it is not final until the trade actually closes.";
+                                        $filledHelp = "The bot lines up a few backup buy orders below your entry. This shows how many have filled so far, out of the total.\n\n**0 / 4** means none of the 4 backups have triggered yet — the price has not dropped far enough to need them.";
+                                        $entryHelp = "The price this trade is measured against.\n\n- **Open** — the price the bot first bought at to start the trade.\n- **WAP** — shown once the bot has bought more lower down. It is the new **average** price across all those buys, which is a fairer break-even point.";
+                                        $tpHelp = "**Take-profit** — the price the bot is trying to sell at for a small win.\n\nIf the market reaches this price, the trade closes in the green. It shifts as the bot buys more (the average changes, so the target moves with it).";
+                                        $nextHelp = "The price of the bot's **next** backup buy.\n\nIf the market falls to here, the bot buys a little more to lower its average price — giving the trade a better chance to recover.";
+                                        $pxHelp = "**PX** is the live price of this market right now.\n\nIt keeps changing as the market moves. The bot watches it against your entry and targets to decide what to do next.";
+                                        $pnlHelp = "How much this trade is up or down right now, in dollars.\n\n- **Green** — the trade is winning.\n- **Red** — the trade is losing.\n\nIt is a live number that moves with the market, and it only becomes final when the trade actually closes.";
                                     @endphp
                                     <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]">
                                         <template x-for="dot in p.timeframe_dots" :key="dot.timeframe">
@@ -664,7 +669,7 @@
                                     </div>
                                     <div class="text-right">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-check class="w-[11px] h-[11px]" stroke-width="1.75"/>Filled
+                                            <x-feathericon-check class="w-[11px] h-[11px]" stroke-width="1.75"/>Filled<x-ui.help-dot title="Filled" :body="$filledHelp" tip="How many backup buys have filled, out of the total." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[14px] text-fg-1" x-text="`${p.filled_count} / ${p.total_limits}`"></div>
                                     </div>
@@ -676,19 +681,19 @@
                                 <div class="grid grid-cols-3 gap-2">
                                     <div>
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span><span x-text="p.entry_label ?? 'Open'"></span>
+                                            <span class="inline-block w-[6px] h-[6px] rounded-full bg-current"></span><span x-text="p.entry_label ?? 'Open'"></span><x-ui.help-dot title="Entry price" :body="$entryHelp" tip="The price the trade is measured against (Open, or the WAP average)." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="(p.entry_price ?? p.opening_price) ?? '—'"></div>
                                     </div>
                                     <div class="text-center">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-center gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="1.75"/>TP
+                                            <x-feathericon-arrow-up class="w-[11px] h-[11px]" stroke-width="1.75"/>TP<x-ui.help-dot title="Take-profit" :body="$tpHelp" tip="The price the bot is trying to sell at for a profit." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'" x-text="p.profit_price ?? p.first_profit_price ?? '—'"></div>
                                     </div>
                                     <div class="text-right">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/>Next
+                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/>Next<x-ui.help-dot title="Next buy" :body="$nextHelp" tip="The price of the bot's next backup buy." />
                                         </div>
                                         <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="p.next_limit_price ?? '—'"></div>
                                     </div>
@@ -696,10 +701,13 @@
 
                                 {{-- footer: live mark + unrealized PnL (real-data extra) --}}
                                 <div class="flex items-center justify-between pt-2.5 mt-[13px] border-t border-line-soft">
-                                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px]">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span><x-ui.help-dot title="Live price" :body="$pxHelp" tip="The live price, and how much the trade is up or down right now." /></span>
-                                    <span class="font-mono text-[12px] font-semibold tabular-nums"
-                                          :class="p.pnl === null || p.pnl === undefined ? 'text-fg-mute' : (Number(p.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown')"
-                                          x-text="p.pnl === null || p.pnl === undefined ? 'PNL —' : usdSigned(p.pnl)"></span>
+                                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px]">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span><x-ui.help-dot title="Live price" :body="$pxHelp" tip="The live price of this market right now." /></span>
+                                    <span class="inline-flex items-center gap-[5px]">
+                                        <span class="font-mono text-[12px] font-semibold tabular-nums"
+                                              :class="p.pnl === null || p.pnl === undefined ? 'text-fg-mute' : (Number(p.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown')"
+                                              x-text="p.pnl === null || p.pnl === undefined ? 'PNL —' : usdSigned(p.pnl)"></span>
+                                        <x-ui.help-dot title="Profit / loss" :body="$pnlHelp" tip="How much the trade is up or down right now." />
+                                    </span>
                                 </div>
                             </div>
                         </div>

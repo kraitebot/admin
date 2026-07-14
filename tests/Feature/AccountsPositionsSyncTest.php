@@ -228,3 +228,24 @@ it('flags a stop order as db_only once the algo snapshot exists and lacks it', f
         ->assertJsonPath('pairs.0.orders.1.status', 'db_only')
         ->assertJsonPath('pairs.0.status', 'drift');
 });
+
+it('treats a matched order re-placed after the snapshot as unverified, not drifting', function (): void {
+    [$userId, $accountId] = seedSyncedAccount();
+    seedExchangeSnapshots($accountId); // open-orders snapshot has k1 @ 61.665
+
+    // The exchange order snapshot is stale (30 min old). The DB entry rung was
+    // just re-priced AFTER it (exactly a WAP re-placing the take-profit), so
+    // its new price differs from the old picture — but that is a stale
+    // snapshot, not proof of drift. It must read UNVERIFIED, and the pair
+    // must fall back to SYNCED, not raise a false out-of-sync alarm.
+    DB::table('api_snapshots')->update(['updated_at' => now()->subMinutes(30)]);
+    DB::table('orders')
+        ->where('client_order_id', 'k1')
+        ->update(['price' => 55.0, 'updated_at' => now()]);
+
+    $this->actingAs(User::findOrFail($userId))
+        ->get("https://admin.kraite.test/accounts/positions/data?account_id={$accountId}")
+        ->assertSuccessful()
+        ->assertJsonPath('pairs.0.orders.0.status', 'unverified')
+        ->assertJsonPath('pairs.0.status', 'synced');
+});

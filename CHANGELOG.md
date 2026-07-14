@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.19.1] — 2026-07-14
+
+### Fixed
+- [FIXED] **False out-of-sync alarm on recently re-placed orders.** The positions comparator no longer flags an order as drifting when the exchange snapshot it compares against is older than the order's last change (e.g. a take-profit re-priced by a ladder-fill WAP). A stale exchange picture is not proof of drift — the order now reads "unverified" and the position stays "in sync." Verified against the live exchange: DB and Binance matched exactly; only the 2h-old snapshot disagreed.
+
+### Features
+- [NEW FEATURE] **Full [?] coverage on the dashboard position cards.** Added the remaining help popups — Filled, Entry, Take-profit, Next buy, and Profit/loss — so every metric on the tile is explained in plain language.
+
 ## [0.19.0] — 2026-07-14
 
 ### Features

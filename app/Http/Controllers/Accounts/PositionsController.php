@@ -465,7 +465,7 @@ class PositionsController extends Controller
         // position "out of sync"). Symbol configs (leverage/marginType)
         // have no snapshot source yet; the comparator already treats a
         // missing exchange-side value as "no signal", never drift.
-        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent, $snapshotOldestAt] =
+        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent, $snapshotOldestAt, $ordersSnapshotAt] =
             $this->exchangeStateFromSnapshots($account);
         $symbolConfigs = [];
 
@@ -547,6 +547,48 @@ class PositionsController extends Controller
             }, $pairs);
         }
 
+        // Stale-snapshot guard on MATCHED orders. An order re-placed AFTER the
+        // exchange order snapshot was captured — e.g. a take-profit re-priced by
+        // a WAP fill — shows as field-drift against the old picture, but the
+        // snapshot is simply too stale to prove it. When the DB order's last
+        // change is newer than the exchange-order snapshot, downgrade its drift
+        // to 'unverified' (same "only alarm on what we can prove" rule as the
+        // position-level guards above). Same-writer stamps, compared raw.
+        if ($snapshotsPresent && $ordersSnapshotAt !== null) {
+            $ordersSnapTs = strtotime($ordersSnapshotAt);
+            $pairs = array_map(function (array $p) use ($ordersSnapTs): array {
+                $changed = false;
+                $p['orders'] = array_map(function (array $o) use ($ordersSnapTs, &$changed): array {
+                    $upd = $o['db']['updated_at'] ?? null;
+                    if ($o['status'] === self::PAIR_STATUS_DRIFT
+                        && $upd !== null && $upd !== ''
+                        && strtotime($upd) > $ordersSnapTs + 60) {
+                        $changed = true;
+
+                        return array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]);
+                    }
+
+                    return $o;
+                }, $p['orders']);
+
+                if (! $changed) {
+                    return $p;
+                }
+
+                $p['order_counts'] = $this->countStatuses($p['orders']);
+                if ($p['status'] === self::PAIR_STATUS_DRIFT) {
+                    $provenOrderDrift = collect($p['orders'])->contains(
+                        fn (array $o): bool => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
+                    );
+                    if (! $provenOrderDrift && empty($p['position_drift_fields'])) {
+                        $p['status'] = self::PAIR_STATUS_SYNCED;
+                    }
+                }
+
+                return $p;
+            }, $pairs);
+        }
+
         // Sort open positions newest → oldest by DB opened_at. Pairs without a
         // DB side (exchange-only) lack an age; push them to the bottom.
         $pairs = collect($pairs)
@@ -575,7 +617,7 @@ class PositionsController extends Controller
      * positions (keyed map → list), open orders merged with algo orders
      * when that snapshot exists, and the age of the oldest snapshot used.
      *
-     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: int|null, 3: bool}
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: int|null, 3: bool, 4: string|null, 5: string|null}
      */
     private function exchangeStateFromSnapshots(Account $account): array
     {
@@ -598,6 +640,7 @@ class PositionsController extends Controller
 
         $age = null;
         $oldestAt = null;
+        $ordersSnapshotAt = null;
         if ($snapshotsPresent) {
             // Oldest of the snapshots used — raw, for same-frame comparison
             // against positions.opened_at (both written by the trading apps).
@@ -613,9 +656,17 @@ class PositionsController extends Controller
                     : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
                 ->value('age'), null, false);
             $age = $age !== null ? (int) $age : null;
+
+            // Freshness of the exchange ORDER picture specifically (open + algo
+            // orders) — used below to ignore field-drift on an order that was
+            // re-placed AFTER this snapshot was taken.
+            $ordersSnapshotAt = $account->apiSnapshots()
+                ->whereIn('canonical', ['account-open-orders', 'account-algo-orders'])
+                ->min('updated_at');
+            $ordersSnapshotAt = $ordersSnapshotAt !== null ? (string) $ordersSnapshotAt : null;
         }
 
-        return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent, $oldestAt];
+        return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent, $oldestAt, $ordersSnapshotAt];
     }
 
     private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
@@ -1060,6 +1111,10 @@ class PositionsController extends Controller
             'type' => strtoupper((string) $order->type),
             'price' => (string) $order->price,
             'quantity' => (string) $order->quantity,
+            // Raw last-modified stamp (same writer frame as the snapshots) — lets
+            // the comparator tell a genuinely-drifting order apart from one simply
+            // re-placed AFTER a now-stale exchange snapshot was taken.
+            'updated_at' => (string) $order->getRawOriginal('updated_at'),
         ];
     }
 
