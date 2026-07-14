@@ -21,7 +21,8 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body>
-<div class="grid grid-cols-[112px_1fr] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]"
+<div data-shell-grid
+     class="grid grid-cols-[112px_1fr] grid-rows-[minmax(0,1fr)_auto] h-screen w-screen bg-black text-ink-9 font-sans max-[640px]:grid-cols-[1fr]"
      data-density="compact">
 
     {{-- Raw x-persist divs, NOT the @persist directive — the directive
@@ -34,7 +35,8 @@
         <x-rail :active="$active"/>
     </div>
 
-    <div class="flex flex-col min-w-0 h-screen bg-[#07090b]"
+    <div data-shell-main
+         class="flex flex-col min-w-0 min-h-0 bg-[#07090b]"
          x-data="{ contentDark: localStorage.getItem('kraite-content-theme') !== 'light' }"
          x-init="$watch('contentDark', v => localStorage.setItem('kraite-content-theme', v ? 'dark' : 'light'))">
 
@@ -53,9 +55,10 @@
             </div>
         </div>
 
-        <div x-persist="footer" class="contents">
-            <x-footer/>
-        </div>
+    </div>
+
+    <div x-persist="footer" class="contents">
+        <x-footer/>
     </div>
 </div>
 

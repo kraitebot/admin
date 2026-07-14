@@ -77,7 +77,26 @@ Alpine.store('help', {
 
 const railNav = () => document.querySelector('nav[data-rail]');
 
+const railReveal = (el) => {
+    const viewport = el?.closest('[data-rail-scroll]');
+    if (!viewport) {
+        return;
+    }
+
+    const top = el.offsetTop;
+    const bottom = top + el.offsetHeight;
+    const visibleTop = viewport.scrollTop;
+    const visibleBottom = visibleTop + viewport.clientHeight;
+
+    if (top < visibleTop) {
+        viewport.scrollTop = top;
+    } else if (bottom > visibleBottom) {
+        viewport.scrollTop = bottom - viewport.clientHeight;
+    }
+};
+
 const railMeasure = (el) => {
+    railReveal(el);
     Alpine.store('rail').hl = el
         ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
         : null;

@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.20.2] — 2026-07-14
+
+### Fixed
+- [FIXED] **The bottom-left shell corner is now one clean surface.** The navigation rail and footer share one full-width border instead of drawing overlapping seams, and the active console item remains visible by scrolling the rail on shorter screens.
+
 ## [0.20.1] — 2026-07-14
 
 ### Improved

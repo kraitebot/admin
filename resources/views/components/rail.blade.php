@@ -38,42 +38,41 @@
      below instead — the old fixed bottom bar couldn't hold ten labeled
      items in the 421-640px band. --}}
 <nav data-rail x-data
-     class="relative z-30 h-full flex flex-col items-stretch bg-[#07090b] pt-3 pb-2 max-[640px]:hidden">
+     class="relative z-30 h-full min-h-0 flex flex-col items-stretch bg-[#07090b] pt-3 pb-2 max-[640px]:hidden">
     <div class="flex items-center justify-center h-11 mb-4">
         <img src="{{ asset('svg/snake-green.svg') }}" alt="Kraite" class="block w-[30px] h-[30px]"/>
     </div>
-    <div class="relative flex flex-col gap-0.5 flex-1 justify-center px-2">
-        <span aria-hidden="true"
-              x-show="$store.rail.hl"
-              x-cloak
-              :style="$store.rail.hl ? `left:${$store.rail.hl.left}px;top:${$store.rail.hl.top}px;width:${$store.rail.hl.width}px;height:${$store.rail.hl.height}px` : ''"
-              {{-- accent-driven: trader green, console violet — follows the surface --accent --}}
-              class="absolute z-0 bg-accent rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
-                     before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-accent before:rounded-chip"></span>
+    <div data-rail-scroll class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
+        <div class="relative min-h-full flex flex-col gap-0.5 justify-center px-2 py-2">
+            <span aria-hidden="true"
+                  x-show="$store.rail.hl"
+                  x-cloak
+                  :style="$store.rail.hl ? `left:${$store.rail.hl.left}px;top:${$store.rail.hl.top}px;width:${$store.rail.hl.width}px;height:${$store.rail.hl.height}px` : ''"
+                  {{-- accent-driven: trader green, console violet — follows the surface --accent --}}
+                  class="absolute z-0 bg-accent rounded-control pointer-events-none transition-all duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)]
+                         before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-accent before:rounded-chip"></span>
 
-        @foreach($items as $item)
-            <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
-               data-id="{{ $item['id'] }}"
-               wire:navigate.hover
-               wire:current.ignore
-               @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
-               {{-- color transition matches the pill slide (420ms, same curve) so the
-                    arriving label darkens in sync with the green sliding beneath it.
-                    `hover:text-fg-on-accent` on the active item is load-bearing: the
-                    global `a:hover { color: var(--accent) }` (tokens.css) outranks a
-                    plain `text-fg-on-accent` on specificity, so without it the active
-                    link turns accent-on-accent (invisible) the moment the pointer
-                    rests on it after a click. The hover utility ties that selector and
-                    wins on source order (utilities layer is emitted last). --}}
-               :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
-               class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
-                <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
-                <span class="whitespace-nowrap">{{ $item['label'] }}</span>
-            </a>
-        @endforeach
-    </div>
-    <div class="flex flex-col items-center gap-1.5 pt-2 mx-2 border-t border-ink-2">
-        <div class="w-2 h-2 rounded-chip bg-green-500" title="Engine online"></div>
+            @foreach($items as $item)
+                <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
+                   data-id="{{ $item['id'] }}"
+                   wire:navigate.hover
+                   wire:current.ignore
+                   @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
+                   {{-- color transition matches the pill slide (420ms, same curve) so the
+                        arriving label darkens in sync with the green sliding beneath it.
+                        `hover:text-fg-on-accent` on the active item is load-bearing: the
+                        global `a:hover { color: var(--accent) }` (tokens.css) outranks a
+                        plain `text-fg-on-accent` on specificity, so without it the active
+                        link turns accent-on-accent (invisible) the moment the pointer
+                        rests on it after a click. The hover utility ties that selector and
+                        wins on source order (utilities layer is emitted last). --}}
+                   :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
+                   class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
+                    <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
+                    <span class="whitespace-nowrap">{{ $item['label'] }}</span>
+                </a>
+            @endforeach
+        </div>
     </div>
 </nav>
 

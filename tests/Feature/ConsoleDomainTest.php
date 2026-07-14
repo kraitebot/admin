@@ -31,6 +31,38 @@ it('lets admins reach the sysadmin console on the admin host', function (): void
         ->assertSuccessful();
 });
 
+it('uses one full-width footer for the rail status and footer content', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'shell-layout-'.uniqid().'@example.test',
+        'is_admin' => true,
+    ]);
+
+    $html = (string) $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/dashboard')
+        ->assertSuccessful()
+        ->getContent();
+
+    $document = new DOMDocument;
+    $document->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+    $xpath = new DOMXPath($document);
+
+    $shell = $xpath->query('//*[@data-shell-grid]')->item(0);
+    $footer = $xpath->query('//*[@data-shell-footer]')->item(0);
+    $status = $xpath->query('//*[@data-shell-footer]/*[@data-rail-status]')->item(0);
+    $railScroll = $xpath->query('//*[@data-rail]/*[@data-rail-scroll]')->item(0);
+
+    expect($shell)->not->toBeNull()
+        ->and($shell->getAttribute('class'))->toContain('grid-rows-[minmax(0,1fr)_auto]')
+        ->and($footer)->not->toBeNull()
+        ->and($footer->getAttribute('class'))->toContain('col-span-full')
+        ->and($footer->getAttribute('class'))->toContain('border-t')
+        ->and($status)->not->toBeNull()
+        ->and($status->getAttribute('class'))->not->toContain('border-t')
+        ->and($railScroll)->not->toBeNull()
+        ->and($railScroll->getAttribute('class'))->toContain('overflow-y-auto')
+        ->and($xpath->query('//*[@data-rail]//*[@data-rail-status]')->length)->toBe(0);
+});
+
 it('sends sysadmin logins to the system dashboard', function (): void {
     $admin = User::factory()->create([
         'is_admin' => true,
