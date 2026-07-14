@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.19.2] — 2026-07-14
+
+### Fixed
+- [FIXED] **Runaway memory in long-open tabs.** Every page with a live auto-refresh — the trader positions and dashboard, plus the system console's engine / infra / positions / dashboard — now pauses its polling and view-rebuild while the browser tab is hidden. A backgrounded tab was rebuilding its whole live view every 10–15s for hours, growing memory until the browser force-reloaded the page ("This webpage was reloaded because it was using significant memory"). Polling resumes on the next tick once the tab is visible again. (Billing's 1s trial counter is display-only and left untouched.)
+
 ## [0.19.1] — 2026-07-14
 
 ### Fixed

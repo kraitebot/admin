@@ -18,7 +18,7 @@
             overrideError: '',
 
             init() {
-                this._timer = setInterval(() => this.refresh(), 10000);
+                this._timer = setInterval(() => { if (! document.hidden) this.refresh(); }, 10000);
             },
             destroy() {
                 if (this._timer) { clearInterval(this._timer); this._timer = null; }

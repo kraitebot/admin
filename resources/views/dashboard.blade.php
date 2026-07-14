@@ -55,7 +55,9 @@
             // ---- data ----
             spinning: false,
             async refresh() {
-                if (this.loading || !this.accountId) return;
+                // Skip while the tab is hidden — no polling/re-render churn in a
+                // backgrounded dashboard (same guard as the positions page).
+                if (this.loading || !this.accountId || document.hidden) return;
                 this.loading = true;
                 this.spinning = true;
                 const started = Date.now();

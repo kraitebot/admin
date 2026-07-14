@@ -175,7 +175,12 @@
             },
             async refresh() {
                 const el = this.$refs.content;
-                if (! el || this.spinning) {
+                // Skip while the tab is hidden. This refresh re-fetches and
+                // rebuilds the whole view (DOMParser + innerHTML swap + Alpine
+                // re-init); doing that every 10s in a backgrounded tab churns
+                // memory for hours — what tripped Safari's "significant memory"
+                // reload. The next visible tick picks the data back up.
+                if (! el || this.spinning || document.hidden) {
                     return;
                 }
                 const started = Date.now();
@@ -199,7 +204,9 @@
             // Live DB-vs-exchange reconcile across every account on the page.
             async reconcile() {
                 const store = window.Alpine.store('reconcile');
-                if (store.checking) {
+                // Same hidden-tab guard as refresh() — no exchange re-check work
+                // while the page isn't being looked at.
+                if (store.checking || document.hidden) {
                     return;
                 }
                 store.checking = true;

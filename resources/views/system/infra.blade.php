@@ -19,7 +19,7 @@
 
             init() {
                 this.refresh();
-                this._timer = setInterval(() => this.refresh(), 15000);
+                this._timer = setInterval(() => { if (! document.hidden) this.refresh(); }, 15000);
             },
             destroy() {
                 if (this._timer) { clearInterval(this._timer); this._timer = null; }
