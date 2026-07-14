@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.19.3] — 2026-07-14
+
+### Changed
+- [CHANGED] **Expanded drift comparison stays open when the order resyncs.** Previously, expanding an out-of-sync order's exchange comparison and then having the 5-min re-check resolve it would snap the row shut mid-look. Now the row is tied to your toggle (not the live drift state): it shows the amber comparison while drifting, swaps to a green "back in sync — now matches the exchange" panel once resolved, and you close it yourself. An order that resolves before you ever opened it is left untouched.
+
 ## [0.19.2] — 2026-07-14
 
 ### Fixed

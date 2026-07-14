@@ -166,16 +166,18 @@
                             {{-- DB row. Live reconcile (5-min) marks the specific drifting
                                  order via the global store; the row becomes clickable and
                                  expands the EXCHANGE ghost row below it. --}}
-                            <tr @if($oid) @click="{{ $drift }} && (openSync[{{ $oid }}] = !openSync[{{ $oid }}])"
-                                :class="{{ $drift }} ? 'cursor-pointer transition-colors duration-fast ease-out' : ''"
-                                :style="{{ $drift }} ? `background: color-mix(in srgb, var(--warn) ${openSync[{{ $oid }}] ? 11 : 6}%, transparent)` : ''" @endif>
+                            <tr @if($oid) @click="({{ $drift }} || openSync[{{ $oid }}]) && (openSync[{{ $oid }}] = !openSync[{{ $oid }}])"
+                                :class="({{ $drift }} || openSync[{{ $oid }}]) ? 'cursor-pointer transition-colors duration-fast ease-out' : ''"
+                                :style="{{ $drift }} ? `background: color-mix(in srgb, var(--warn) ${openSync[{{ $oid }}] ? 11 : 6}%, transparent)` : (openSync[{{ $oid }}] ? 'background: color-mix(in srgb, var(--pnl-up-fg) 7%, transparent)' : '')" @endif>
                                 <td class="{{ $oc }} px-1.5">
                                     @if($oid)
-                                        <template x-if="{{ $drift }}">
-                                            <button type="button" @click.stop="openSync[{{ $oid }}] = !openSync[{{ $oid }}]" title="Out of sync with the exchange — expand to compare"
+                                        <template x-if="{{ $drift }} || openSync[{{ $oid }}]">
+                                            <button type="button" @click.stop="openSync[{{ $oid }}] = !openSync[{{ $oid }}]"
+                                                    :title="{{ $drift }} ? 'Out of sync with the exchange — expand to compare' : 'Back in sync — click to collapse'"
                                                     class="appearance-none cursor-pointer bg-transparent border-0 inline-flex items-center gap-0.5 p-0.5 rounded-[6px] transition-colors duration-fast">
-                                                <span class="text-warn"><x-feathericon-alert-triangle class="w-3.5 h-3.5" stroke-width="1.75"/></span>
-                                                <span class="text-warn transition-transform duration-[200ms]" :class="openSync[{{ $oid }}] ? 'rotate-180' : ''"><x-feathericon-chevron-down class="w-[11px] h-[11px]" stroke-width="2"/></span>
+                                                <template x-if="{{ $drift }}"><span class="text-warn"><x-feathericon-alert-triangle class="w-3.5 h-3.5" stroke-width="1.75"/></span></template>
+                                                <template x-if="!({{ $drift }})"><span class="text-pnlup"><x-feathericon-check class="w-3.5 h-3.5" stroke-width="2"/></span></template>
+                                                <span class="transition-transform duration-[200ms]" :class="({{ $drift }} ? 'text-warn' : 'text-pnlup') + (openSync[{{ $oid }}] ? ' rotate-180' : '')"><x-feathericon-chevron-down class="w-[11px] h-[11px]" stroke-width="2"/></span>
                                             </button>
                                         </template>
                                     @endif
@@ -197,9 +199,14 @@
                             @if($oid)
                                 {{-- EXCHANGE ghost row — slides open when the order drifts and
                                      the user expands it. Values come live from the store. --}}
-                                <tr :aria-hidden="!(openSync[{{ $oid }}] && {{ $drift }})">
+                                <tr :aria-hidden="!openSync[{{ $oid }}]">
                                     <td colspan="8" class="p-0 border-0">
-                                        <div x-show="openSync[{{ $oid }}] && {{ $drift }}" x-collapse.duration.360ms x-cloak>
+                                        {{-- Stays open on the user's toggle (openSync) — NOT tied to live
+                                             drift — so a re-check that resyncs the order no longer yanks it
+                                             shut. It shows the amber comparison while drifting, then a green
+                                             "back in sync" panel once resolved, and the user closes it. --}}
+                                        <div x-show="openSync[{{ $oid }}]" x-collapse.duration.360ms x-cloak>
+                                            <template x-if="{{ $drift }}">
                                             <div style="background: color-mix(in srgb, var(--warn) 6%, transparent);">
                                                 <table class="w-full border-collapse table-fixed">
                                                     <colgroup>
@@ -243,6 +250,23 @@
                                                     </button>
                                                 </div>
                                             </div>
+                                            </template>
+                                            {{-- Kept open, now resolved. Shows it came back in sync; user closes it. --}}
+                                            <template x-if="!({{ $drift }})">
+                                            <div style="background: color-mix(in srgb, var(--pnl-up-fg) 7%, transparent);">
+                                                <div class="px-3 py-2.5 border-b border-line-soft flex items-center gap-3 flex-wrap">
+                                                    <span class="inline-flex items-center gap-2 text-[11.5px] text-fg-2 leading-snug">
+                                                        <span class="flex-shrink-0 text-pnlup"><x-feathericon-check class="w-[14px] h-[14px]" stroke-width="2"/></span>
+                                                        <span>Back in sync with <span class="font-semibold text-fg-1 whitespace-nowrap">{{ $d['exch'] }}</span> — this order now matches the exchange.</span>
+                                                    </span>
+                                                    <span class="flex-1"></span>
+                                                    <button type="button" @click.stop="openSync[{{ $oid }}] = false"
+                                                            class="appearance-none cursor-pointer inline-flex items-center gap-1.5 whitespace-nowrap rounded-control border border-line bg-surface-3 text-fg-1 font-sans text-[11.5px] font-semibold py-[6px] px-3 transition-colors duration-fast ease-out hover:border-line-strong">
+                                                        <x-feathericon-x class="w-[13px] h-[13px]" stroke-width="2"/>Close
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            </template>
                                         </div>
                                     </td>
                                 </tr>
