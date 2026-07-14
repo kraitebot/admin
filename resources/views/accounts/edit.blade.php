@@ -186,34 +186,34 @@
                                     </x-form.group>
 
                                     <x-form.group title="Trading" icon="activity" hint="per position">
-                                        <x-form.field label="Profit target" for="{{ $key }}-pt">
+                                        <x-form.field label="Profit target" for="{{ $key }}-pt" help="Closes a position after the price moves this percentage in your favor.">
                                             <x-form.select model="cfg.pt" :options="$opts['pt']"/>
                                         </x-form.field>
-                                        <x-form.field label="Stop-loss" for="{{ $key }}-sl">
+                                        <x-form.field label="Stop-loss" for="{{ $key }}-sl" help="Closes a position after the price moves this percentage against you, limiting the loss.">
                                             <x-form.select model="cfg.sl" :options="$opts['sl']"/>
                                         </x-form.field>
                                     </x-form.group>
 
                                     <x-form.group title="Position slots" icon="layers" hint="max concurrent">
-                                        <x-form.field label="Long slots" dir="long">
+                                        <x-form.field label="Long slots" dir="long" help="Maximum long positions that can be open at the same time.">
                                             <x-form.select model="cfg.sL" :options="$opts['slots']" dir="long"/>
                                         </x-form.field>
-                                        <x-form.field label="Short slots" dir="short">
+                                        <x-form.field label="Short slots" dir="short" help="Maximum short positions that can be open at the same time.">
                                             <x-form.select model="cfg.sS" :options="$opts['slots']" dir="short"/>
                                         </x-form.field>
                                     </x-form.group>
 
-                                    <x-form.group title="Leverage &amp; margin" icon="database">
-                                        <x-form.field label="Leverage — long" dir="long">
+                                    <x-form.group title="Leverage & margin" icon="database">
+                                        <x-form.field label="Leverage — long" dir="long" help="Multiplies the size of each long position. A higher number means larger gains and losses.">
                                             <x-form.select model="cfg.lL" :options="$opts['lev']" dir="long"/>
                                         </x-form.field>
-                                        <x-form.field label="Leverage — short" dir="short">
+                                        <x-form.field label="Leverage — short" dir="short" help="Multiplies the size of each short position. A higher number means larger gains and losses.">
                                             <x-form.select model="cfg.lS" :options="$opts['lev']" dir="short"/>
                                         </x-form.field>
-                                        <x-form.field label="Margin % — long" dir="long">
+                                        <x-form.field label="Margin % — long" dir="long" help="Uses up to this percentage of the trading balance as margin for each new long position.">
                                             <x-form.select model="cfg.mL" :options="$opts['margin']" dir="long"/>
                                         </x-form.field>
-                                        <x-form.field label="Margin % — short" dir="short">
+                                        <x-form.field label="Margin % — short" dir="short" help="Uses up to this percentage of the trading balance as margin for each new short position.">
                                             <x-form.select model="cfg.mS" :options="$opts['margin']" dir="short"/>
                                         </x-form.field>
                                     </x-form.group>

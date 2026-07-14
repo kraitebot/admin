@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.20.1] — 2026-07-14
+
+### Improved
+- [IMPROVED] **Account trading settings now explain themselves.** Profit target, stop-loss, position slots, leverage, and margin each show a short plain-language explanation below the input. The leverage and margin heading also renders its ampersand correctly.
+
 ## [0.20.0] — 2026-07-14
 
 ### Features
