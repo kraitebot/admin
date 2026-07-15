@@ -8,11 +8,11 @@ use App\Http\Controllers\Controller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\TopUpCoin;
+use Kraite\Core\Support\Billing\NowPaymentsClient;
 use Throwable;
 
 /**
@@ -125,28 +125,15 @@ final class BillingCoinsController extends Controller
             "nowpayments.min_amount.{$canonical}",
             now()->addMinutes(5),
             function () use ($canonical) {
-                $apiKey = (string) config('services.nowpayments.api_key', '');
-                $baseUrl = (string) config('services.nowpayments.base_url', '');
-
-                if ($apiKey === '' || $baseUrl === '') {
-                    return null;
-                }
-
                 try {
-                    $response = Http::withHeaders(['x-api-key' => $apiKey])
-                        ->timeout(8)
-                        ->get(rtrim($baseUrl, '/').'/min-amount', [
-                            'currency_from' => $canonical,
-                            'currency_to' => 'usdttrc20',
-                        ])
-                        ->json();
+                    $minimum = NowPaymentsClient::fromConfig()->minimumAmount($canonical);
 
-                    if (! is_array($response) || ! isset($response['min_amount'])) {
+                    if ($minimum <= 0) {
                         return null;
                     }
 
                     return [
-                        'min_amount' => (float) $response['min_amount'],
+                        'min_amount' => $minimum,
                         'unit' => $canonical,
                     ];
                 } catch (Throwable) {

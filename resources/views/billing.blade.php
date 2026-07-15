@@ -1,16 +1,12 @@
 @php
-    // Billing — REAL DATA. Display is fed from BillingController::index
-    // (subscriptions, wallet, transactions, accounts, top-up coins) and the
-    // derived state machine below. NOTE: the money-mutating actions (plan
-    // switch, pause/resume, top-up → NOWPayments) are still the design's
-    // local Alpine flow — wiring them to the live POST endpoints is the next
-    // pass (real wallet debits + live gateway redirect; needs sign-off).
+    // Billing display and actions are both backed by BillingController.
 
     // ---- plans (real subscription tiers) ----
     $plans = $subscriptions->map(fn ($s) => [
         'id' => $s->canonical ?? (string) $s->id,
         'name' => $s->name,
         'price' => (float) $s->monthly_rate_usdt,
+        'trial_days' => (int) $s->trial_days,
         'popular' => $s->max_accounts === null,
         'blurb' => $s->description ?? '',
         // Account-count feature is real (max_accounts); the rest are
@@ -52,18 +48,37 @@
     // ---- derived state machine + Alpine config ----
     $currentPlan = $tier ? ($tier->canonical ?? (string) $tier->id) : null;
     $view = ! $tier ? 'no-plan'
-        : ($user->trial_started_at === null ? 'trial-ready'
-        : ($trialActive ? 'trial'
-        : ($isPaused ? 'paused'
-        : ($inClosingMode ? 'read-only' : 'active'))));
+        : ($isComplimentaryPlan
+            ? ($isPaused ? 'paused' : 'complimentary')
+            : ($user->trial_started_at === null ? 'trial-ready'
+            : ($trialActive ? 'trial'
+            : ($isPaused ? 'paused'
+            : ($inClosingMode ? 'read-only' : 'active')))));
+
+    $stateSubscriptions = $subscriptions->values();
+    if ($tier && ! $stateSubscriptions->contains('id', $tier->id)) {
+        $stateSubscriptions = $stateSubscriptions->push($tier);
+    }
+
+    $trialSeconds = $trialEndsAt?->isFuture()
+        ? (int) now()->diffInSeconds($trialEndsAt)
+        : 0;
 
     $billingCfg = [
         'view' => $view,
         'plan' => $currentPlan,
         'wallet' => (float) $user->wallet_balance_usdt,
-        'rates' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => (float) $s->monthly_rate_usdt])->all(),
-        'names' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->name])->all(),
-        'renewalLabel' => $renewsAt ? $renewsAt->format('M j, Y') : '—',
+        'rates' => $stateSubscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => (float) $s->monthly_rate_usdt])->all(),
+        'names' => $stateSubscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->name])->all(),
+        'planIds' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->id])->all(),
+        'maxAccounts' => $subscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->max_accounts])->all(),
+        'trialDays' => $stateSubscriptions->mapWithKeys(fn ($s) => [($s->canonical ?? (string) $s->id) => $s->trial_days])->all(),
+        'accountIds' => collect($pickerAccounts)->pluck('id')->all(),
+        'activeAccountId' => $user->active_account_id,
+        'minimumTopUp' => $topUpMinimum,
+        'trialSecs' => $trialSeconds,
+        'pausedSince' => $user->subscription_paused_at?->format('M j, Y'),
+        'renewalLabel' => $renewsAt?->format('M j, Y') ?? '—',
         'daysLeft' => $renewsAt ? max(0, (int) ceil(now()->floatDiffInDays($renewsAt, false))) : 0,
         'ledger' => $ledger,
     ];
@@ -72,8 +87,8 @@
     $terms = [
         ['icon' => 'refresh-cw', 'title' => 'Monthly prepaid model',
          'body' => 'Your plan rate is debited from the prepaid USDT wallet once per month on the renewal date. There are no cards and no recurring card charges — you fund the wallet ahead of time and the engine draws from it.'],
-        ['icon' => 'clock', 'title' => '7-day free trial',
-         'body' => 'Every plan starts with a 7-day free trial. The wallet is never debited during the trial and switching plans mid-trial is free and instant. The first renewal — and first debit — lands when the trial ends.'],
+        ['icon' => 'clock', 'title' => 'Free trial',
+         'body' => 'Each plan shows its trial duration. The wallet is never debited during the trial and switching plans mid-trial is free and instant. The first renewal — and first debit — lands when the trial ends.'],
         ['icon' => 'database', 'title' => 'Gateway & network fees',
          'body' => 'Top-ups are processed by NOWPayments, which takes roughly 0.5% of the transacted amount. You also pay the network gas for the chain you send on. Only the amount that settles on-chain credits your wallet.'],
         ['icon' => 'activity', 'title' => 'Conversion spread',
@@ -89,28 +104,20 @@
     $btnPrimary = 'appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px text-[12px] bg-accent text-accent-on hover:bg-accent-hover';
     $btnSecondary = 'appearance-none font-sans font-semibold rounded-control border cursor-pointer inline-flex items-center gap-[7px] whitespace-nowrap transition-colors duration-fast ease-out active:translate-y-px text-[12px] bg-transparent text-fg-1 border-line-strong hover:bg-hover';
 
-    // ledger badge metadata — keyed by the real WalletTransaction type
-    // constants. A fallback covers any unmapped type.
-    $ledgerTypes = [
-        'debit_subscription'    => ['label' => 'Subscription',   'icon' => 'refresh-cw',      'credit' => false],
-        'credit_topup'          => ['label' => 'Top-up',         'icon' => 'arrow-down-left', 'credit' => true],
-        'credit_topup_bonus'    => ['label' => 'Bonus',          'icon' => 'gift',            'credit' => true],
-        'credit_prorate_refund' => ['label' => 'Prorate refund', 'icon' => 'refresh-cw',      'credit' => true],
-        'credit_admin'          => ['label' => 'Admin credit',   'icon' => 'shield',          'credit' => true],
-        'debit_admin'           => ['label' => 'Admin debit',    'icon' => 'shield',          'credit' => false],
-    ];
 @endphp
 
 <x-app-layout active="billing" :title="'Kraite — Billing'">
 
     <script>
         // Billing page state machine — prepaid USDT wallet, monthly debits.
-        // Views: no-plan · trial-ready · trial · paused · read-only · active.
-        // Mock opens on 'active'; the other views are wired and reachable via
-        // the interactive actions (pause/resume, plan flows) or backend later.
+        // Views: no-plan · trial-ready · trial · complimentary · paused · read-only · active.
         window.billingPage = (cfg) => {
             const RATES = cfg.rates || {};
             const NAMES = cfg.names || {};
+            const PLAN_IDS = cfg.planIds || {};
+            const MAX_ACCOUNTS = cfg.maxAccounts || {};
+            const TRIAL_DAYS = cfg.trialDays || {};
+            const ACCOUNT_IDS = cfg.accountIds || [];
             const CYCLE_DAYS = 30;
             const BASE_LEDGER = cfg.ledger || [];
 
@@ -121,14 +128,15 @@
                 view: cfg.view,
                 plan: cfg.plan,
                 wallet: Number(cfg.wallet) || 0,
-                pausedSince: null,
+                pausedSince: cfg.pausedSince,
                 pausing: false,
                 switchTo: null,
-                keepAcct: 0,
+                keepAcct: cfg.activeAccountId || null,
                 credited: null,
-                trialSecs: 0,
+                trialSecs: Number(cfg.trialSecs) || 0,
                 invoice: null,
                 amount: String(defaultAmount),
+                busy: false,
                 renewalLabel: cfg.renewalLabel,
                 daysLeft: cfg.daysLeft,
                 _timers: [],
@@ -162,6 +170,8 @@
                 rate() { return this.plan ? RATES[this.plan] : 0; },
                 rateOf(id) { return RATES[id]; },
                 nameOf(id) { return NAMES[id]; },
+                trialDays() { return this.plan ? Number(TRIAL_DAYS[this.plan]) || 0 : 0; },
+                planDatabaseId() { return this.switchTo ? PLAN_IDS[this.switchTo] : ''; },
                 covered() { return this.wallet >= this.rate(); },
                 shortfall() { return Math.max(0, this.rate() - this.wallet); },
                 surplus() { return Math.max(0, this.wallet - this.rate()); },
@@ -176,11 +186,12 @@
                 },
                 prorationDebit() { return this.switchTo ? RATES[this.switchTo] : 0; },
                 walletAfter() { return +(this.wallet + this.prorationRefund() - this.prorationDebit()).toFixed(4); },
-                switchShort() { return !this.isTrialView() && this.walletAfter() < 0; },
-                downgradeAccts() { return !!(this.switchTo && this.plan === 'unlimited' && this.switchTo !== 'unlimited'); },
+                switchShort() { return this.view !== 'no-plan' && !this.isTrialView() && this.walletAfter() < 0; },
+                requiresAccountSelection() { return !!(this.switchTo && Number(MAX_ACCOUNTS[this.switchTo]) === 1 && ACCOUNT_IDS.length > 1); },
+                downgradeAccts() { return this.requiresAccountSelection(); },
 
                 // top-up
-                effMin() { return this.covered() ? 20 : this.shortfall(); },
+                effMin() { return Number(cfg.minimumTopUp) || 0; },
                 amtNum() { return parseFloat(this.amount) || 0; },
                 belowMin() { return this.amtNum() < this.effMin() - 1e-9; },
                 presets() {
@@ -200,23 +211,32 @@
                         return { ...m, balance };
                     });
                 },
-                emptyLedger() { return this.view === 'no-plan' || this.view === 'trial-ready'; },
+                emptyLedger() { return BASE_LEDGER.length === 0; },
 
                 // ---- actions ----
-                startSwitch(id) { if (id !== this.plan) { this.switchTo = id; this.keepAcct = 0; } },
+                startSwitch(id) {
+                    if (id === this.plan) return;
+                    this.switchTo = id;
+                    if (Number(MAX_ACCOUNTS[id]) === 1) {
+                        this.keepAcct = cfg.activeAccountId || ACCOUNT_IDS[0] || null;
+                    }
+                },
                 cancelSwitch() { this.switchTo = null; },
                 confirmSwitch() {
-                    if (!this.isTrialView() && this.view !== 'no-plan') this.wallet = this.walletAfter();
-                    this.plan = this.switchTo;
-                    this.switchTo = null;
-                    if (this.view === 'no-plan') this.view = 'trial-ready';
+                    if (!this.switchTo || (this.requiresAccountSelection() && !this.keepAcct)) return;
+                    this.submitForm('subscriptionForm');
                 },
-                choosePlan(id) { this.plan = id; this.view = 'trial-ready'; },
-                startTrial() { this.trialSecs = 167.5 * 3600; this.view = 'trial'; },
-                pauseConfirm() { this.pausing = false; this.pausedSince = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); this.view = 'paused'; },
-                resume() { this.view = 'active'; this.pausedSince = null; },
+                choosePlan(id) { this.startSwitch(id); },
+                startTrial() { this.submitForm('startTrialForm'); },
+                pauseConfirm() { this.pausing = false; this.submitForm('pauseForm'); },
+                resume() { this.submitForm('resumeForm'); },
                 topUpGo() { if (!this.belowMin() && this.amtNum() > 0) this.invoice = { amount: this.amtNum() }; },
-                continueGateway() { this.invoice = null; },   // real flow redirects to NOWPayments
+                continueGateway() { this.submitForm('topUpForm'); },
+                submitForm(ref) {
+                    if (this.busy) return;
+                    this.busy = true;
+                    this.$nextTick(() => this.$refs[ref]?.requestSubmit());
+                },
                 focusTopUp() {
                     this.switchTo = null;
                     this.$nextTick(() => this.$refs.topup?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -229,6 +249,25 @@
     </script>
 
     <div x-data="billingPage(@js($billingCfg))">
+
+        <form x-ref="subscriptionForm" method="POST" action="{{ route('billing.subscription') }}" class="hidden" aria-hidden="true">
+            @csrf
+            <input type="hidden" name="subscription_id" :value="planDatabaseId()">
+            <input type="hidden" name="active_account_id" :value="keepAcct || ''">
+        </form>
+        <form x-ref="startTrialForm" method="POST" action="{{ route('billing.start-trading') }}" class="hidden" aria-hidden="true">
+            @csrf
+        </form>
+        <form x-ref="pauseForm" method="POST" action="{{ route('billing.pause') }}" class="hidden" aria-hidden="true">
+            @csrf
+        </form>
+        <form x-ref="resumeForm" method="POST" action="{{ route('billing.resume') }}" class="hidden" aria-hidden="true">
+            @csrf
+        </form>
+        <form x-ref="topUpForm" method="POST" action="{{ route('billing.topup') }}" class="hidden" aria-hidden="true">
+            @csrf
+            <input type="hidden" name="amount_usdt" :value="amount">
+        </form>
 
         {{-- ===================== PAGE HEADER ===================== --}}
         <div class="flex items-end justify-between gap-5 pb-5 mb-6 border-b border-line max-[820px]:flex-col max-[820px]:items-start">
@@ -246,6 +285,16 @@
             </div>
         </div>
 
+        @if(session('status'))
+            <div class="mb-5 rounded-control border border-accent/40 bg-accent/10 px-4 py-3 text-[13px] text-fg-1">{{ session('status') }}</div>
+        @endif
+        @if(session('error'))
+            <div class="mb-5 rounded-control border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-danger">{{ session('error') }}</div>
+        @endif
+        @if($errors->any())
+            <div class="mb-5 rounded-control border border-danger/40 bg-danger/10 px-4 py-3 text-[13px] text-danger">{{ $errors->first() }}</div>
+        @endif
+
         {{-- ===================== STATE BANNERS ===================== --}}
         <template x-if="view === 'no-plan'">
             <div class="rounded-surface border px-5 py-4 mb-6 flex items-center gap-4 max-[760px]:flex-col max-[760px]:items-start"
@@ -253,7 +302,7 @@
                 <span class="flex-shrink-0 flex text-accent"><x-feathericon-flag class="w-[22px] h-[22px]" stroke-width="1.75"/></span>
                 <div class="flex-1 min-w-0">
                     <div class="font-sans font-semibold text-[14.5px] text-fg-1 leading-tight">Welcome to Kraite — pick a plan to get started</div>
-                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">Choose a plan below to begin your 7-day free trial. You won't be charged until the trial ends — and you can fund your wallet any time.</div>
+                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">Choose a plan below to begin its free trial. You won't be charged until the trial ends — and you can fund your wallet any time.</div>
                 </div>
                 <div class="flex-shrink-0 max-[760px]:w-full">
                     <button type="button" @click="focusPlans()" class="{{ $btnPrimary }} h-[38px] px-4">See plans<x-feathericon-arrow-down class="w-[15px] h-[15px]" stroke-width="1.75"/></button>
@@ -265,8 +314,8 @@
                  style="border-color: color-mix(in srgb, var(--accent) 42%, transparent); background: color-mix(in srgb, var(--accent) 9%, transparent);">
                 <span class="flex-shrink-0 flex text-accent"><x-feathericon-zap class="w-[22px] h-[22px]" stroke-width="1.75"/></span>
                 <div class="flex-1 min-w-0">
-                    <div class="font-sans font-semibold text-[14.5px] text-fg-1 leading-tight" x-text="`You're on ${planName()} — start your 7-day free trial`"></div>
-                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">Starting trading begins the trial and the bot goes live. The wallet stays untouched until your first renewal on <span x-text="renewalLabel"></span>.</div>
+                    <div class="font-sans font-semibold text-[14.5px] text-fg-1 leading-tight" x-text="`You're on ${planName()} — start your ${trialDays()}-day free trial`"></div>
+                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">Starting trading begins the trial and the bot goes live. The wallet stays untouched until the first renewal, <span x-text="`${trialDays()} days after you start`"></span>.</div>
                 </div>
                 <div class="flex-shrink-0 max-[760px]:w-full">
                     <button type="button" @click="startTrial()" class="{{ $btnPrimary }} h-[40px] px-5 text-[13px]"><x-feathericon-play class="w-[15px] h-[15px]" stroke-width="1.75"/>Start trading</button>
@@ -289,7 +338,13 @@
                 <span class="flex-shrink-0 flex text-warn"><x-feathericon-pause class="w-[22px] h-[22px]" stroke-width="1.75"/></span>
                 <div class="flex-1 min-w-0">
                     <div class="font-sans font-semibold text-[14.5px] text-fg-1 leading-tight" x-text="`Subscription paused since ${pausedSince}`"></div>
-                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">Renewals are stopped. Existing positions keep trading; new positions are blocked. Resuming moves your renewal date forward by the pause length.</div>
+                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">
+                        @if($isComplimentaryPlan)
+                            Trading is paused. Existing positions keep closing; new positions are blocked. Your complimentary plan stays assigned.
+                        @else
+                            Renewals are stopped. Existing positions keep trading; new positions are blocked. Resuming moves your renewal date forward by the pause length.
+                        @endif
+                    </div>
                 </div>
                 <div class="flex-shrink-0 max-[760px]:w-full">
                     <button type="button" @click="resume()" class="{{ $btnPrimary }} h-[40px] px-5 text-[13px]"><x-feathericon-play class="w-[15px] h-[15px]" stroke-width="1.75"/>Resume subscription</button>
@@ -342,7 +397,7 @@
                     <template x-if="view === 'no-plan'">
                         <div class="flex flex-col items-start justify-center h-full gap-2">
                             <div class="{{ $eyebrow }}">No active plan</div>
-                            <div class="text-[13px] text-fg-3 leading-snug max-w-[260px]">Pick a plan below to start your 7-day free trial. The wallet is only charged after the trial ends.</div>
+                            <div class="text-[13px] text-fg-3 leading-snug max-w-[260px]">Pick a plan below to start its free trial. The wallet is only charged after the trial ends.</div>
                         </div>
                     </template>
 
@@ -350,7 +405,7 @@
                         <div class="flex flex-col items-start justify-center h-full gap-2">
                             <div class="{{ $eyebrow }}">Trial not started</div>
                             <div class="font-sans text-[15px] text-fg-1 font-semibold"><span x-text="planName()"></span> · <span x-text="usdt2(rate())"></span> USDT<span class="text-fg-mute font-normal">/mo</span></div>
-                            <div class="text-[12.5px] text-fg-3 leading-snug max-w-[260px]">Your 7-day free trial begins when you start trading. No debit until the first renewal.</div>
+                            <div class="text-[12.5px] text-fg-3 leading-snug max-w-[260px]">Your <span x-text="trialDays()"></span>-day free trial begins when you start trading. No debit until the first renewal.</div>
                         </div>
                     </template>
 
@@ -362,11 +417,28 @@
                         </div>
                     </template>
 
+                    <template x-if="view === 'complimentary' && !pausing">
+                        <div class="flex flex-col h-full">
+                            <div class="flex flex-1 flex-col justify-center gap-2">
+                                <div class="{{ $eyebrow }} flex items-center gap-2"><x-feathericon-star class="h-3 w-3" stroke-width="2"/>Complimentary access</div>
+                                <div class="font-sans text-[17px] font-semibold text-fg-1" x-text="planName()"></div>
+                                <div class="max-w-[310px] text-[12.5px] leading-snug text-fg-3">Free forever. No trial, renewal date, or wallet debit. Trading stays enabled while this plan is assigned.</div>
+                            </div>
+                            <button type="button" @click="pausing = true" class="mt-3 inline-flex cursor-pointer appearance-none self-start items-center gap-1.5 border-0 bg-transparent font-mono text-[10.5px] uppercase tracking-[0.06em] text-fg-mute transition-colors duration-fast hover:text-fg-2"><x-feathericon-pause class="h-3 w-3" stroke-width="2"/>Pause subscription</button>
+                        </div>
+                    </template>
+
                     <template x-if="view === 'paused'">
                         <div class="flex flex-col items-start justify-center h-full gap-2">
                             <div class="{{ $eyebrow }} flex items-center gap-2 !text-warn"><x-feathericon-pause class="w-3 h-3" stroke-width="2"/>Subscription paused</div>
                             <div class="font-sans text-[15px] text-fg-1 font-semibold" x-text="`Paused since ${pausedSince}`"></div>
-                            <div class="text-[12.5px] text-fg-3 leading-snug max-w-[270px]">Renewals are stopped and the wallet is untouched. Existing positions keep trading; new positions are blocked. Resuming pushes the renewal date forward by the pause length.</div>
+                            <div class="text-[12.5px] text-fg-3 leading-snug max-w-[270px]">
+                                @if($isComplimentaryPlan)
+                                    Your free access stays assigned. Existing positions keep closing; new positions are blocked until you resume.
+                                @else
+                                    Renewals are stopped and the wallet is untouched. Existing positions keep trading; new positions are blocked. Resuming pushes the renewal date forward by the pause length.
+                                @endif
+                            </div>
                         </div>
                     </template>
 
@@ -382,11 +454,17 @@
                     </template>
 
                     {{-- pause confirm (active view, pausing) --}}
-                    <template x-if="view === 'active' && pausing">
+                    <template x-if="(view === 'active' || view === 'complimentary') && pausing">
                         <div class="flex flex-col items-start justify-center h-full gap-3">
                             <div>
                                 <div class="font-sans font-semibold text-[14px] text-fg-1">Pause subscription?</div>
-                                <div class="text-[12px] text-fg-3 mt-1 leading-snug max-w-[270px]">Renewals stop and nothing is debited. Existing positions keep trading; new positions are blocked. Resume anytime — your renewal date moves forward by the pause length.</div>
+                                <div class="text-[12px] text-fg-3 mt-1 leading-snug max-w-[270px]">
+                                    @if($isComplimentaryPlan)
+                                        Existing positions keep closing; new positions are blocked. Your free plan stays assigned and can be resumed anytime.
+                                    @else
+                                        Renewals stop and nothing is debited. Existing positions keep trading; new positions are blocked. Resume anytime — your renewal date moves forward by the pause length.
+                                    @endif
+                                </div>
                             </div>
                             <div class="flex items-center gap-2">
                                 <button type="button" @click="pauseConfirm()" class="{{ $btnPrimary }} h-[34px] px-3.5" style="background: var(--warn); color: #1a1200;"><x-feathericon-pause class="w-3.5 h-3.5" stroke-width="1.75"/>Pause now</button>
@@ -430,7 +508,7 @@
         <div x-ref="plans" class="scroll-mt-4">
             <div class="flex items-center justify-between gap-3 mb-4">
                 <span class="font-mono text-[10.5px] font-semibold tracking-[0.12em] uppercase text-fg-mute" x-text="view === 'no-plan' ? 'Choose a plan' : 'Plans'"></span>
-                <span class="font-mono text-[10.5px] text-fg-faint tracking-[0.04em] max-[640px]:hidden">All plans include a 7-day free trial</span>
+                <span class="font-mono text-[10.5px] text-fg-faint tracking-[0.04em] max-[640px]:hidden">Trial duration shown per plan</span>
             </div>
             <div class="grid grid-cols-2 gap-4 max-[680px]:grid-cols-1">
                 @foreach($plans as $p)
@@ -447,6 +525,7 @@
                             <span class="font-mono font-semibold tabular-nums tracking-[-0.03em] text-fg-1 leading-none text-[34px]">${{ $p['price'] }}</span>
                             <span class="font-mono text-[13px] text-fg-mute">/mo</span>
                         </div>
+                        <div class="font-mono text-[10px] text-fg-mute mb-3">{{ $p['trial_days'] }}-day free trial</div>
                         <div class="text-[12.5px] text-fg-3 leading-snug mb-4 min-h-[34px]">{{ $p['blurb'] }}</div>
                         <div class="flex flex-col gap-2 mb-5">
                             @foreach($p['features'] as $fi => $f)
@@ -515,25 +594,25 @@
                         </template>
 
                         {{-- downgrade-from-unlimited: pick which account stays active --}}
-                        <template x-if="!isTrialView() && downgradeAccts()">
+                        <template x-if="downgradeAccts()">
                             <div>
                                 <div class="font-mono text-[10px] font-semibold tracking-[0.11em] uppercase text-fg-mute mb-2.5 flex items-center gap-2">
                                     <span class="text-warn"><x-feathericon-alert-triangle class="w-[13px] h-[13px]" stroke-width="1.75"/></span>
                                     <span x-text="`${nameOf(switchTo)} allows one account — keep which active?`"></span>
                                 </div>
                                 <div class="grid grid-cols-2 gap-2 max-[560px]:grid-cols-1">
-                                    @foreach($pickerAccounts as $ai => $pa)
-                                        <button type="button" @click="keepAcct = {{ $ai }}"
+                                    @foreach($pickerAccounts as $pa)
+                                        <button type="button" @click="keepAcct = {{ $pa['id'] }}"
                                                 class="appearance-none cursor-pointer text-left flex items-center gap-3 rounded-control border bg-surface-2 py-2.5 px-3 transition-colors duration-fast"
-                                                :style="keepAcct === {{ $ai }} ? 'border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent)' : 'border-color: var(--border)'">
+                                                :style="keepAcct === {{ $pa['id'] }} ? 'border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent)' : 'border-color: var(--border)'">
                                             <span class="w-[28px] h-[28px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[11px] flex items-center justify-center flex-shrink-0">{{ $pa['mono'] }}</span>
                                             <span class="flex flex-col leading-[1.2] min-w-0 flex-1">
                                                 <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap">{{ $pa['ex'] }} <span class="text-fg-mute font-normal">· {{ $pa['tag'] }}</span></span>
                                                 <span class="font-mono text-[10px] text-fg-mute tabular-nums">{{ $pa['equity'] }}</span>
                                             </span>
                                             <span class="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0"
-                                                  :style="keepAcct === {{ $ai }} ? 'background: var(--accent)' : 'box-shadow: inset 0 0 0 1.5px var(--border-strong)'">
-                                                <span x-show="keepAcct === {{ $ai }}" class="text-accent-on"><x-feathericon-check class="w-[11px] h-[11px]" stroke-width="2.5"/></span>
+                                                  :style="keepAcct === {{ $pa['id'] }} ? 'background: var(--accent)' : 'box-shadow: inset 0 0 0 1.5px var(--border-strong)'">
+                                                <span x-show="keepAcct === {{ $pa['id'] }}" class="text-accent-on"><x-feathericon-check class="w-[11px] h-[11px]" stroke-width="2.5"/></span>
                                             </span>
                                         </button>
                                     @endforeach
@@ -552,7 +631,7 @@
                         </template>
                         <template x-if="!switchShort()">
                             <div class="flex items-center gap-2.5 flex-wrap">
-                                <button type="button" @click="confirmSwitch()" class="{{ $btnPrimary }} h-[40px] px-5"><x-feathericon-check class="w-4 h-4" stroke-width="2"/><span x-text="`Confirm switch to ${nameOf(switchTo)}`"></span></button>
+                                <button type="button" @click="confirmSwitch()" :disabled="busy || (requiresAccountSelection() && !keepAcct)" class="{{ $btnPrimary }} h-[40px] px-5 disabled:opacity-40 disabled:cursor-not-allowed"><x-feathericon-check class="w-4 h-4" stroke-width="2"/><span x-text="`Confirm switch to ${nameOf(switchTo)}`"></span></button>
                                 <button type="button" @click="cancelSwitch()" class="{{ $btnSecondary }} h-[40px] px-4">Cancel</button>
                                 <span x-show="!isTrialView() && view !== 'no-plan'" class="font-mono text-[10.5px] text-fg-mute tracking-[0.03em]" x-text="`Refund credits instantly, then ${nameOf(switchTo)} is debited`"></span>
                             </div>
@@ -594,7 +673,7 @@
                             </div>
                         </div>
                         <div class="flex items-center gap-2.5 flex-wrap">
-                            <button type="button" @click="continueGateway()" class="{{ $btnPrimary }} h-[40px] px-5">Continue to NOWPayments<x-feathericon-arrow-up-right class="w-[15px] h-[15px]" stroke-width="1.75"/></button>
+                            <button type="button" @click="continueGateway()" :disabled="busy" class="{{ $btnPrimary }} h-[40px] px-5 disabled:opacity-40 disabled:cursor-not-allowed">Continue to NOWPayments<x-feathericon-arrow-up-right class="w-[15px] h-[15px]" stroke-width="1.75"/></button>
                             <button type="button" @click="invoice = null" class="{{ $btnSecondary }} h-[40px] px-4">Back</button>
                         </div>
                     </div>
@@ -704,11 +783,11 @@
                                     <td class="py-3 px-4">
                                         <span class="inline-flex items-center gap-1.5 py-[3px] pl-1.5 pr-2.5 rounded-chip font-mono text-[10px] font-bold tracking-[0.05em] uppercase whitespace-nowrap"
                                               :class="m.amount > 0 ? 'text-pnlup bg-pnlup-bg' : 'text-pnldown bg-pnldown-bg'">
-                                            <template x-if="m.type === 'credit-topup'"><span class="inline-flex"><x-feathericon-arrow-down-left class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
-                                            <template x-if="m.type === 'credit-bonus'"><span class="inline-flex"><x-feathericon-gift class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
-                                            <template x-if="m.type === 'debit-sub' || m.type === 'credit-refund'"><span class="inline-flex"><x-feathericon-refresh-cw class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
-                                            <template x-if="m.type === 'credit-admin' || m.type === 'debit-admin'"><span class="inline-flex"><x-feathericon-shield class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
-                                            <span x-text="({'debit-sub':'Subscription','credit-topup':'Top-up','credit-bonus':'Bonus','credit-refund':'Prorate refund','credit-admin':'Admin credit','debit-admin':'Admin debit'})[m.type]"></span>
+                                            <template x-if="m.type === 'credit_topup'"><span class="inline-flex"><x-feathericon-arrow-down-left class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
+                                            <template x-if="m.type === 'credit_topup_bonus'"><span class="inline-flex"><x-feathericon-gift class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
+                                            <template x-if="m.type === 'debit_subscription' || m.type === 'credit_prorate_refund'"><span class="inline-flex"><x-feathericon-refresh-cw class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
+                                            <template x-if="m.type === 'credit_admin' || m.type === 'debit_admin'"><span class="inline-flex"><x-feathericon-shield class="w-[11px] h-[11px]" stroke-width="2"/></span></template>
+                                            <span x-text="({'debit_subscription':'Subscription','credit_topup':'Top-up','credit_topup_bonus':'Bonus','credit_prorate_refund':'Prorate refund','credit_admin':'Admin credit','debit_admin':'Admin debit'})[m.type] || m.type"></span>
                                         </span>
                                     </td>
                                     <td class="py-3 px-4 text-[12.5px] text-fg-2" x-text="m.desc"></td>

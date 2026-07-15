@@ -9,8 +9,8 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Kraite\Core\Models\Kraite;
@@ -39,6 +39,12 @@ final class BillingController extends Controller
     {
         $user = $this->kraiteUser($request);
         $tier = $user->subscription;
+        $subscriptions = Subscription::publiclyAvailable()->orderBy('id')->get();
+        $isComplimentaryPlan = $tier !== null && (float) $tier->monthly_rate_usdt <= 0;
+        $trialActive = ! $isComplimentaryPlan && $user->isTrialActive();
+        $trialEndsAt = $trialActive
+            ? $user->trial_started_at?->copy()->addDays($user->effectiveTrialDays())
+            : null;
 
         $transactions = WalletTransaction::where('user_id', $user->id)
             ->orderByDesc('created_at')
@@ -48,16 +54,19 @@ final class BillingController extends Controller
         return view('billing', [
             'user' => $user,
             'tier' => $tier,
-            'subscriptions' => Subscription::where('is_active', true)->orderBy('id')->get(),
+            'subscriptions' => $subscriptions,
             'transactions' => $transactions,
-            'trialActive' => $user->isTrialActive(),
+            'trialActive' => $trialActive,
+            'isComplimentaryPlan' => $isComplimentaryPlan,
             'isPaused' => $user->isPaused(),
             'inClosingMode' => $user->isInClosingMode(),
             'rateCovered' => $user->subscriptionCoversNextRenewal(),
             'shortfall' => $user->renewalShortfallUsdt(),
             'monthlyRate' => (float) ($tier?->monthly_rate_usdt ?? 0),
-            'renewsAt' => $user->subscription_renews_at,
-            'accounts' => $user->accounts()->orderBy('id')->get(),
+            'renewsAt' => $isComplimentaryPlan ? null : $user->subscription_renews_at,
+            'trialEndsAt' => $trialEndsAt,
+            'topUpMinimum' => $this->ruleMinimum($user),
+            'accounts' => $user->accounts()->with('apiSystem')->orderBy('id')->get(),
             'topUpCoins' => TopUpCoin::active(),
         ]);
     }
@@ -72,16 +81,18 @@ final class BillingController extends Controller
                 ->with('error', 'Pick a plan before starting your trial.');
         }
 
+        $user->loadMissing('subscription');
+
+        if ((float) ($user->subscription?->monthly_rate_usdt ?? 0) <= 0) {
+            return redirect()
+                ->route('billing')
+                ->with('status', "{$user->subscription->name} is free forever. No trial or renewal is needed.");
+        }
+
         if ($user->trial_started_at === null) {
-            $user->trial_started_at = now();
-
-            $trialDays = $user->effectiveTrialDays();
-
-            if ($trialDays > 0) {
-                $user->subscription_renews_at = now()->copy()->addDays($trialDays);
-            }
-
-            $user->save();
+            $user->startTrial();
+        } elseif ($user->subscription_renews_at === null) {
+            $user->syncTrialRenewalAnchor();
         }
 
         return redirect()
@@ -94,7 +105,14 @@ final class BillingController extends Controller
         $user = $this->kraiteUser($request);
 
         $data = $request->validate([
-            'subscription_id' => 'required|exists:subscriptions,id',
+            'subscription_id' => [
+                'required',
+                'integer',
+                Rule::exists('subscriptions', 'id')
+                    ->where(static fn ($query) => $query
+                        ->where('is_active', true)
+                        ->where('canonical', '!=', Subscription::CANONICAL_BLACK)),
+            ],
             'active_account_id' => [
                 'nullable',
                 'integer',
@@ -116,6 +134,16 @@ final class BillingController extends Controller
                 ->with('status', 'Already on this plan.');
         }
 
+        $requiresActiveAccount = ! $newTier->hasUnlimitedAccounts()
+            && $newTier->max_accounts === 1
+            && $user->accounts()->count() > 1;
+
+        if ($requiresActiveAccount && empty($data['active_account_id'])) {
+            return redirect()
+                ->route('billing')
+                ->with('error', 'Pick which account stays active under the new plan.');
+        }
+
         // First-time plan pick: user has no tier and hasn't started
         // their trial yet. Free assignment, no debit, no anchor.
         if ($user->subscription_id === null && $user->trial_started_at === null) {
@@ -129,46 +157,44 @@ final class BillingController extends Controller
         }
 
         // During trial, flip the tier without prorate or debit.
-        if ($user->isTrialActive()) {
+        if (
+            (float) ($user->subscription?->monthly_rate_usdt ?? 0) > 0
+            && $user->isTrialActive()
+        ) {
             $user->subscription_id = $newTier->id;
             $this->maybeAssignActiveAccount($user, $newTier, $data['active_account_id'] ?? null);
             $user->save();
+            $user->syncTrialRenewalAnchor();
 
             return redirect()
                 ->route('billing')
                 ->with('status', 'Plan updated.');
         }
 
-        $isDowngradeToCapped = ! $newTier->hasUnlimitedAccounts()
-            && (int) ($newTier->max_accounts ?? 0) === 1;
-
-        if (
-            $isDowngradeToCapped
-            && empty($data['active_account_id'])
-            && $user->accounts()->count() > 1
-        ) {
-            return redirect()
-                ->route('billing')
-                ->with('error', 'Pick which account stays active under the new plan.');
-        }
-
         try {
-            DB::transaction(function () use ($user, $newTier, $data) {
-                $currentTier = $user->subscription;
+            $changed = DB::transaction(function () use ($user, $newTier, $data): bool {
+                $lockedUser = KraiteUser::query()->lockForUpdate()->findOrFail($user->id);
+                $lockedUser->load('subscription');
+
+                if ($lockedUser->subscription_id === $newTier->id) {
+                    return false;
+                }
+
+                $currentTier = $lockedUser->subscription;
                 $now = now();
 
                 if (
                     $currentTier !== null
-                    && $user->subscription_renews_at !== null
-                    && $user->subscription_renews_at->isFuture()
+                    && $lockedUser->subscription_renews_at !== null
+                    && $lockedUser->subscription_renews_at->isFuture()
                 ) {
-                    $daysRemaining = (int) ceil($now->diffInDays($user->subscription_renews_at, absolute: false));
+                    $daysRemaining = (int) ceil($now->diffInDays($lockedUser->subscription_renews_at, absolute: false));
                     $currentMonthly = (float) $currentTier->monthly_rate_usdt;
                     $refund = $daysRemaining > 0 ? round($daysRemaining * ($currentMonthly / 30), 4) : 0.0;
 
                     if ($refund > 0) {
                         $this->wallet->credit(
-                            user: $user,
+                            user: $lockedUser,
                             amount: $refund,
                             type: WalletTransaction::TYPE_CREDIT_PRORATE_REFUND,
                             description: sprintf(
@@ -185,20 +211,36 @@ final class BillingController extends Controller
                     }
                 }
 
-                $user->subscription_id = $newTier->id;
-                $this->maybeAssignActiveAccount($user, $newTier, $data['active_account_id'] ?? null);
-                $user->save();
-                $user->load('subscription');
+                $lockedUser->subscription_id = $newTier->id;
+                $this->maybeAssignActiveAccount($lockedUser, $newTier, $data['active_account_id'] ?? null);
+
+                if ((float) $newTier->monthly_rate_usdt <= 0) {
+                    $lockedUser->subscription_renews_at = null;
+                    $lockedUser->save();
+
+                    return true;
+                }
+
+                $lockedUser->save();
+                $lockedUser->load('subscription');
 
                 $this->wallet->runRenewal(
-                    user: $user,
+                    user: $lockedUser,
                     newRenewsAt: now()->addMonth()->subDay(),
                 );
+
+                return true;
             });
         } catch (InsufficientFundsException) {
             return redirect()
                 ->route('billing')
                 ->with('error', 'Wallet does not cover the new plan after prorate. Top up first.');
+        }
+
+        if (! $changed) {
+            return redirect()
+                ->route('billing')
+                ->with('status', 'Already on this plan.');
         }
 
         return redirect()
@@ -241,13 +283,8 @@ final class BillingController extends Controller
 
         $monthlyRate = (float) ($tier?->monthly_rate_usdt ?? 0);
         $wallet = (float) $user->wallet_balance_usdt;
-        $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
-
         $enforceCoverage = (bool) config('kraite.billing.enforce_minimum_for_renewal', true);
-
-        $ruleMin = $enforceCoverage
-            ? ($wallet >= $monthlyRate ? $coveredFloor : max(0.0, $monthlyRate - $wallet))
-            : 0.0;
+        $ruleMin = $this->ruleMinimum($user);
 
         $gatewayMinUsdt = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
 
@@ -271,35 +308,29 @@ final class BillingController extends Controller
     public function topUp(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'amount_usdt' => 'required|numeric|min:0.01',
-            'pay_currency' => 'required|string',
+            'amount_usdt' => ['required', 'numeric', 'min:0.01'],
+            'pay_currency' => ['nullable', 'string', 'max:64'],
         ]);
 
         $user = $this->kraiteUser($request);
 
-        $coin = TopUpCoin::query()
-            ->where('canonical', $data['pay_currency'])
-            ->where('is_active', true)
-            ->first();
+        $coin = isset($data['pay_currency'])
+            ? TopUpCoin::query()
+                ->where('canonical', $data['pay_currency'])
+                ->where('is_active', true)
+                ->first()
+            : null;
 
-        if ($coin === null) {
+        if (isset($data['pay_currency']) && $coin === null) {
             return redirect()
                 ->route('billing')
                 ->with('error', 'The selected coin is not available. Pick another option.');
         }
 
-        $tier = $user->subscription;
-        $monthlyRate = (float) ($tier?->monthly_rate_usdt ?? 0);
-        $wallet = (float) $user->wallet_balance_usdt;
-        $coveredFloor = (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
-
-        $enforceCoverage = (bool) config('kraite.billing.enforce_minimum_for_renewal', true);
-
-        $ruleMin = $enforceCoverage
-            ? ($wallet >= $monthlyRate ? $coveredFloor : max(0.0, $monthlyRate - $wallet))
+        $ruleMin = $this->ruleMinimum($user);
+        $gatewayMin = $coin !== null
+            ? $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override)
             : 0.0;
-
-        $gatewayMin = $this->gatewayMinAmountUsdt($coin->canonical, $coin->min_amount_override);
         $effectiveMin = max($ruleMin, $gatewayMin);
 
         $amount = (float) $data['amount_usdt'];
@@ -309,7 +340,7 @@ final class BillingController extends Controller
                 ->route('billing')
                 ->with('error', sprintf(
                     'Minimum top-up for %s is %s USDT.',
-                    $coin->display_name,
+                    $coin?->display_name ?? 'this payment',
                     number_format($effectiveMin, 2),
                 ));
         }
@@ -345,22 +376,18 @@ final class BillingController extends Controller
         return $this->createInvoiceAndRedirect($user, $coin, (float) $data['amount']);
     }
 
-    private function createInvoiceAndRedirect(KraiteUser $user, TopUpCoin $coin, float $amount): RedirectResponse
+    private function createInvoiceAndRedirect(KraiteUser $user, ?TopUpCoin $coin, float $amount): RedirectResponse
     {
-
         $payment = Payment::create([
             'user_id' => $user->id,
             'order_id' => 'pending-'.bin2hex(random_bytes(8)),
             'price_amount' => $amount,
-            'pay_currency' => $coin->canonical,
+            'pay_currency' => $coin?->canonical,
             'outcome_currency' => 'usdttrc20',
             'status' => Payment::STATUS_PENDING,
         ]);
 
-        $emailSlug = trim(
-            (string) preg_replace('/[^a-z0-9]+/', '-', strtolower((string) $user->email)),
-            '-',
-        ) ?: "user-{$user->id}";
+        $emailSlug = Str::slug((string) $user->email) ?: "user-{$user->id}";
         $orderId = "order-{$emailSlug}-{$payment->id}";
         $payment->order_id = $orderId;
         $payment->save();
@@ -380,7 +407,7 @@ final class BillingController extends Controller
                 priceCurrency: 'usdttrc20',
                 orderDescription: sprintf('Kraite wallet top-up · %s', $user->email),
                 customerEmail: $user->email,
-                payCurrency: $coin->canonical,
+                payCurrency: $coin?->canonical,
             );
         } catch (Throwable $e) {
             Log::error('[NOWPayments] invoice creation failed', [
@@ -437,27 +464,15 @@ final class BillingController extends Controller
      */
     private function gatewayMinAmountUsdt(string $canonical, ?string $override): float
     {
-        $apiKey = (string) config('services.nowpayments.api_key', '');
-        $baseUrl = (string) config('services.nowpayments.base_url', '');
-
-        if ($apiKey === '' || $baseUrl === '') {
-            return 0.0;
-        }
-
         return (float) Cache::remember(
-            "nowpayments.min_amount_usdt.{$canonical}",
+            'nowpayments.min_amount_usdt.'.sha1($canonical.'|'.($override ?? 'gateway')),
             now()->addMinutes(5),
-            function () use ($canonical, $override, $apiKey, $baseUrl) {
+            function () use ($canonical, $override) {
                 try {
+                    $client = NowPaymentsClient::fromConfig();
                     $minInCoin = $override !== null
                         ? (float) $override
-                        : (float) (Http::withHeaders(['x-api-key' => $apiKey])
-                            ->timeout(8)
-                            ->get(rtrim($baseUrl, '/').'/min-amount', [
-                                'currency_from' => $canonical,
-                                'currency_to' => 'usdttrc20',
-                            ])
-                            ->json('min_amount') ?? 0);
+                        : $client->minimumAmount($canonical);
 
                     if ($minInCoin <= 0) {
                         return 0.0;
@@ -467,21 +482,28 @@ final class BillingController extends Controller
                         return $minInCoin;
                     }
 
-                    $estimate = Http::withHeaders(['x-api-key' => $apiKey])
-                        ->timeout(8)
-                        ->get(rtrim($baseUrl, '/').'/estimate', [
-                            'amount' => $minInCoin,
-                            'currency_from' => $canonical,
-                            'currency_to' => 'usdttrc20',
-                        ])
-                        ->json('estimated_amount');
-
-                    return (float) ($estimate ?? 0);
+                    return $client->estimate($minInCoin, $canonical);
                 } catch (Throwable) {
                     return 0.0;
                 }
             },
         );
+    }
+
+    private function ruleMinimum(KraiteUser $user): float
+    {
+        if (! config('kraite.billing.enforce_minimum_for_renewal', true)) {
+            return 0.0;
+        }
+
+        $monthlyRate = (float) ($user->subscription?->monthly_rate_usdt ?? 0);
+        $wallet = (float) $user->wallet_balance_usdt;
+
+        if ($wallet < $monthlyRate) {
+            return max(0.0, $monthlyRate - $wallet);
+        }
+
+        return (float) (Kraite::find(1)?->top_up_minimum_when_covered_usdt ?? 20);
     }
 
     private function maybeAssignActiveAccount(KraiteUser $user, Subscription $newTier, mixed $activeAccountId): void

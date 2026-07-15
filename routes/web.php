@@ -91,24 +91,23 @@ Route::domain(config('domains.admin'))->group(function () {
             ->whereUuid('blockUuid')
             ->name('accounts.connectivity.status');
 
-        // User-facing billing area — own balance, plan switcher, top-up
-        // (mock pre-NOWPayments integration), wallet history, start-trading
-        // trigger.
+        // User-facing billing area — own balance, plan switcher, top-up,
+        // wallet history, and start-trading trigger.
         Route::get('/billing', [BillingController::class, 'index'])->name('billing');
         Route::post('/billing/start-trading', [BillingController::class, 'startTrading'])->name('billing.start-trading');
         Route::post('/billing/subscription', [BillingController::class, 'changeSubscription'])->name('billing.subscription');
         Route::post('/billing/pause', [BillingController::class, 'pause'])->name('billing.pause');
         Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
-        Route::post('/billing/topup', [BillingController::class, 'topUp'])->name('billing.topup');
-        Route::get('/billing/min-amount', [BillingController::class, 'minAmount'])->name('billing.min-amount');
-        Route::get('/billing/wallet-status', [BillingController::class, 'walletStatus'])->name('billing.wallet-status');
+        Route::post('/billing/topup', [BillingController::class, 'topUp'])->middleware('throttle:10,1')->name('billing.topup');
+        Route::get('/billing/min-amount', [BillingController::class, 'minAmount'])->middleware('throttle:30,1')->name('billing.min-amount');
+        Route::get('/billing/wallet-status', [BillingController::class, 'walletStatus'])->middleware('throttle:60,1')->name('billing.wallet-status');
     });
 
     // Signed shortcut from email — pre-fills amount + coin from the last
     // payment so the user doesn't retype anything. Bypasses the auth gate
     // because the signed URL itself is the authentication.
     Route::get('/billing/quick-topup', [BillingController::class, 'quickTopUp'])
-        ->middleware('signed')
+        ->middleware(['signed', 'throttle:5,1'])
         ->name('billing.quick-topup');
 });
 

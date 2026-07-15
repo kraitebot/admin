@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.21.0] — 2026-07-15
+
+### Features
+- [NEW FEATURE] **Customer billing now performs real subscription actions.** Plan selection, paid-plan trials, pause/resume, wallet top-ups, live gateway minimums, signed quick top-ups, and payment history are connected to the existing billing controllers instead of changing browser-only state.
+- [NEW FEATURE] **Sysadmins can operate billing from the UI.** The new Billing section exposes users, plans, and top-up coins with working wallet adjustments, subscription assignment, trial controls, plan/coin management, and clear validation feedback.
+
+### Fixed
+- [FIXED] **Black is shown as free forever, never as a broken trial.** Complimentary plans no longer display "trial ends now", a fake renewal date, or paid-plan trial controls. Switching away from a legacy complimentary account cannot accidentally grant a fresh paid trial.
+- [FIXED] **NOWPayments webhooks credit every received increment exactly once.** Partial and out-of-order events apply only the positive uncredited delta, preserve forward status progress, reject mismatched gateway payment IDs, and use the same database-backed credentials as invoice creation.
+- [FIXED] **Billing edge cases now fail safely.** Public users cannot select the invite-only Black plan, excessive admin debits return a useful error, trial renewal anchors are repaired, gateway actions are rate-limited, and payment-signature failures no longer log digest material.
+
+### Improved
+- [IMPROVED] **The customer billing page explains the current state plainly.** Trial countdowns use the real plan duration, renewal and wallet coverage copy matches the actual subscription state, and the sidebar now exposes Billing to the correct audience.
+- [IMPROVED] **PHP and frontend dependencies were refreshed** through the requested project update while preserving the production manifest workflow.
+
 ## [0.20.2] — 2026-07-14
 
 ### Fixed

@@ -7,6 +7,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Kraite\Core\Support\Billing\NowPaymentsClient;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -23,7 +24,7 @@ final class VerifyNowPaymentsSignature
 {
     public function handle(Request $request, Closure $next): Response
     {
-        $secret = (string) config('services.nowpayments.ipn_secret', '');
+        $secret = NowPaymentsClient::ipnSecret();
 
         if ($secret === '') {
             abort(503, 'NOWPayments IPN secret is not configured.');
@@ -54,7 +55,6 @@ final class VerifyNowPaymentsSignature
         if (! hash_equals(strtolower($expected), strtolower($signature))) {
             Log::warning('[NOWPayments] signature mismatch', [
                 'received_sig_prefix' => substr($signature, 0, 16),
-                'expected_sig_prefix' => substr($expected, 0, 16),
                 'order_id' => $data['order_id'] ?? null,
                 'payment_id' => $data['payment_id'] ?? null,
                 'payment_status' => $data['payment_status'] ?? null,

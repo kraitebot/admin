@@ -24,7 +24,7 @@ final class BillingPlansController extends Controller
     public function index(): View
     {
         return view('system.billing.plans', [
-            'subscriptions' => Subscription::orderBy('id')->get(),
+            'subscriptions' => Subscription::withCount('users')->orderBy('id')->get(),
         ]);
     }
 
@@ -82,6 +82,7 @@ final class BillingPlansController extends Controller
             'monthly_rate_usdt' => 'required|numeric|min:0',
             'trial_days' => 'required|integer|min:0',
             'max_accounts' => 'nullable|integer|min:1',
+            'max_exchanges' => 'nullable|integer|min:1',
             'max_balance' => 'nullable|numeric|min:0',
             'is_active' => 'sometimes|boolean',
         ]);

@@ -12,6 +12,7 @@ use Illuminate\View\View;
 use Kraite\Core\Models\Subscription;
 use Kraite\Core\Models\User;
 use Kraite\Core\Models\WalletTransaction;
+use Kraite\Core\Support\Billing\InsufficientFundsException;
 use Kraite\Core\Support\Billing\Wallet;
 
 /**
@@ -64,22 +65,28 @@ final class UsersController extends Controller
             'admin_email' => $admin?->email,
         ];
 
-        if ($amount > 0) {
-            $wallet->credit(
-                user: $user,
-                amount: $amount,
-                type: WalletTransaction::TYPE_CREDIT_ADMIN,
-                description: $data['description'],
-                meta: $meta,
-            );
-        } else {
-            $wallet->debit(
-                user: $user,
-                amount: abs($amount),
-                type: WalletTransaction::TYPE_DEBIT_ADMIN,
-                description: $data['description'],
-                meta: $meta,
-            );
+        try {
+            if ($amount > 0) {
+                $wallet->credit(
+                    user: $user,
+                    amount: $amount,
+                    type: WalletTransaction::TYPE_CREDIT_ADMIN,
+                    description: $data['description'],
+                    meta: $meta,
+                );
+            } else {
+                $wallet->debit(
+                    user: $user,
+                    amount: abs($amount),
+                    type: WalletTransaction::TYPE_DEBIT_ADMIN,
+                    description: $data['description'],
+                    meta: $meta,
+                );
+            }
+        } catch (InsufficientFundsException) {
+            return redirect()
+                ->route('system.users', $user)
+                ->with('error', 'Debit rejected because it exceeds the user wallet balance.');
         }
 
         return redirect()
@@ -93,8 +100,19 @@ final class UsersController extends Controller
             'subscription_id' => 'required|exists:subscriptions,id',
         ]);
 
-        $user->subscription_id = (int) $data['subscription_id'];
+        $subscription = Subscription::findOrFail((int) $data['subscription_id']);
+
+        $user->subscription()->associate($subscription);
+
+        if ((float) $subscription->monthly_rate_usdt <= 0) {
+            $user->subscription_renews_at = null;
+        }
+
         $user->save();
+
+        if ((float) $subscription->monthly_rate_usdt > 0 && $user->isTrialActive()) {
+            $user->syncTrialRenewalAnchor();
+        }
 
         return redirect()
             ->route('system.users', $user)
@@ -129,14 +147,38 @@ final class UsersController extends Controller
 
     public function startTrial(User $user): RedirectResponse
     {
+        if ($user->subscription_id === null) {
+            return redirect()
+                ->route('system.users', $user)
+                ->with('error', 'Assign a subscription before starting the trial.');
+        }
+
+        $user->loadMissing('subscription');
+
+        if (
+            $user->subscription !== null
+            && (float) $user->subscription->monthly_rate_usdt <= 0
+        ) {
+            return redirect()
+                ->route('system.users', $user)
+                ->with('error', "{$user->subscription->name} is free forever and does not use trials.");
+        }
+
         if ($user->trial_started_at !== null) {
+            if ($user->subscription_renews_at === null) {
+                $user->syncTrialRenewalAnchor();
+
+                return redirect()
+                    ->route('system.users', $user)
+                    ->with('status', 'Trial renewal anchor restored.');
+            }
+
             return redirect()
                 ->route('system.users', $user)
                 ->with('status', 'Trial already started for this user.');
         }
 
-        $user->trial_started_at = now();
-        $user->save();
+        $user->startTrial();
 
         return redirect()
             ->route('system.users', $user)
@@ -145,12 +187,34 @@ final class UsersController extends Controller
 
     public function changeTrialDays(Request $request, User $user): RedirectResponse
     {
+        $user->loadMissing('subscription');
+
+        if (
+            $user->subscription !== null
+            && (float) $user->subscription->monthly_rate_usdt <= 0
+        ) {
+            return redirect()
+                ->route('system.users', $user)
+                ->with('error', "{$user->subscription->name} is free forever and does not use trials.");
+        }
+
         $data = $request->validate([
             'trial_days_override' => 'nullable|integer|min:0|max:365',
         ]);
 
+        $previousTrialEnd = $user->trial_started_at?->copy()->addDays($user->effectiveTrialDays());
+        $shouldSyncAnchor = $user->trial_started_at !== null
+            && (
+                $user->subscription_renews_at === null
+                || $user->subscription_renews_at->equalTo($previousTrialEnd)
+            );
+
         $user->trial_days_override = $data['trial_days_override'] ?? null;
         $user->save();
+
+        if ($shouldSyncAnchor && $user->subscription_id !== null) {
+            $user->syncTrialRenewalAnchor();
+        }
 
         $msg = $user->trial_days_override === null
             ? 'Trial duration reset to tier default.'
