@@ -77,6 +77,11 @@ jobs:
       - name: Generate application key
         run: php artisan key:generate
 
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build
+
       - name: Run migrations
         run: php artisan migrate --force
         env:

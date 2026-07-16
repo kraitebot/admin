@@ -87,10 +87,9 @@ it('server-renders only the real apiable-host egress IPs from the fleet roster',
     $response = $this->actingAs($admin)
         ->get('https://admin.kraite.test/system/infra');
 
-    // Apiable hosts appear in the allowlist…
-    $response->assertSee('37.27.243.164', false);
-    $response->assertSee('204.168.137.153', false);
-    // …non-apiable hosts (DB, web) never make exchange calls, so they don't.
-    $response->assertDontSee('135.181.93.226', false);
-    $response->assertDontSee('62.238.38.113', false);
+    $response->assertSuccessful();
+    $response->assertViewHas('egressIps', [
+        ['id' => 'athena', 'ip' => '37.27.243.164', 'type' => 'ingestion'],
+        ['id' => 'eos', 'ip' => '204.168.137.153', 'type' => 'worker'],
+    ]);
 });
