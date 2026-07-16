@@ -6,18 +6,22 @@ namespace App\Http\Controllers\Accounts;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Accounts\UpdateAccountRequest;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Kraite\Core\Jobs\Lifecycles\Account\TestExchangeConnectivityStep;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\ForbiddenHostname;
 use Kraite\Core\Models\Server;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use StepDispatcher\Models\Step;
@@ -28,6 +32,10 @@ class AccountController extends Controller
     private const ACCOUNT_CONNECTIVITY_DRAFT_PREFIX = 'Connection test for account ';
 
     private const REGISTRATION_CONNECTIVITY_DRAFT_NAME = 'Registration connectivity test';
+
+    private const CONNECTIVITY_FAILED_REASON = 'Connectivity failed from one or more Kraite servers.';
+
+    private const CONNECTIVITY_AUTO_DISABLED_REASON_PREFIX = 'All worker IPs blacklisted on ';
 
     /**
      * Editable column allowlist. Mirrors the validation rules in
@@ -50,7 +58,10 @@ class AccountController extends Controller
     {
         $isAdmin = (bool) Auth::user()->is_admin;
 
-        $query = Account::with(['apiSystem', 'user'])
+        $query = Account::with(['apiSystem', 'user.subscription'])
+            ->withCount([
+                'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
+            ])
             ->where('name', 'not like', self::ACCOUNT_CONNECTIVITY_DRAFT_PREFIX.'%')
             ->where('name', '!=', self::REGISTRATION_CONNECTIVITY_DRAFT_NAME);
 
@@ -58,14 +69,22 @@ class AccountController extends Controller
             $query->where('user_id', Auth::id());
         }
 
-        $accounts = $query
+        $accountModels = $query
             ->orderBy('user_id')
             ->orderBy('name')
-            ->get()
-            ->map(fn (Account $a) => $this->serialize($a))
+            ->get();
+
+        $connectivityServerModels = $connectivity->apiConnectivityServers();
+        $activeConnectivityBans = $this->activeConnectivityBans($accountModels);
+
+        $accounts = $accountModels
+            ->map(fn (Account $account) => $this->serialize(
+                $account,
+                $this->connectivityHealth($account, $activeConnectivityBans, $connectivityServerModels),
+            ))
             ->all();
 
-        $connectivityServers = $connectivity->apiConnectivityServers()
+        $connectivityServers = $connectivityServerModels
             ->map(static fn (Server $server): array => [
                 'id' => $server->id,
                 'hostname' => $server->hostname,
@@ -146,21 +165,48 @@ class AccountController extends Controller
         }
     }
 
-    public function update(UpdateAccountRequest $request): RedirectResponse
+    public function update(UpdateAccountRequest $request): JsonResponse|RedirectResponse
     {
-        $query = Account::where('id', $request->input('account_id'));
+        $query = Account::with('user.subscription')
+            ->withCount([
+                'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
+            ])
+            ->where('id', $request->input('account_id'));
         if (! Auth::user()->is_admin) {
             $query->where('user_id', Auth::id());
         }
         $account = $query->firstOrFail();
 
         $data = $request->only(self::EDITABLE_FIELDS);
+        $subscriptionActive = $this->subscriptionActive($account);
+
+        if (($data['can_trade'] ?? false) && ! $subscriptionActive) {
+            throw ValidationException::withMessages([
+                'can_trade' => 'Trading cannot be enabled while the subscription is inactive.',
+            ]);
+        }
+
+        $this->rejectLockedQuoteChanges($account, $data);
 
         if (! Auth::user()->is_admin && $account->disabled_reason !== null) {
             $data['can_trade'] = false;
         }
 
         $account->update($data);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Account updated.',
+                'account' => [
+                    'id' => $account->id,
+                    'can_trade' => (bool) $account->can_trade,
+                    'portfolio_quote' => $account->portfolio_quote,
+                    'trading_quote' => $account->trading_quote,
+                    'subscription_active' => $subscriptionActive,
+                    'open_positions_count' => (int) $account->open_positions_count,
+                ],
+            ]);
+        }
 
         return back()
             ->with('status', 'Account updated.')
@@ -226,29 +272,63 @@ class AccountController extends Controller
                 passphrase: $credentials['passphrase'] ?? null,
             );
 
-        DB::transaction(function () use ($account, $allConnected, $credentialColumns, $testedAccount): void {
+        $wasConnectivityAutoDisabled = $this->isConnectivityAutoDisabled($account);
+        $hadConnectivityFailure = $wasConnectivityAutoDisabled
+            || $account->disabled_reason === self::CONNECTIVITY_FAILED_REASON;
+
+        DB::transaction(function () use ($account, $allConnected, $credentialColumns, $testedAccount, $wasConnectivityAutoDisabled, $hadConnectivityFailure): void {
             if ($credentialColumns !== null) {
                 $account->all_credentials = $credentialColumns;
             }
 
-            $account->forceFill([
-                'can_trade' => $allConnected,
-                'disabled_reason' => $allConnected ? null : 'Connectivity failed from one or more Kraite servers.',
-                'disabled_at' => $allConnected ? null : now(),
-            ])->save();
+            $state = ['can_trade' => $allConnected];
+
+            if ($allConnected && $hadConnectivityFailure) {
+                $state['disabled_reason'] = null;
+                $state['disabled_at'] = null;
+            } elseif (! $allConnected && ! $wasConnectivityAutoDisabled) {
+                $state['disabled_reason'] = self::CONNECTIVITY_FAILED_REASON;
+                $state['disabled_at'] = now();
+            }
+
+            if ($allConnected && $wasConnectivityAutoDisabled) {
+                $state['is_active'] = true;
+            }
+
+            $account->forceFill($state)->save();
+
+            if ($allConnected) {
+                ForbiddenHostname::query()
+                    ->where('account_id', $account->id)
+                    ->where('api_system_id', $account->api_system_id)
+                    ->whereIn('type', [
+                        ForbiddenHostname::TYPE_IP_NOT_WHITELISTED,
+                        ForbiddenHostname::TYPE_ACCOUNT_BLOCKED,
+                    ])
+                    ->delete();
+            }
 
             $testedAccount->forceDelete();
         });
 
+        $account = $account->fresh(['apiSystem', 'user.subscription']);
+        $account->loadCount([
+            'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
+        ]);
+        $connectivityServers = $connectivity->apiConnectivityServers();
+        $activeConnectivityBans = $this->activeConnectivityBans(collect([$account]));
+
         return response()->json([
-            'message' => $usesSavedCredentials
-                ? ($allConnected
-                    ? 'Connectivity result applied. Trading is enabled for this account.'
-                    : 'Connectivity result applied. Trading stays disabled until every Kraite server connects.')
-                : ($allConnected
-                    ? 'API keys saved. Trading is enabled for this account.'
-                    : 'API keys saved. Trading stays disabled until connectivity succeeds from every Kraite server.'),
-            'account' => $this->serialize($account->load(['apiSystem', 'user'])),
+            'message' => $this->connectivitySaveMessage(
+                $usesSavedCredentials,
+                $allConnected,
+                (bool) $account->is_active,
+                $this->subscriptionActive($account),
+            ),
+            'account' => $this->serialize(
+                $account,
+                $this->connectivityHealth($account, $activeConnectivityBans, $connectivityServers),
+            ),
         ]);
     }
 
@@ -299,7 +379,7 @@ class AccountController extends Controller
      *
      * @return array<string, mixed>
      */
-    private function serialize(Account $account): array
+    private function serialize(Account $account, array $connectivityHealth): array
     {
         $base = [
             'id' => $account->id,
@@ -311,6 +391,9 @@ class AccountController extends Controller
             'disabled_at' => $account->disabled_at ? (string) $account->disabled_at : null,
             'has_credentials' => $this->hasRequiredCredentials($account),
             'requires_passphrase' => in_array((string) $account->apiSystem?->canonical, ['kucoin', 'bitget'], true),
+            'connectivity_health' => $connectivityHealth,
+            'subscription_active' => $this->subscriptionActive($account),
+            'open_positions_count' => (int) ($account->open_positions_count ?? 0),
         ];
 
         foreach (self::EDITABLE_FIELDS as $field) {
@@ -318,6 +401,181 @@ class AccountController extends Controller
         }
 
         return $base;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function rejectLockedQuoteChanges(Account $account, array $data): void
+    {
+        $portfolioQuoteChanged = ($data['portfolio_quote'] ?? $account->portfolio_quote) !== $account->portfolio_quote;
+        $tradingQuoteChanged = ($data['trading_quote'] ?? $account->trading_quote) !== $account->trading_quote;
+
+        if (! $portfolioQuoteChanged && ! $tradingQuoteChanged) {
+            return;
+        }
+
+        $errors = [];
+        $hasOpenPositions = (int) $account->open_positions_count > 0;
+        $tradingWillBeEnabled = (bool) ($data['can_trade'] ?? $account->can_trade);
+
+        if ($portfolioQuoteChanged && $hasOpenPositions) {
+            $errors['portfolio_quote'] = 'Portfolio quote cannot change while this account has open positions.';
+        } elseif ($portfolioQuoteChanged && $tradingWillBeEnabled) {
+            $errors['portfolio_quote'] = 'Portfolio quote cannot change while account trading is enabled.';
+        }
+
+        if ($tradingQuoteChanged && $hasOpenPositions) {
+            $errors['trading_quote'] = 'Trading quote cannot change while this account has open positions.';
+        } elseif ($tradingQuoteChanged && $tradingWillBeEnabled) {
+            $errors['trading_quote'] = 'Trading quote cannot change while account trading is enabled.';
+        }
+
+        if ($errors !== []) {
+            throw ValidationException::withMessages($errors);
+        }
+    }
+
+    private function subscriptionActive(Account $account): bool
+    {
+        return $account->user?->billing()->subscription()->isActive() ?? false;
+    }
+
+    /**
+     * @param  Collection<int, Account>  $accounts
+     * @return Collection<int, ForbiddenHostname>
+     */
+    private function activeConnectivityBans(Collection $accounts): Collection
+    {
+        $apiSystemIds = $accounts->pluck('api_system_id')->filter()->unique()->values();
+        $accountIds = $accounts->pluck('id')->filter()->unique()->values();
+
+        if ($apiSystemIds->isEmpty() || $accountIds->isEmpty()) {
+            return collect();
+        }
+
+        return ForbiddenHostname::query()
+            ->whereIn('api_system_id', $apiSystemIds)
+            ->where(static function ($query) use ($accountIds): void {
+                $query->whereIn('account_id', $accountIds)->orWhereNull('account_id');
+            })
+            ->where(static function ($query): void {
+                $query->whereNull('forbidden_until')->orWhere('forbidden_until', '>', now());
+            })
+            ->get();
+    }
+
+    /**
+     * @param  Collection<int, ForbiddenHostname>  $activeBans
+     * @param  Collection<int, Server>  $connectivityServers
+     * @return array{kind: string, label: string, blocked_servers: int, total_servers: int}
+     */
+    private function connectivityHealth(Account $account, Collection $activeBans, Collection $connectivityServers): array
+    {
+        $totalServers = $connectivityServers->count();
+
+        if ($this->isConnectivityAutoDisabled($account)) {
+            return [
+                'kind' => 'critical',
+                'label' => 'Trading stopped: no safe server route',
+                'blocked_servers' => 0,
+                'total_servers' => $totalServers,
+            ];
+        }
+
+        if (! $this->hasRequiredCredentials($account)) {
+            return [
+                'kind' => 'unconfigured',
+                'label' => 'Not connected',
+                'blocked_servers' => 0,
+                'total_servers' => $totalServers,
+            ];
+        }
+
+        if ($totalServers === 0) {
+            return [
+                'kind' => 'unconfigured',
+                'label' => 'No eligible servers configured',
+                'blocked_servers' => 0,
+                'total_servers' => 0,
+            ];
+        }
+
+        $accountBans = $activeBans->filter(
+            static fn (ForbiddenHostname $ban): bool => (int) $ban->api_system_id === (int) $account->api_system_id
+                && ($ban->account_id === null || (int) $ban->account_id === (int) $account->id),
+        );
+
+        $eligibleServerIps = $connectivityServers
+            ->pluck('ip_address')
+            ->filter()
+            ->unique();
+        $blockedServerCount = $accountBans
+            ->whereIn('type', [
+                ForbiddenHostname::TYPE_IP_NOT_WHITELISTED,
+                ForbiddenHostname::TYPE_IP_RATE_LIMITED,
+                ForbiddenHostname::TYPE_IP_BANNED,
+            ])
+            ->pluck('ip_address')
+            ->intersect($eligibleServerIps)
+            ->unique()
+            ->count();
+        $hasAccountBlock = $accountBans->contains(
+            static fn (ForbiddenHostname $ban): bool => $ban->type === ForbiddenHostname::TYPE_ACCOUNT_BLOCKED,
+        );
+
+        if ($hasAccountBlock || $blockedServerCount > 0 || $account->disabled_reason === self::CONNECTIVITY_FAILED_REASON) {
+            return [
+                'kind' => 'degraded',
+                'label' => $blockedServerCount > 0
+                    ? sprintf('%d of %d servers blocked', $blockedServerCount, $totalServers)
+                    : 'Connectivity degraded',
+                'blocked_servers' => $blockedServerCount,
+                'total_servers' => $totalServers,
+            ];
+        }
+
+        return [
+            'kind' => 'healthy',
+            'label' => 'No active server blocks',
+            'blocked_servers' => 0,
+            'total_servers' => $totalServers,
+        ];
+    }
+
+    private function isConnectivityAutoDisabled(Account $account): bool
+    {
+        return ! $account->is_active
+            && Str::startsWith((string) $account->disabled_reason, self::CONNECTIVITY_AUTO_DISABLED_REASON_PREFIX);
+    }
+
+    private function connectivitySaveMessage(
+        bool $usesSavedCredentials,
+        bool $allConnected,
+        bool $isActive,
+        bool $subscriptionActive,
+    ): string {
+        if (! $allConnected) {
+            return $usesSavedCredentials
+                ? 'Connectivity result applied. Trading stays disabled until every Kraite server connects.'
+                : 'API keys saved. Trading stays disabled until connectivity succeeds from every Kraite server.';
+        }
+
+        if (! $isActive) {
+            return $usesSavedCredentials
+                ? 'Connectivity result applied. Every server connected, but this account remains inactive.'
+                : 'API keys saved. Every server connected, but this account remains inactive.';
+        }
+
+        if (! $subscriptionActive) {
+            return $usesSavedCredentials
+                ? 'Connectivity result applied. The connection is ready, but an inactive subscription prevents new positions.'
+                : 'API keys saved. The connection is ready, but an inactive subscription prevents new positions.';
+        }
+
+        return $usesSavedCredentials
+            ? 'Connectivity result applied. Trading is enabled for this account.'
+            : 'API keys saved. Trading is enabled for this account.';
     }
 
     private function accountForCurrentUser(int $accountId): Account

@@ -13,8 +13,21 @@
             'note' => $a['disabled_reason'] ?: ($a['is_active'] ? 'Active' : 'Inactive'),
             'equity' => '—',
             'hasCredentials' => (bool) ($a['has_credentials'] ?? false),
+            'isActive' => (bool) ($a['is_active'] ?? false),
+            'subscriptionActive' => (bool) ($a['subscription_active'] ?? true),
+            'openPositionsCount' => (int) ($a['open_positions_count'] ?? 0),
             'needsPass' => (bool) ($a['requires_passphrase'] ?? false),
-            'quotes' => array_values(array_unique(array_filter([$pq, $tq]))),
+            'connectivityHealth' => $a['connectivity_health'] ?? [
+                'kind' => 'unconfigured',
+                'label' => 'Not connected',
+                'blocked_servers' => 0,
+                'total_servers' => 0,
+            ],
+            'quotes' => array_values(array_unique(array_filter([
+                $pq,
+                $tq,
+                ...($a['exchange_canonical'] === 'bitget' ? ['USDT', 'USDC'] : []),
+            ]))),
             'cfg' => [
                 'cfgName' => $a['name'],
                 'canTrade' => (bool) ($a['can_trade'] ?? false),
@@ -88,19 +101,24 @@
                     $cardInit = [
                         'accountId' => $a['id'],
                         'hasCredentials' => $a['hasCredentials'],
+                        'isActive' => $a['isActive'],
+                        'subscriptionActive' => $a['subscriptionActive'],
+                        'openPositionsCount' => $a['openPositionsCount'],
                         'needsPass' => $a['needsPass'],
+                        'connectivityHealth' => $a['connectivityHealth'],
                         'cfg' => $a['cfg'],
                         'servers' => $connectivityServers,
                         'urls' => [
                             'start' => route('accounts.connectivity.test'),
                             'status' => route('accounts.connectivity.status', '__UUID__'),
                             'save' => route('accounts.connectivity.credentials'),
+                            'update' => route('accounts.update'),
                         ],
                     ];
                 @endphp
                 <div class="card card--flat overflow-hidden"
                      x-data="acctCard(@js($cardInit))"
-                     @if($a['hasCredentials'] && ! $a['cfg']['canTrade']) style="border-color: color-mix(in srgb, var(--warn) 32%, var(--border));" @endif>
+                     @if($a['hasCredentials'] && (! $a['cfg']['canTrade'] || ! $a['subscriptionActive'])) style="border-color: color-mix(in srgb, var(--warn) 32%, var(--border));" @endif>
 
                     {{-- ---------- collapsed header ---------- --}}
                     <button type="button" @click="openIdx = openIdx === {{ $i }} ? -1 : {{ $i }}"
@@ -119,7 +137,7 @@
                                   class="hidden sm:inline-flex items-center gap-1.5 font-mono text-[9.5px] font-bold tracking-[0.09em] uppercase"
                                   :style="`color: ${tradingActive() ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`">
                                 <span class="w-[6px] h-[6px] rounded-chip" :style="`background: ${tradingActive() ? 'var(--pnl-up-fg)' : 'var(--border-strong)'}`"></span>
-                                <span x-text="tradingActive() ? 'Trading' : 'Paused'"></span>
+                                <span x-text="tradingActive() ? 'Trading' : 'Not trading'"></span>
                             </span>
                             <span class="font-mono text-[13px] font-semibold text-fg-1 tabular-nums max-[480px]:hidden">{{ $a['equity'] }}</span>
                             {{-- status chip --}}
@@ -149,7 +167,10 @@
                                             class="relative inline-flex items-center gap-2 py-3.5 bg-transparent border-0 font-mono text-[12px] font-semibold tracking-[0.04em] transition-colors duration-fast ease-out cursor-pointer"
                                             :style="`color: ${tab === 'connectivity' ? 'var(--fg-1)' : 'var(--fg-mute)'}`">
                                         Connectivity
-                                        <span class="w-[7px] h-[7px] rounded-chip" :style="`background: ${status().kind === 'ok' ? 'var(--pnl-up-fg)' : status().kind === 'disabled' ? 'var(--warn)' : status().kind === 'testing' ? 'var(--info)' : 'var(--fg-faint)'}`"></span>
+                                        <span class="w-[7px] h-[7px] rounded-chip"
+                                              :class="connectivityStatus().pulse ? 'animate-pulse-soft' : ''"
+                                              :style="`background: ${connectivityStatus().c}`"
+                                              :title="connectivityStatus().t"></span>
                                         <span x-show="tab === 'connectivity'" class="absolute left-0 right-0 -bottom-px h-[2px] rounded-t bg-accent"></span>
                                     </button>
                                 </div>
@@ -169,19 +190,22 @@
                                         </x-form.field>
                                         <x-form.field label="Trading enabled">
                                             <div class="h-[42px] flex items-center gap-3 px-3.5 rounded-control border border-line bg-input">
-                                                <x-form.toggle model="cfg.canTrade" disabledExpr="!connectionUsable()"/>
+                                                <x-form.toggle model="cfg.canTrade" checkedExpr="tradingActive()" clickExpr="requestCanTradeToggle()" disabledExpr="!canChangeTrading()"/>
                                                 <span class="font-mono text-[12px] font-semibold tracking-[0.03em]"
-                                                      :style="`color: ${cfg.canTrade ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`"
-                                                      x-text="cfg.canTrade ? 'CAN TRADE' : 'PAUSED'"></span>
-                                                <span x-show="!connectionUsable()" class="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint">needs connection</span>
+                                                      :style="`color: ${tradingActive() ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`"
+                                                      x-text="tradingActive() ? 'CAN TRADE' : 'NOT TRADING'"></span>
+                                                <span x-show="!subscriptionActive" class="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase text-warn">Subscription inactive</span>
+                                                <span x-show="subscriptionActive && !connectionUsable()" class="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint">needs connection</span>
                                             </div>
-                                            <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5" x-text="cfg.canTrade ? 'Bot may open and manage positions on this account.' : 'Master off — bot will not trade this account.'"></div>
+                                            <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5" x-text="tradingHelper()"></div>
                                         </x-form.field>
-                                        <x-form.field label="Portfolio quote" help="Currency the portfolio is valued in.">
-                                            <x-form.select model="cfg.pq" :options="$a['quotes']"/>
+                                        <x-form.field label="Portfolio quote">
+                                            <x-form.select model="cfg.pq" :options="$a['quotes']" disabledExpr="quotesLocked()"/>
+                                            <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5" x-text="quoteHelper('Currency the portfolio is valued in.')"></div>
                                         </x-form.field>
-                                        <x-form.field label="Trading quote" help="Quote currency for new positions.">
-                                            <x-form.select model="cfg.tq" :options="$a['quotes']"/>
+                                        <x-form.field label="Trading quote">
+                                            <x-form.select model="cfg.tq" :options="$a['quotes']" disabledExpr="quotesLocked()"/>
+                                            <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5" x-text="quoteHelper('Quote currency for new positions.')"></div>
                                         </x-form.field>
                                     </x-form.group>
 
@@ -234,6 +258,9 @@
                                             </template>
                                         </button>
                                         <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.04em] max-[560px]:text-center">Applies to new positions opened after saving</span>
+                                    </div>
+                                    <div x-show="cfgError" x-cloak class="border-t border-line-soft px-6 py-3 max-[640px]:px-4">
+                                        <div class="rounded-control border border-danger/40 bg-danger/10 px-4 py-3 text-[12px] text-danger" x-text="cfgError"></div>
                                     </div>
                                 </div>
 
@@ -384,6 +411,30 @@
                                     </div>
                                 </div>
 
+                            </div>
+                        </div>
+                    </div>
+
+                    <div x-show="stopTradingOpen" x-cloak x-transition.opacity.duration.200ms
+                         class="fixed inset-0 z-[80] flex items-center justify-center p-4"
+                         style="background: rgba(0,0,0,0.45); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+                         @mousedown="stopTradingOpen = false" @keydown.escape.window="stopTradingOpen = false">
+                        <div class="w-[480px] max-w-full bg-surface border border-line-strong rounded-control shadow-3 overflow-hidden" @mousedown.stop>
+                            <div class="flex items-center gap-2.5 py-3 px-5 bg-surface-2 border-b border-line-soft">
+                                <span class="w-[28px] h-[28px] rounded-control flex items-center justify-center flex-shrink-0 text-warn bg-warn/10">
+                                    <x-feathericon-alert-triangle class="w-4 h-4" stroke-width="1.75"/>
+                                </span>
+                                <h4 class="font-sans font-bold text-[15px] text-fg-1">Open positions keep running</h4>
+                                <button type="button" @click="stopTradingOpen = false" class="appearance-none bg-transparent border-0 p-0 ml-auto w-[28px] h-[28px] rounded-control inline-flex items-center justify-center text-fg-mute hover:text-fg-1 hover:bg-hover transition-colors duration-fast cursor-pointer">
+                                    <x-feathericon-x class="w-4 h-4" stroke-width="2"/>
+                                </button>
+                            </div>
+                            <div class="p-5 flex flex-col gap-4">
+                                <p class="text-[12.5px] text-fg-2 leading-normal">This account has <span class="font-mono font-semibold text-fg-1" x-text="openPositionsCount"></span> open <span x-text="openPositionsCount === 1 ? 'position' : 'positions'"></span>. After saving, the bot will continue managing <span x-text="openPositionsCount === 1 ? 'it' : 'them'"></span> until closed, but it will not open new positions.</p>
+                                <div class="flex items-center gap-2.5 flex-wrap">
+                                    <button type="button" @click="confirmStopTrading()" class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] h-[40px] px-4 text-[12px] bg-accent text-accent-on hover:bg-accent-hover">Stop opening new positions</button>
+                                    <button type="button" @click="stopTradingOpen = false" class="appearance-none font-sans font-semibold rounded-control border border-line-strong cursor-pointer inline-flex items-center h-[40px] px-4 text-[12px] bg-transparent text-fg-1 hover:bg-hover">Cancel</button>
+                                </div>
                             </div>
                         </div>
                     </div>

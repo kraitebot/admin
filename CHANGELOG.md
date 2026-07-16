@@ -2,6 +2,31 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.23.0] — 2026-07-17
+
+### Account safety and connectivity
+
+- [NEW FEATURE] **Account cards show final trading readiness and fleet
+  connectivity separately.** Subscription state, open exposure, active server
+  blocks, and engine auto-stop state now produce honest controls and status.
+- [IMPROVED] **A successful full-fleet retest repairs connectivity state.** It
+  can reactivate accounts automatically stopped after every safe route was
+  blocked and clears only that account's connectivity bans.
+- [FIXED] **Quote changes cannot invalidate live exposure.** Portfolio and
+  trading quotes stay locked while positions are open or opening remains
+  enabled; Bitget cards expose both USDT and USDC products once unlocked.
+- [FIXED] Connectivity actions no longer promise new positions when the user's
+  subscription is inactive.
+- [FIXED] The production dependency manifest now resolves tagged Core and AI
+  Bridge releases instead of development branches.
+
+### Tests
+
+- [ADDED] Regression coverage for subscription gates, quote locks, connectivity
+  health, scoped ban cleanup, auto-reactivation, and live JSON saves.
+- [VERIFIED] Full admin suite passes: 146 tests / 691 assertions; production
+  frontend build passes.
+
 ## [0.22.2] — 2026-07-16
 
 ### Bitget USDC futures

@@ -4,14 +4,20 @@
 @props([
     'model',
     'disabledExpr' => 'false',
+    'checkedExpr' => null,
+    'clickExpr' => null,
 ])
+@php
+    $checked = $checkedExpr ?: $model;
+    $click = $clickExpr ?: "{$model} = !{$model}";
+@endphp
 <button type="button" role="switch"
-        :aria-checked="{{ $model }}"
+        :aria-checked="{{ $checked }}"
         :disabled="{{ $disabledExpr }}"
-        @click="{{ $model }} = !{{ $model }}"
+        @click="{{ $click }}"
         :class="({{ $disabledExpr }}) ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer'"
-        :style="({{ $model }}) ? 'background: var(--accent)' : 'background: var(--bg-elev-3); box-shadow: inset 0 0 0 1px var(--border-strong)'"
+        :style="({{ $checked }}) ? 'background: var(--accent)' : 'background: var(--bg-elev-3); box-shadow: inset 0 0 0 1px var(--border-strong)'"
         class="relative inline-flex items-center h-[26px] w-[46px] rounded-chip transition-colors duration-[180ms] ease-out flex-shrink-0">
     <span class="absolute rounded-chip bg-white w-[18px] h-[18px] top-1 shadow-[0_1px_3px_rgba(0,0,0,.4)] transition-[left] duration-[180ms] ease-[cubic-bezier(0.16,1,0.3,1)]"
-          :style="({{ $model }}) ? 'left: 24px' : 'left: 4px'"></span>
+          :style="({{ $checked }}) ? 'left: 24px' : 'left: 4px'"></span>
 </button>

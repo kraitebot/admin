@@ -49,7 +49,7 @@ class DashboardController extends Controller
         // Sysadmin sees every account (cross-user); regular users see
         // only their own. Ordered to match the dropdown's expected
         // grouping: by user (admin view), then exchange + account name.
-        $query = Account::with(['apiSystem', 'user']);
+        $query = Account::with(['apiSystem', 'user.subscription']);
 
         if (! $isAdmin) {
             $query->where('user_id', Auth::id());
@@ -66,7 +66,7 @@ class DashboardController extends Controller
                 'name' => $account->name,
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
                 'owner' => $account->user?->name ?? 'Unknown',
-                'can_trade' => (bool) $account->can_trade,
+                'is_trading' => $account->isReadyToTrade(),
                 'disabled_reason' => $account->disabled_reason,
             ]);
 

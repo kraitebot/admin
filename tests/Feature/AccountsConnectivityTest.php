@@ -28,6 +28,25 @@ beforeEach(function (): void {
         $table->timestamps();
     });
 
+    Schema::create('forbidden_hostnames', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('api_system_id');
+        $table->unsignedBigInteger('account_id')->nullable();
+        $table->string('ip_address', 45);
+        $table->string('type', 32)->default('ip_not_whitelisted');
+        $table->timestamp('forbidden_until')->nullable();
+        $table->string('error_code', 32)->nullable();
+        $table->string('error_message')->nullable();
+        $table->timestamps();
+    });
+
+    Schema::create('positions', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('account_id');
+        $table->string('status');
+        $table->timestamps();
+    });
+
     Schema::table('accounts', function (Blueprint $table): void {
         $table->string('portfolio_quote')->nullable();
         $table->string('trading_quote')->nullable();
@@ -71,21 +90,24 @@ beforeEach(function (): void {
 afterEach(function (): void {
     $migration = require base_path('vendor/brunocfalcao/step-dispatcher/database/migrations/2024_01_01_000000_create_step_dispatcher_tables.php');
     $migration->down();
+    Schema::dropIfExists('positions');
+    Schema::dropIfExists('forbidden_hostnames');
     Schema::dropIfExists('servers');
 });
 
 function createAccountForConnectivityTest(User $user, bool $withCredentials): Account
 {
-    $apiSystemId = DB::table('api_systems')->insertGetId([
-        'name' => 'Binance',
-        'canonical' => 'binance',
-        'created_at' => now(),
-        'updated_at' => now(),
-    ]);
+    $apiSystemId = DB::table('api_systems')->where('canonical', 'binance')->value('id')
+        ?? DB::table('api_systems')->insertGetId([
+            'name' => 'Binance',
+            'canonical' => 'binance',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
 
     $accountId = DB::table('accounts')->insertGetId([
         'uuid' => fake()->uuid(),
-        'name' => 'Connectivity Test Account',
+        'name' => 'Connectivity Test Account '.fake()->uuid(),
         'user_id' => $user->id,
         'api_system_id' => $apiSystemId,
         'trade_configuration_id' => 1,
@@ -106,6 +128,28 @@ function createAccountForConnectivityTest(User $user, bool $withCredentials): Ac
     }
 
     return $account->refresh();
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function validAccountConfigurationPayload(Account $account, array $overrides = []): array
+{
+    return array_merge([
+        'account_id' => $account->id,
+        'name' => $account->name,
+        'portfolio_quote' => $account->portfolio_quote ?: 'USDT',
+        'trading_quote' => $account->trading_quote ?: 'USDT',
+        'can_trade' => (bool) $account->can_trade,
+        'profit_percentage' => '0.360',
+        'stop_market_initial_percentage' => '2.50',
+        'total_positions_long' => 4,
+        'total_positions_short' => 4,
+        'position_leverage_long' => 10,
+        'position_leverage_short' => 10,
+        'margin_percentage_long' => '4.00',
+        'margin_percentage_short' => '4.00',
+    ], $overrides);
 }
 
 it('passes only live API connectivity servers to the accounts page', function (): void {
@@ -130,6 +174,416 @@ it('passes only live API connectivity servers to the accounts page', function ()
         ]);
 });
 
+it('serializes inactive subscription state and only currently open positions', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Expired test plan',
+        'canonical' => 'expired-test-plan',
+        'monthly_rate_usdt' => 25,
+        'trial_days' => 7,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Expired Subscription Owner',
+        'email' => 'expired-subscription-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update([
+        'subscription_id' => $subscriptionId,
+        'subscription_renews_at' => now()->subMinute(),
+    ]);
+    $account = createAccountForConnectivityTest($user, true);
+
+    DB::table('positions')->insert([
+        ['account_id' => $account->id, 'status' => 'active', 'created_at' => now(), 'updated_at' => now()],
+        ['account_id' => $account->id, 'status' => 'closing', 'created_at' => now(), 'updated_at' => now()],
+        ['account_id' => $account->id, 'status' => 'closed', 'created_at' => now(), 'updated_at' => now()],
+    ]);
+
+    $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertViewHas('accounts', function (array $accounts) use ($account): bool {
+            $serialized = collect($accounts)->firstWhere('id', $account->id);
+
+            return $serialized['subscription_active'] === false
+                && $serialized['open_positions_count'] === 2;
+        });
+});
+
+it('serializes the engine subscription gate for every billing state', function (string $state, bool $expectedActive): void {
+    $user = User::factory()->create([
+        'name' => "Subscription State {$state}",
+        'email' => "subscription-state-{$state}@kraite.test",
+    ]);
+
+    if ($state !== 'absent') {
+        $subscriptionId = DB::table('subscriptions')->insertGetId([
+            'name' => "Subscription {$state}",
+            'canonical' => "subscription-{$state}",
+            'monthly_rate_usdt' => $state === 'expired' ? 25 : 0,
+            'trial_days' => 0,
+            'is_active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        DB::table('users')->where('id', $user->id)->update([
+            'subscription_id' => $subscriptionId,
+            'subscription_renews_at' => $state === 'expired' ? now()->subMinute() : null,
+            'subscription_paused_at' => $state === 'paused' ? now() : null,
+        ]);
+    }
+
+    $account = createAccountForConnectivityTest($user, true);
+    $account->forceFill(['can_trade' => true])->save();
+
+    $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertViewHas('accounts', function (array $accounts) use ($account, $expectedActive): bool {
+            $serialized = collect($accounts)->firstWhere('id', $account->id);
+
+            return $serialized['subscription_active'] === $expectedActive;
+        });
+})->with([
+    'no subscription' => ['absent', false],
+    'paused subscription' => ['paused', false],
+    'expired subscription' => ['expired', false],
+    'active free subscription' => ['active', true],
+]);
+
+it('rejects quote changes while preserving every field when an open position exists', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Active test plan',
+        'canonical' => 'active-test-plan',
+        'monthly_rate_usdt' => 0,
+        'trial_days' => 0,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Quote Lock Owner',
+        'email' => 'quote-lock-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update(['subscription_id' => $subscriptionId]);
+    $account = createAccountForConnectivityTest($user, false);
+    $account->forceFill([
+        'name' => 'Quote Lock Account',
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+    ])->save();
+    DB::table('positions')->insert([
+        'account_id' => $account->id,
+        'status' => 'active',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect($account->fresh()->name)->toBe('Quote Lock Account')
+        ->and($account->portfolio_quote)->toBe('USDT')
+        ->and($account->trading_quote)->toBe('USDT');
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'name' => 'Must Not Be Saved',
+            'portfolio_quote' => 'USDC',
+            'trading_quote' => 'USDC',
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['portfolio_quote', 'trading_quote']);
+
+    $account->refresh();
+    expect($account->name)->toBe('Quote Lock Account')
+        ->and($account->portfolio_quote)->toBe('USDT')
+        ->and($account->trading_quote)->toBe('USDT');
+});
+
+it('allows non-quote configuration changes with open positions and quote changes after closure', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Editable test plan',
+        'canonical' => 'editable-test-plan',
+        'monthly_rate_usdt' => 0,
+        'trial_days' => 0,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Editable Account Owner',
+        'email' => 'editable-account-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update(['subscription_id' => $subscriptionId]);
+    $account = createAccountForConnectivityTest($user, false);
+    $account->forceFill([
+        'name' => 'Before Rename',
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+    ])->save();
+    $positionId = DB::table('positions')->insertGetId([
+        'account_id' => $account->id,
+        'status' => 'closing',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'name' => 'Renamed While Open',
+        ]))
+        ->assertSuccessful();
+
+    $account->refresh();
+    expect($account->name)->toBe('Renamed While Open')
+        ->and($account->portfolio_quote)->toBe('USDT')
+        ->and($account->trading_quote)->toBe('USDT');
+
+    DB::table('positions')->where('id', $positionId)->update(['status' => 'closed']);
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'portfolio_quote' => 'USDC',
+            'trading_quote' => 'USDC',
+        ]))
+        ->assertSuccessful();
+
+    $account->refresh();
+    expect($account->portfolio_quote)->toBe('USDC')
+        ->and($account->trading_quote)->toBe('USDC');
+});
+
+it('rejects quote changes while account trading remains enabled', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Trading quote lock plan',
+        'canonical' => 'trading-quote-lock-plan',
+        'monthly_rate_usdt' => 0,
+        'trial_days' => 0,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Trading Quote Lock Owner',
+        'email' => 'trading-quote-lock-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update(['subscription_id' => $subscriptionId]);
+    $account = createAccountForConnectivityTest($user, false);
+    $account->forceFill([
+        'can_trade' => true,
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+    ])->save();
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'portfolio_quote' => 'USDC',
+            'trading_quote' => 'USDC',
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors(['portfolio_quote', 'trading_quote']);
+
+    $account->refresh();
+    expect($account->can_trade)->toBeTrue()
+        ->and($account->portfolio_quote)->toBe('USDT')
+        ->and($account->trading_quote)->toBe('USDT');
+});
+
+it('allows turning trading off and changing quotes in one save without open positions', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Quote unlock plan',
+        'canonical' => 'quote-unlock-plan',
+        'monthly_rate_usdt' => 0,
+        'trial_days' => 0,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Quote Unlock Owner',
+        'email' => 'quote-unlock-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update(['subscription_id' => $subscriptionId]);
+    $account = createAccountForConnectivityTest($user, false);
+    $account->forceFill([
+        'can_trade' => true,
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+    ])->save();
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'can_trade' => false,
+            'portfolio_quote' => 'USDC',
+            'trading_quote' => 'USDC',
+        ]))
+        ->assertSuccessful();
+
+    $account->refresh();
+    expect($account->can_trade)->toBeFalse()
+        ->and($account->portfolio_quote)->toBe('USDC')
+        ->and($account->trading_quote)->toBe('USDC');
+});
+
+it('rejects enabling account trading while the subscription is inactive', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Inactive test plan',
+        'canonical' => 'inactive-test-plan',
+        'monthly_rate_usdt' => 25,
+        'trial_days' => 7,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $user = User::factory()->create([
+        'name' => 'Inactive Subscription Owner',
+        'email' => 'inactive-subscription-owner@kraite.test',
+    ]);
+    DB::table('users')->where('id', $user->id)->update([
+        'subscription_id' => $subscriptionId,
+        'subscription_renews_at' => now()->subMinute(),
+    ]);
+    $account = createAccountForConnectivityTest($user, false);
+    $account->forceFill([
+        'name' => 'Inactive Subscription Account',
+        'portfolio_quote' => 'USDT',
+        'trading_quote' => 'USDT',
+        'can_trade' => false,
+    ])->save();
+
+    expect($account->fresh()->can_trade)->toBeFalse()
+        ->and($account->name)->toBe('Inactive Subscription Account');
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/edit', validAccountConfigurationPayload($account, [
+            'name' => 'Must Not Be Saved',
+            'can_trade' => true,
+        ]))
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('can_trade');
+
+    $account->refresh();
+    expect($account->can_trade)->toBeFalse()
+        ->and($account->name)->toBe('Inactive Subscription Account');
+});
+
+it('reports healthy connectivity when no eligible server has an active block', function (): void {
+    DB::table('servers')->insert([
+        ['hostname' => 'test-healthy-a', 'ip_address' => '203.0.113.20', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+        ['hostname' => 'test-healthy-b', 'ip_address' => '203.0.113.21', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+    ]);
+
+    $user = User::factory()->create([
+        'name' => 'Healthy Connectivity Owner',
+        'email' => 'healthy-connectivity-owner@kraite.test',
+    ]);
+    $account = createAccountForConnectivityTest($user, true);
+    $account->forceFill(['can_trade' => true])->save();
+
+    $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertViewHas('accounts', function (array $accounts) use ($account): bool {
+            $serialized = collect($accounts)->firstWhere('id', $account->id);
+
+            return $serialized['connectivity_health'] === [
+                'kind' => 'healthy',
+                'label' => 'No active server blocks',
+                'blocked_servers' => 0,
+                'total_servers' => 2,
+            ];
+        });
+});
+
+it('reports degraded connectivity for active blocks and ignores expired or retired server blocks', function (): void {
+    DB::table('servers')->insert([
+        ['hostname' => 'test-degraded-a', 'ip_address' => '203.0.113.30', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+        ['hostname' => 'test-degraded-b', 'ip_address' => '203.0.113.31', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+    ]);
+
+    $user = User::factory()->create([
+        'name' => 'Degraded Connectivity Owner',
+        'email' => 'degraded-connectivity-owner@kraite.test',
+    ]);
+    $account = createAccountForConnectivityTest($user, true);
+
+    DB::table('forbidden_hostnames')->insert([
+        [
+            'api_system_id' => $account->api_system_id,
+            'account_id' => $account->id,
+            'ip_address' => '203.0.113.30',
+            'type' => 'ip_not_whitelisted',
+            'forbidden_until' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'api_system_id' => $account->api_system_id,
+            'account_id' => $account->id,
+            'ip_address' => '203.0.113.31',
+            'type' => 'ip_rate_limited',
+            'forbidden_until' => now()->subMinute(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'api_system_id' => $account->api_system_id,
+            'account_id' => $account->id,
+            'ip_address' => '203.0.113.99',
+            'type' => 'ip_not_whitelisted',
+            'forbidden_until' => null,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertViewHas('accounts', function (array $accounts) use ($account): bool {
+            $serialized = collect($accounts)->firstWhere('id', $account->id);
+
+            return $serialized['connectivity_health'] === [
+                'kind' => 'degraded',
+                'label' => '1 of 2 servers blocked',
+                'blocked_servers' => 1,
+                'total_servers' => 2,
+            ];
+        });
+});
+
+it('reports critical connectivity only when the engine auto-stopped the account', function (): void {
+    DB::table('servers')->insert([
+        ['hostname' => 'test-critical-a', 'ip_address' => '203.0.113.40', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+        ['hostname' => 'test-critical-b', 'ip_address' => '203.0.113.41', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'worker'],
+    ]);
+
+    $user = User::factory()->create([
+        'name' => 'Critical Connectivity Owner',
+        'email' => 'critical-connectivity-owner@kraite.test',
+    ]);
+    $account = createAccountForConnectivityTest($user, true);
+    $account->forceFill([
+        'is_active' => false,
+        'can_trade' => true,
+        'disabled_reason' => 'All worker IPs blacklisted on Binance — fix whitelist/API key and reactivate',
+        'disabled_at' => now(),
+    ])->save();
+
+    $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertViewHas('accounts', function (array $accounts) use ($account): bool {
+            $serialized = collect($accounts)->firstWhere('id', $account->id);
+
+            return $serialized['connectivity_health'] === [
+                'kind' => 'critical',
+                'label' => 'Trading stopped: no safe server route',
+                'blocked_servers' => 0,
+                'total_servers' => 2,
+            ];
+        });
+});
+
 it('renders the supplied server roster without placeholder connectivity results', function (): void {
     $html = view('accounts.edit', [
         'accounts' => [[
@@ -142,6 +596,12 @@ it('renders the supplied server roster without placeholder connectivity results'
             'disabled_at' => null,
             'has_credentials' => true,
             'requires_passphrase' => false,
+            'connectivity_health' => [
+                'kind' => 'healthy',
+                'label' => 'No active server blocks',
+                'blocked_servers' => 0,
+                'total_servers' => 1,
+            ],
             'name' => 'Test Binance Account',
             'portfolio_quote' => 'USDT',
             'trading_quote' => 'USDT',
@@ -189,6 +649,42 @@ it('starts a real per-server workflow with saved credentials when replacement fi
     ]);
     $account = createAccountForConnectivityTest($user, true);
     $credentialsBefore = $account->all_credentials;
+    $account->forceFill([
+        'is_active' => false,
+        'can_trade' => true,
+        'disabled_reason' => 'All worker IPs blacklisted on Binance — fix whitelist/API key and reactivate',
+        'disabled_at' => now(),
+    ])->save();
+
+    $otherUser = User::factory()->create([
+        'name' => 'Unrelated Connectivity Owner',
+        'email' => 'unrelated-connectivity-owner@kraite.test',
+    ]);
+    $otherAccount = createAccountForConnectivityTest($otherUser, true);
+
+    DB::table('forbidden_hostnames')->insert([
+        [
+            'api_system_id' => $account->api_system_id,
+            'account_id' => $account->id,
+            'ip_address' => '203.0.113.50',
+            'type' => 'ip_not_whitelisted',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'api_system_id' => $otherAccount->api_system_id,
+            'account_id' => $otherAccount->id,
+            'ip_address' => '203.0.113.50',
+            'type' => 'ip_not_whitelisted',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    expect($account->is_active)->toBeFalse()
+        ->and($account->can_trade)->toBeTrue()
+        ->and(DB::table('forbidden_hostnames')->where('account_id', $account->id)->exists())->toBeTrue()
+        ->and(DB::table('forbidden_hostnames')->where('account_id', $otherAccount->id)->exists())->toBeTrue();
 
     $response = $this->actingAs($user)
         ->postJson('https://admin.kraite.test/accounts/connectivity/test', [
@@ -237,10 +733,17 @@ it('starts a real per-server workflow with saved credentials when replacement fi
             'tested_block_uuid' => $response->json('block_uuid'),
         ])
         ->assertSuccessful()
-        ->assertJsonPath('account.can_trade', true);
+        ->assertJsonPath('message', 'Connectivity result applied. The connection is ready, but an inactive subscription prevents new positions.')
+        ->assertJsonPath('account.can_trade', true)
+        ->assertJsonPath('account.is_active', true)
+        ->assertJsonPath('account.connectivity_health.kind', 'healthy');
 
     expect($account->refresh()->all_credentials)->toBe($credentialsBefore)
         ->and($account->can_trade)->toBeTrue()
+        ->and($account->is_active)->toBeTrue()
+        ->and($account->disabled_reason)->toBeNull()
+        ->and(DB::table('forbidden_hostnames')->where('account_id', $account->id)->exists())->toBeFalse()
+        ->and(DB::table('forbidden_hostnames')->where('account_id', $otherAccount->id)->exists())->toBeTrue()
         ->and(Account::withTrashed()->find($testedAccount->id))->toBeNull();
 });
 
@@ -416,6 +919,7 @@ it('tests replacement credentials on a draft and applies only the completed resu
             'api_secret' => 'replacement-secret',
         ])
         ->assertSuccessful()
+        ->assertJsonPath('message', 'API keys saved. The connection is ready, but an inactive subscription prevents new positions.')
         ->assertJsonPath('account.can_trade', true)
         ->assertJsonPath('account.has_credentials', true);
 

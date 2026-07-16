@@ -520,7 +520,7 @@
                         <button type="button" @click="acctOpen = !acctOpen"
                                 :class="acctOpen ? 'border-accent' : 'border-line hover:border-line-strong'"
                                 class="inline-flex items-center gap-[9px] h-[34px] border rounded-control bg-surface px-3 cursor-pointer text-[12.5px] text-fg-2 max-w-[280px] transition-colors duration-fast ease-out max-[640px]:max-w-none max-[640px]:flex-1">
-                            <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :class="account()?.can_trade ? 'bg-green-500' : 'bg-warn'"></span>
+                            <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :class="account()?.is_trading ? 'bg-green-500' : 'bg-warn'"></span>
                             <span class="whitespace-nowrap overflow-hidden text-ellipsis" x-text="account() ? `${account().name} · ${account().exchange}` : 'Pick an account'"></span>
                             <x-feathericon-chevron-down class="w-[14px] h-[14px] text-fg-mute" stroke-width="1.75"/>
                         </button>
@@ -530,7 +530,7 @@
                                 <button type="button" @click="setAccount(a.id)"
                                         :class="a.id === accountId ? 'bg-hover' : ''"
                                         class="appearance-none cursor-pointer text-left flex items-center gap-2.5 bg-transparent border-0 rounded-[7px] py-2 px-[9px] transition-colors duration-fast ease-out hover:bg-hover">
-                                    <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :class="a.can_trade ? 'bg-green-500' : 'bg-warn'"></span>
+                                    <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :class="a.is_trading ? 'bg-green-500' : 'bg-warn'"></span>
                                     <span class="flex flex-col leading-[1.2] flex-1 min-w-0">
                                         <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap" x-text="a.name"></span>
                                         <span class="font-mono text-[10px] text-fg-mute" x-text="a.exchange + (a.owner ? ' · ' + a.owner : '')"></span>

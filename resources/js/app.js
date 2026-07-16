@@ -292,13 +292,23 @@ window.hubUiFetch = async (url, options = {}) => {
 };
 
 window.acctCard = (init) => ({
-    tab: init.hasCredentials && !init.cfg.canTrade ? 'connectivity' : 'general',
+    tab: ['degraded', 'critical'].includes(init.connectivityHealth.kind)
+        || (init.hasCredentials && !init.cfg.canTrade)
+        ? 'connectivity'
+        : 'general',
     phase: init.hasCredentials ? 'idle' : 'empty',
     hasCredentials: init.hasCredentials,
+    isActive: init.isActive,
+    subscriptionActive: init.subscriptionActive,
+    openPositionsCount: init.openPositionsCount,
+    hasOpenPositions: init.openPositionsCount > 0,
+    connectivityHealth: { ...init.connectivityHealth },
     creds: { key: '', secret: '', pass: '' },
     rows: init.servers.map((server) => ({ ...server, status: 'idle' })),
     cfg: { ...init.cfg },
     cfgSaved: 'idle',
+    cfgError: null,
+    stopTradingOpen: false,
     connDone: false,
     connError: null,
     connSaving: false,
@@ -307,6 +317,7 @@ window.acctCard = (init) => ({
     testedMode: null,
     _pollTimer: null,
     _feedbackTimer: null,
+    _cfgFeedbackTimer: null,
 
     tested() {
         return this.phase === 'ok' || this.phase === 'fail';
@@ -340,14 +351,64 @@ window.acctCard = (init) => ({
         return !this.hasCredentials;
     },
     connectionUsable() {
-        return this.phase === 'ok'
-            || (this.phase === 'idle' && this.hasCredentials && this.cfg.canTrade);
+        return this.isActive && (
+            this.phase === 'ok'
+            || (this.phase === 'idle' && this.hasCredentials && this.connectivityHealth.kind === 'healthy')
+        );
+    },
+    canChangeTrading() {
+        return this.subscriptionActive && this.connectionUsable();
     },
     tradingDisabled() {
-        return this.hasCredentials && !this.cfg.canTrade;
+        return this.hasCredentials && (!this.cfg.canTrade || !this.isActive || !this.subscriptionActive);
     },
     tradingActive() {
-        return this.hasCredentials && this.cfg.canTrade;
+        return this.hasCredentials
+            && this.cfg.canTrade
+            && this.isActive
+            && this.subscriptionActive
+            && this.connectionUsable();
+    },
+    tradingHelper() {
+        if (!this.subscriptionActive) {
+            return 'Subscription inactive — the bot will continue managing open positions but will not open new ones.';
+        }
+
+        return this.cfg.canTrade
+            ? 'Bot may open new positions and will continue managing open positions on this account.'
+            : 'Bot will continue managing open positions but will not open new ones.';
+    },
+    quotesLocked() {
+        return this.hasOpenPositions || this.cfg.canTrade;
+    },
+    quoteHelper(defaultText) {
+        if (this.hasOpenPositions) {
+            return 'Locked while this account has open positions.';
+        }
+        if (this.cfg.canTrade) {
+            return 'Turn off Can trade to change this quote.';
+        }
+
+        return defaultText;
+    },
+    requestCanTradeToggle() {
+        if (!this.canChangeTrading()) {
+            return;
+        }
+        if (!this.cfg.canTrade) {
+            this.cfg.canTrade = true;
+            return;
+        }
+        if (this.hasOpenPositions) {
+            this.stopTradingOpen = true;
+            return;
+        }
+
+        this.cfg.canTrade = false;
+    },
+    confirmStopTrading() {
+        this.cfg.canTrade = false;
+        this.stopTradingOpen = false;
     },
     connectedCount() {
         return this.rows.filter((server) => server.status === 'connected').length;
@@ -356,20 +417,53 @@ window.acctCard = (init) => ({
         if (this.testing()) {
             return { kind: 'testing', c: 'var(--info)', t: 'Testing…', pulse: false };
         }
-        if (this.phase === 'ok') {
-            return { kind: 'ok', c: 'var(--pnl-up-fg)', t: 'Connection verified', pulse: false };
+        if (this.connectivityStatus().kind === 'critical') {
+            return { kind: 'disabled', c: 'var(--danger)', t: 'Trading stopped', pulse: true };
         }
         if (this.phase === 'fail') {
-            return { kind: 'disabled', c: 'var(--danger)', t: 'Test failed', pulse: true };
+            return { kind: 'disabled', c: 'var(--warn)', t: 'Test failed', pulse: true };
+        }
+        if (this.connectivityStatus().kind === 'degraded') {
+            return { kind: 'disabled', c: 'var(--warn)', t: 'Connectivity degraded', pulse: true };
+        }
+        if (!this.subscriptionActive) {
+            return { kind: 'disabled', c: 'var(--warn)', t: 'Not trading', pulse: false };
+        }
+        if (this.phase === 'ok') {
+            return this.cfg.canTrade
+                ? { kind: 'saved', c: 'var(--pnl-up-fg)', t: 'Trading enabled', pulse: false }
+                : { kind: 'disabled', c: 'var(--warn)', t: 'Not trading', pulse: false };
         }
         if (this.tradingActive()) {
             return { kind: 'saved', c: 'var(--pnl-up-fg)', t: 'Trading enabled', pulse: false };
         }
         if (this.tradingDisabled()) {
-            return { kind: 'disabled', c: 'var(--warn)', t: 'Trading disabled', pulse: true };
+            return { kind: 'disabled', c: 'var(--warn)', t: 'Not trading', pulse: false };
         }
 
         return { kind: 'none', c: 'var(--fg-mute)', t: 'Not connected', pulse: false };
+    },
+    connectivityStatus() {
+        if (this.testing()) {
+            return { kind: 'testing', c: 'var(--info)', t: 'Testing every server…', pulse: false };
+        }
+        if (this.phase === 'ok') {
+            return { kind: 'healthy', c: 'var(--pnl-up-fg)', t: 'All servers passed the latest test', pulse: false };
+        }
+        if (this.connectivityHealth.kind === 'critical') {
+            return { kind: 'critical', c: 'var(--danger)', t: this.connectivityHealth.label, pulse: true };
+        }
+        if (this.phase === 'fail') {
+            return { kind: 'degraded', c: 'var(--warn)', t: 'Some servers failed the latest test', pulse: true };
+        }
+        if (this.connectivityHealth.kind === 'degraded') {
+            return { kind: 'degraded', c: 'var(--warn)', t: this.connectivityHealth.label, pulse: true };
+        }
+        if (this.connectivityHealth.kind === 'healthy') {
+            return { kind: 'healthy', c: 'var(--pnl-up-fg)', t: this.connectivityHealth.label, pulse: false };
+        }
+
+        return { kind: 'unconfigured', c: 'var(--fg-faint)', t: this.connectivityHealth.label, pulse: false };
     },
     resultColor(status) {
         if (status === 'connected') {
@@ -409,6 +503,10 @@ window.acctCard = (init) => ({
             return this.testedMode === 'replacement' ? 'Save keys (trading stays off)' : 'Apply result (trading off)';
         }
 
+        if (!this.subscriptionActive) {
+            return this.testedMode === 'replacement' ? 'Save connection' : 'Apply connection result';
+        }
+
         return this.testedMode === 'replacement' ? 'Save & enable trading' : 'Apply result & enable trading';
     },
     credentialPayload() {
@@ -440,6 +538,9 @@ window.acctCard = (init) => ({
         }
         if (this._feedbackTimer) {
             clearTimeout(this._feedbackTimer);
+        }
+        if (this._cfgFeedbackTimer) {
+            clearTimeout(this._cfgFeedbackTimer);
         }
     },
     async runTest() {
@@ -543,6 +644,8 @@ window.acctCard = (init) => ({
         }
 
         this.hasCredentials = response.data.account.has_credentials;
+        this.isActive = response.data.account.is_active;
+        this.connectivityHealth = { ...response.data.account.connectivity_health };
         this.cfg.canTrade = response.data.account.can_trade;
         this.phase = response.data.account.can_trade ? 'ok' : 'fail';
         this.creds = { key: '', secret: '', pass: '' };
@@ -557,18 +660,56 @@ window.acctCard = (init) => ({
             this.connDone = false;
         }, 1900);
     },
-    saveCfg() {
+    async saveCfg() {
         if (this.configLocked() || this.cfgSaved !== 'idle') {
             return;
         }
 
         this.cfgSaved = 'saving';
-        setTimeout(() => {
-            this.cfgSaved = 'done';
-        }, 520);
-        setTimeout(() => {
+        this.cfgError = null;
+
+        const response = await window.hubUiFetch(init.urls.update, {
+            method: 'PATCH',
+            body: {
+                account_id: init.accountId,
+                name: this.cfg.cfgName,
+                portfolio_quote: this.cfg.pq,
+                trading_quote: this.cfg.tq,
+                ...(this.subscriptionActive ? { can_trade: this.cfg.canTrade } : {}),
+                profit_percentage: this.cfg.pt,
+                stop_market_initial_percentage: this.cfg.sl,
+                total_positions_long: this.cfg.sL,
+                total_positions_short: this.cfg.sS,
+                position_leverage_long: this.cfg.lL,
+                position_leverage_short: this.cfg.lS,
+                margin_percentage_long: this.cfg.mL,
+                margin_percentage_short: this.cfg.mS,
+            },
+        });
+
+        if (!response.ok) {
             this.cfgSaved = 'idle';
-        }, 2200);
+            const errors = response.data?.errors;
+            this.cfgError = errors
+                ? Object.values(errors).flat()[0]
+                : (response.data?.error || 'Could not save the account configuration.');
+            return;
+        }
+
+        this.cfg.canTrade = response.data.account.can_trade;
+        this.cfg.pq = response.data.account.portfolio_quote;
+        this.cfg.tq = response.data.account.trading_quote;
+        this.subscriptionActive = response.data.account.subscription_active;
+        this.openPositionsCount = response.data.account.open_positions_count;
+        this.hasOpenPositions = this.openPositionsCount > 0;
+        this.cfgSaved = 'done';
+
+        if (this._cfgFeedbackTimer) {
+            clearTimeout(this._cfgFeedbackTimer);
+        }
+        this._cfgFeedbackTimer = setTimeout(() => {
+            this.cfgSaved = 'idle';
+        }, 1900);
     },
 });
 
