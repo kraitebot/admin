@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.22.2] — 2026-07-16
+
+### Bitget USDC futures
+- [FIXED] Production now ships Kraite Core 1.73.3, preserving tiny Bitget
+  USDC tick sizes so admin trading metadata never displays a zero increment.
+
+### Tests
+- [VERIFIED] Full admin suite passes: 133 tests / 613 assertions; production
+  frontend build passes.
+
 ## [0.22.1] — 2026-07-16
 
 ### Deployment safety
