@@ -716,10 +716,14 @@ class DashboardController extends Controller
             ? api_format_price($v, $exchangeSymbol)
             : $v;
 
-        // Limit ticks — every LIMIT order with its price + filled state so
-        // the bar can hide already-consumed rungs while keeping unfilled ones.
+        // Limit ticks — current/filled ladder rungs only. The orders relation
+        // also contains cancelled history, including rows replaced at the
+        // same ladder level; counting those makes the configured ladder grow.
+        // This matches Position::lastLimitOrder() and the fleet positions UI.
         $limits = $position->orders
             ->where('type', 'LIMIT')
+            ->whereNotNull('exchange_order_id')
+            ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
             ->sortBy('quantity')
             ->values()
             ->map(fn ($order, $idx) => [
@@ -732,7 +736,7 @@ class DashboardController extends Controller
             ])
             ->all();
 
-        $totalLimits = count($limits);
+        $totalLimits = (int) ($position->total_limit_orders ?? count($limits));
         $filledCount = collect($limits)->filter(fn ($l) => $l['filled'])->count();
 
         // Alpha values — reimplement against mark_price (kraite-core's

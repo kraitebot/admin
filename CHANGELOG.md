@@ -2,6 +2,11 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.21.1] — 2026-07-16
+
+### Fixed
+- [BUG FIX] **Dashboard position cards no longer count cancelled replacement history as extra ladder orders.** The lifecycle bar and Filled total now use only exchange-placed current or filled rungs, while the position's configured ladder size remains authoritative.
+
 ## [0.21.0] — 2026-07-15
 
 ### Features
