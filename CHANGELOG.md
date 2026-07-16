@@ -2,6 +2,12 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.22.1] — 2026-07-16
+
+### Deployment safety
+- [FIXED] Production now ships Kraite Core 1.73.2, so slow-query monitoring
+  cannot interrupt fresh schema migrations before admin settings exist.
+
 ## [0.22.0] — 2026-07-16
 
 ### Changed
