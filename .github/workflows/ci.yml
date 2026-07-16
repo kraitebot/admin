@@ -30,41 +30,14 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Checkout kraitebot/core
-        uses: actions/checkout@v4
-        with:
-          repository: kraitebot/core
-          path: packages/kraitebot/core
-
-      - name: Checkout brunocfalcao/ai-bridge
-        uses: actions/checkout@v4
-        with:
-          repository: brunocfalcao/ai-bridge
-          path: packages/brunocfalcao/ai-bridge
-
-      - name: Checkout brunocfalcao/hub-ui
-        uses: actions/checkout@v4
-        with:
-          repository: brunocfalcao/hub-ui
-          path: packages/brunocfalcao/hub-ui
-
-      - name: Checkout brunocfalcao/step-dispatcher
-        uses: actions/checkout@v4
-        with:
-          repository: brunocfalcao/step-dispatcher
-          path: packages/brunocfalcao/step-dispatcher
-
-      - name: Checkout brunocfalcao/laravel-helpers
-        uses: actions/checkout@v4
-        with:
-          repository: brunocfalcao/laravel-helpers
-          path: packages/brunocfalcao/laravel-helpers
-
-      - name: Checkout brunocfalcao/laravel-zepto-mail-api-driver
-        uses: actions/checkout@v4
-        with:
-          repository: brunocfalcao/laravel-zepto-mail-api-driver
-          path: packages/brunocfalcao/laravel-zepto-mail-api-driver
+      - name: Checkout local packages
+        run: |
+          git clone --depth 1 https://github.com/kraitebot/core.git packages/kraitebot/core
+          git clone --depth 1 https://github.com/brunocfalcao/ai-bridge.git packages/brunocfalcao/ai-bridge
+          git clone --depth 1 https://github.com/brunocfalcao/hub-ui.git packages/brunocfalcao/hub-ui
+          git clone --depth 1 https://github.com/brunocfalcao/step-dispatcher.git packages/brunocfalcao/step-dispatcher
+          git clone --depth 1 https://github.com/brunocfalcao/laravel-helpers.git packages/brunocfalcao/laravel-helpers
+          git clone --depth 1 https://github.com/brunocfalcao/laravel-zepto-mail-api-driver.git packages/brunocfalcao/laravel-zepto-mail-api-driver
 
       - name: Setup PHP
         uses: shivammathur/setup-php@v2

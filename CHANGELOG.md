@@ -24,6 +24,8 @@ All notable changes to the admin.kraite.com project.
 
 - [ADDED] Regression coverage for subscription gates, quote locks, connectivity
   health, scoped ban cleanup, auto-reactivation, and live JSON saves.
+- [FIXED] CI checks out public local packages through Git transport so a
+  degraded GitHub API cannot block the release before tests start.
 - [VERIFIED] Full admin suite passes: 146 tests / 691 assertions; production
   frontend build passes.
 
