@@ -59,6 +59,15 @@ jobs:
 
       - name: Install Composer dependencies
         run: |
+          php -r '
+            $composer = json_decode(file_get_contents("composer.json"), true);
+            foreach ($composer["repositories"] as &$repository) {
+                if (isset($repository["url"]) && str_starts_with($repository["url"], "../packages/")) {
+                    $repository["url"] = "./".substr($repository["url"], 3);
+                }
+            }
+            file_put_contents("composer.json", json_encode($composer, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL);
+          '
           rm -f composer.lock
           composer install --no-interaction --prefer-dist --optimize-autoloader
 
