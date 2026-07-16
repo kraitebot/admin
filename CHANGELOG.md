@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.22.0] — 2026-07-16
+
+### Changed
+- [CHANGED] **Customer billing no longer offers subscription pause or
+  resume.** The controls and public action endpoints are removed; plan
+  changes and top-ups remain available, while existing paused back-end
+  state continues to be honoured safely.
+- [IMPROVED] **Plan-switch buttons use the primary action treatment,**
+  making the next billing action visually clear.
+
+### Tests
+- [ADDED] Regression coverage proves pause/resume controls and endpoints
+  are absent while the remaining billing actions still render.
+- [VERIFIED] Full admin suite passes: 133 tests / 613 assertions.
+
 ## [0.21.1] — 2026-07-16
 
 ### Fixed

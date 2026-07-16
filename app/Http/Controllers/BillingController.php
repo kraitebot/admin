@@ -58,7 +58,6 @@ final class BillingController extends Controller
             'transactions' => $transactions,
             'trialActive' => $trialActive,
             'isComplimentaryPlan' => $isComplimentaryPlan,
-            'isPaused' => $user->isPaused(),
             'inClosingMode' => $user->isInClosingMode(),
             'rateCovered' => $user->subscriptionCoversNextRenewal(),
             'shortfall' => $user->renewalShortfallUsdt(),
@@ -119,12 +118,6 @@ final class BillingController extends Controller
                 Rule::exists('accounts', 'id')->where('user_id', $user->id),
             ],
         ]);
-
-        if ($user->isPaused()) {
-            return redirect()
-                ->route('billing')
-                ->with('error', 'Resume your subscription before changing plan.');
-        }
 
         $newTier = Subscription::findOrFail((int) $data['subscription_id']);
 
@@ -428,26 +421,6 @@ final class BillingController extends Controller
         $payment->save();
 
         return redirect()->away($invoice['invoice_url']);
-    }
-
-    public function pause(Request $request): RedirectResponse
-    {
-        $user = $this->kraiteUser($request);
-        $user->pause();
-
-        return redirect()
-            ->route('billing')
-            ->with('status', 'Subscription paused. New positions blocked; existing trades unaffected.');
-    }
-
-    public function resume(Request $request): RedirectResponse
-    {
-        $user = $this->kraiteUser($request);
-        $user->resume();
-
-        return redirect()
-            ->route('billing')
-            ->with('status', 'Subscription resumed. Renewal anchor pushed forward by the pause duration.');
     }
 
     private function kraiteUser(Request $request): KraiteUser

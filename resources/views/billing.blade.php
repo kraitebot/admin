@@ -48,12 +48,10 @@
     // ---- derived state machine + Alpine config ----
     $currentPlan = $tier ? ($tier->canonical ?? (string) $tier->id) : null;
     $view = ! $tier ? 'no-plan'
-        : ($isComplimentaryPlan
-            ? ($isPaused ? 'paused' : 'complimentary')
+        : ($isComplimentaryPlan ? 'complimentary'
             : ($user->trial_started_at === null ? 'trial-ready'
             : ($trialActive ? 'trial'
-            : ($isPaused ? 'paused'
-            : ($inClosingMode ? 'read-only' : 'active')))));
+            : ($inClosingMode ? 'read-only' : 'active'))));
 
     $stateSubscriptions = $subscriptions->values();
     if ($tier && ! $stateSubscriptions->contains('id', $tier->id)) {
@@ -77,7 +75,6 @@
         'activeAccountId' => $user->active_account_id,
         'minimumTopUp' => $topUpMinimum,
         'trialSecs' => $trialSeconds,
-        'pausedSince' => $user->subscription_paused_at?->format('M j, Y'),
         'renewalLabel' => $renewsAt?->format('M j, Y') ?? '—',
         'daysLeft' => $renewsAt ? max(0, (int) ceil(now()->floatDiffInDays($renewsAt, false))) : 0,
         'ledger' => $ledger,
@@ -110,7 +107,7 @@
 
     <script>
         // Billing page state machine — prepaid USDT wallet, monthly debits.
-        // Views: no-plan · trial-ready · trial · complimentary · paused · read-only · active.
+        // Views: no-plan · trial-ready · trial · complimentary · read-only · active.
         window.billingPage = (cfg) => {
             const RATES = cfg.rates || {};
             const NAMES = cfg.names || {};
@@ -128,8 +125,6 @@
                 view: cfg.view,
                 plan: cfg.plan,
                 wallet: Number(cfg.wallet) || 0,
-                pausedSince: cfg.pausedSince,
-                pausing: false,
                 switchTo: null,
                 keepAcct: cfg.activeAccountId || null,
                 credited: null,
@@ -228,8 +223,6 @@
                 },
                 choosePlan(id) { this.startSwitch(id); },
                 startTrial() { this.submitForm('startTrialForm'); },
-                pauseConfirm() { this.pausing = false; this.submitForm('pauseForm'); },
-                resume() { this.submitForm('resumeForm'); },
                 topUpGo() { if (!this.belowMin() && this.amtNum() > 0) this.invoice = { amount: this.amtNum() }; },
                 continueGateway() { this.submitForm('topUpForm'); },
                 submitForm(ref) {
@@ -256,12 +249,6 @@
             <input type="hidden" name="active_account_id" :value="keepAcct || ''">
         </form>
         <form x-ref="startTrialForm" method="POST" action="{{ route('billing.start-trading') }}" class="hidden" aria-hidden="true">
-            @csrf
-        </form>
-        <form x-ref="pauseForm" method="POST" action="{{ route('billing.pause') }}" class="hidden" aria-hidden="true">
-            @csrf
-        </form>
-        <form x-ref="resumeForm" method="POST" action="{{ route('billing.resume') }}" class="hidden" aria-hidden="true">
             @csrf
         </form>
         <form x-ref="topUpForm" method="POST" action="{{ route('billing.topup') }}" class="hidden" aria-hidden="true">
@@ -332,25 +319,6 @@
                 </div>
             </div>
         </template>
-        <template x-if="view === 'paused'">
-            <div class="rounded-surface border px-5 py-4 mb-6 flex items-center gap-4 max-[760px]:flex-col max-[760px]:items-start"
-                 style="border-color: color-mix(in srgb, var(--warn) 42%, transparent); background: color-mix(in srgb, var(--warn) 9%, transparent);">
-                <span class="flex-shrink-0 flex text-warn"><x-feathericon-pause class="w-[22px] h-[22px]" stroke-width="1.75"/></span>
-                <div class="flex-1 min-w-0">
-                    <div class="font-sans font-semibold text-[14.5px] text-fg-1 leading-tight" x-text="`Subscription paused since ${pausedSince}`"></div>
-                    <div class="text-[12.5px] text-fg-3 mt-1 leading-snug">
-                        @if($isComplimentaryPlan)
-                            Trading is paused. Existing positions keep closing; new positions are blocked. Your complimentary plan stays assigned.
-                        @else
-                            Renewals are stopped. Existing positions keep trading; new positions are blocked. Resuming moves your renewal date forward by the pause length.
-                        @endif
-                    </div>
-                </div>
-                <div class="flex-shrink-0 max-[760px]:w-full">
-                    <button type="button" @click="resume()" class="{{ $btnPrimary }} h-[40px] px-5 text-[13px]"><x-feathericon-play class="w-[15px] h-[15px]" stroke-width="1.75"/>Resume subscription</button>
-                </div>
-            </div>
-        </template>
         <template x-if="view === 'read-only'">
             <div class="rounded-surface border px-5 py-4 mb-6 flex items-center gap-4 max-[760px]:flex-col max-[760px]:items-start"
                  style="border-color: color-mix(in srgb, var(--danger) 42%, transparent); background: color-mix(in srgb, var(--danger) 9%, transparent);">
@@ -417,28 +385,11 @@
                         </div>
                     </template>
 
-                    <template x-if="view === 'complimentary' && !pausing">
-                        <div class="flex flex-col h-full">
-                            <div class="flex flex-1 flex-col justify-center gap-2">
-                                <div class="{{ $eyebrow }} flex items-center gap-2"><x-feathericon-star class="h-3 w-3" stroke-width="2"/>Complimentary access</div>
-                                <div class="font-sans text-[17px] font-semibold text-fg-1" x-text="planName()"></div>
-                                <div class="max-w-[310px] text-[12.5px] leading-snug text-fg-3">Free forever. No trial, renewal date, or wallet debit. Trading stays enabled while this plan is assigned.</div>
-                            </div>
-                            <button type="button" @click="pausing = true" class="mt-3 inline-flex cursor-pointer appearance-none self-start items-center gap-1.5 border-0 bg-transparent font-mono text-[10.5px] uppercase tracking-[0.06em] text-fg-mute transition-colors duration-fast hover:text-fg-2"><x-feathericon-pause class="h-3 w-3" stroke-width="2"/>Pause subscription</button>
-                        </div>
-                    </template>
-
-                    <template x-if="view === 'paused'">
+                    <template x-if="view === 'complimentary'">
                         <div class="flex flex-col items-start justify-center h-full gap-2">
-                            <div class="{{ $eyebrow }} flex items-center gap-2 !text-warn"><x-feathericon-pause class="w-3 h-3" stroke-width="2"/>Subscription paused</div>
-                            <div class="font-sans text-[15px] text-fg-1 font-semibold" x-text="`Paused since ${pausedSince}`"></div>
-                            <div class="text-[12.5px] text-fg-3 leading-snug max-w-[270px]">
-                                @if($isComplimentaryPlan)
-                                    Your free access stays assigned. Existing positions keep closing; new positions are blocked until you resume.
-                                @else
-                                    Renewals are stopped and the wallet is untouched. Existing positions keep trading; new positions are blocked. Resuming pushes the renewal date forward by the pause length.
-                                @endif
-                            </div>
+                            <div class="{{ $eyebrow }} flex items-center gap-2"><x-feathericon-star class="h-3 w-3" stroke-width="2"/>Complimentary access</div>
+                            <div class="font-sans text-[17px] font-semibold text-fg-1" x-text="planName()"></div>
+                            <div class="max-w-[310px] text-[12.5px] leading-snug text-fg-3">Free forever. No trial, renewal date, or wallet debit. Trading stays enabled while this plan is assigned.</div>
                         </div>
                     </template>
 
@@ -453,28 +404,8 @@
                         </div>
                     </template>
 
-                    {{-- pause confirm (active view, pausing) --}}
-                    <template x-if="(view === 'active' || view === 'complimentary') && pausing">
-                        <div class="flex flex-col items-start justify-center h-full gap-3">
-                            <div>
-                                <div class="font-sans font-semibold text-[14px] text-fg-1">Pause subscription?</div>
-                                <div class="text-[12px] text-fg-3 mt-1 leading-snug max-w-[270px]">
-                                    @if($isComplimentaryPlan)
-                                        Existing positions keep closing; new positions are blocked. Your free plan stays assigned and can be resumed anytime.
-                                    @else
-                                        Renewals stop and nothing is debited. Existing positions keep trading; new positions are blocked. Resume anytime — your renewal date moves forward by the pause length.
-                                    @endif
-                                </div>
-                            </div>
-                            <div class="flex items-center gap-2">
-                                <button type="button" @click="pauseConfirm()" class="{{ $btnPrimary }} h-[34px] px-3.5" style="background: var(--warn); color: #1a1200;"><x-feathericon-pause class="w-3.5 h-3.5" stroke-width="1.75"/>Pause now</button>
-                                <button type="button" @click="pausing = false" class="{{ $btnSecondary }} h-[34px] px-3">Keep active</button>
-                            </div>
-                        </div>
-                    </template>
-
                     {{-- active — covered / short --}}
-                    <template x-if="view === 'active' && !pausing">
+                    <template x-if="view === 'active'">
                         <div class="flex flex-col h-full">
                             <div class="flex-1 flex flex-col justify-center gap-2">
                                 <div class="{{ $eyebrow }}">Next renewal</div>
@@ -495,9 +426,6 @@
                                     </div>
                                 </template>
                             </div>
-                            <button type="button" @click="pausing = true" class="self-start mt-3 appearance-none bg-transparent border-0 cursor-pointer font-mono text-[10.5px] tracking-[0.06em] uppercase text-fg-mute inline-flex items-center gap-1.5 transition-colors duration-fast hover:text-fg-2">
-                                <x-feathericon-pause class="w-3 h-3" stroke-width="2"/>Pause subscription
-                            </button>
                         </div>
                     </template>
                 </div>
@@ -547,8 +475,7 @@
                             </span>
                             <button type="button" x-show="!(plan === '{{ $p['id'] }}' && view !== 'no-plan')"
                                     @click="view === 'no-plan' ? choosePlan('{{ $p['id'] }}') : startSwitch('{{ $p['id'] }}')"
-                                    :class="view === 'no-plan' ? @js($btnPrimary) : @js($btnSecondary)"
-                                    class="w-full justify-center h-[38px] whitespace-nowrap"
+                                    class="{{ $btnPrimary }} w-full justify-center h-[38px]"
                                     x-text="view === 'no-plan' ? 'Choose {{ $p['name'] }}' : 'Switch to {{ $p['name'] }}'"></button>
                         </div>
                     </div>

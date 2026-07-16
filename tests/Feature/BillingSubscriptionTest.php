@@ -263,7 +263,7 @@ it('rejects inactive and invite-only plans from the trader endpoint', function (
     'black plan' => [['canonical' => Subscription::CANONICAL_BLACK]],
 ]);
 
-it('renders real billing forms and hides the invite-only plan', function (): void {
+it('renders real billing forms without subscription pause controls and hides the invite-only plan', function (): void {
     $plan = makeCappedPlan();
     Subscription::create([
         'name' => 'Black',
@@ -275,15 +275,31 @@ it('renders real billing forms and hides the invite-only plan', function (): voi
     ]);
     $user = makeBillingUser(['subscription_id' => $plan->id]);
 
-    $this->actingAs($user)
-        ->get(route('billing'))
+    $response = $this->actingAs($user)
+        ->get(route('billing'));
+
+    $response
         ->assertOk()
         ->assertSee(route('billing.subscription'), false)
         ->assertSee(route('billing.start-trading'), false)
-        ->assertSee(route('billing.pause'), false)
-        ->assertSee(route('billing.resume'), false)
         ->assertSee(route('billing.topup'), false)
+        ->assertDontSee('/billing/pause', false)
+        ->assertDontSee('/billing/resume', false)
+        ->assertDontSee('Pause subscription')
+        ->assertDontSee('Resume subscription')
         ->assertDontSee('Black');
+
+    expect($response->getContent())->toMatch(
+        '/<button[^>]+class="[^"]*bg-accent[^"]*"[^>]+x-text="[^"]*Switch to '.preg_quote($plan->name, '/').'[^"]*"/s',
+    );
+
+    $this->actingAs($user)
+        ->post('/billing/pause')
+        ->assertNotFound();
+
+    $this->actingAs($user)
+        ->post('/billing/resume')
+        ->assertNotFound();
 });
 
 it('creates a hosted invoice while letting the gateway choose the payment coin', function (): void {

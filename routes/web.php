@@ -96,8 +96,6 @@ Route::domain(config('domains.admin'))->group(function () {
         Route::get('/billing', [BillingController::class, 'index'])->name('billing');
         Route::post('/billing/start-trading', [BillingController::class, 'startTrading'])->name('billing.start-trading');
         Route::post('/billing/subscription', [BillingController::class, 'changeSubscription'])->name('billing.subscription');
-        Route::post('/billing/pause', [BillingController::class, 'pause'])->name('billing.pause');
-        Route::post('/billing/resume', [BillingController::class, 'resume'])->name('billing.resume');
         Route::post('/billing/topup', [BillingController::class, 'topUp'])->middleware('throttle:10,1')->name('billing.topup');
         Route::get('/billing/min-amount', [BillingController::class, 'minAmount'])->middleware('throttle:30,1')->name('billing.min-amount');
         Route::get('/billing/wallet-status', [BillingController::class, 'walletStatus'])->middleware('throttle:60,1')->name('billing.wallet-status');
