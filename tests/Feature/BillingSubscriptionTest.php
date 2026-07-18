@@ -302,6 +302,37 @@ it('renders real billing forms without subscription pause controls and hides the
         ->assertNotFound();
 });
 
+it('aligns the top-up action with the amount input while preserving the mobile stack', function (): void {
+    $plan = makeCappedPlan();
+    $user = makeBillingUser(['subscription_id' => $plan->id]);
+
+    $response = $this->actingAs($user)
+        ->get(route('billing'))
+        ->assertOk();
+
+    expect($response->getContent())
+        ->toContain('class="flex flex-col gap-2.5 min-w-[230px] max-[640px]:min-w-0 self-start pt-6 max-[640px]:pt-0"')
+        ->not->toContain('class="flex flex-col gap-2.5 min-w-[230px] max-[640px]:min-w-0 self-end"');
+});
+
+it('submits top-ups directly into a new tab without an intermediate confirmation', function (): void {
+    $plan = makeCappedPlan();
+    $user = makeBillingUser(['subscription_id' => $plan->id]);
+
+    $response = $this->actingAs($user)
+        ->get(route('billing'))
+        ->assertOk();
+
+    expect($response->getContent())
+        ->toMatch('/<form[^>]+x-ref="topUpForm"[^>]+target="_blank"[^>]+rel="noopener"/s')
+        ->toContain('form.requestSubmit();')
+        ->toContain(':disabled="busy || belowMin() || amtNum() <= 0"')
+        ->not->toContain("this.submitForm('topUpForm')")
+        ->not->toContain('continueGateway()')
+        ->not->toContain('Leaving Kraite — NOWPayments checkout')
+        ->not->toContain('<template x-if="invoice">');
+});
+
 it('creates a hosted invoice while letting the gateway choose the payment coin', function (): void {
     Http::preventStrayRequests();
     Http::fake([

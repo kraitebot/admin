@@ -129,7 +129,6 @@
                 keepAcct: cfg.activeAccountId || null,
                 credited: null,
                 trialSecs: Number(cfg.trialSecs) || 0,
-                invoice: null,
                 amount: String(defaultAmount),
                 busy: false,
                 renewalLabel: cfg.renewalLabel,
@@ -223,8 +222,13 @@
                 },
                 choosePlan(id) { this.startSwitch(id); },
                 startTrial() { this.submitForm('startTrialForm'); },
-                topUpGo() { if (!this.belowMin() && this.amtNum() > 0) this.invoice = { amount: this.amtNum() }; },
-                continueGateway() { this.submitForm('topUpForm'); },
+                topUpGo() {
+                    const form = this.$refs.topUpForm;
+                    if (!form || this.busy || this.belowMin() || this.amtNum() <= 0) return;
+                    this.busy = true;
+                    form.requestSubmit();
+                    this._timers.push(setTimeout(() => { this.busy = false; }, 1000));
+                },
                 submitForm(ref) {
                     if (this.busy) return;
                     this.busy = true;
@@ -251,7 +255,7 @@
         <form x-ref="startTrialForm" method="POST" action="{{ route('billing.start-trading') }}" class="hidden" aria-hidden="true">
             @csrf
         </form>
-        <form x-ref="topUpForm" method="POST" action="{{ route('billing.topup') }}" class="hidden" aria-hidden="true">
+        <form x-ref="topUpForm" method="POST" action="{{ route('billing.topup') }}" target="_blank" rel="noopener" class="hidden" aria-hidden="true">
             @csrf
             <input type="hidden" name="amount_usdt" :value="amount">
         </form>
@@ -572,107 +576,67 @@
 
         {{-- ===================== TOP UP ===================== --}}
         <div x-ref="topup" class="card card--flat mb-6 overflow-hidden scroll-mt-4">
-            {{-- invoice step --}}
-            <template x-if="invoice">
-                <div>
-                    <div class="flex items-center justify-between gap-3 py-[13px] px-6 bg-surface-2 border-b border-line-soft max-[640px]:px-4">
-                        <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
-                            <x-feathericon-arrow-up-right class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Leaving Kraite — NOWPayments checkout
-                        </h4>
+            <div class="flex items-center justify-between gap-3 py-[13px] px-6 bg-surface-2 border-b border-line-soft max-[640px]:px-4">
+                <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
+                    <x-feathericon-plus class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Top up wallet
+                </h4>
+                <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">crypto · via NOWPayments</span>
+            </div>
+            <div class="p-6 max-[640px]:p-4 flex flex-col gap-5">
+                <p class="text-[12.5px] text-fg-3 leading-snug max-w-[560px]">Enter how much USDT to add to your wallet. You'll pick the coin and network on the NOWPayments checkout — pay in USDT, USDC, BTC, ETH and more.</p>
+
+                <div class="grid grid-cols-[1fr_auto] gap-5 items-start max-[640px]:grid-cols-1">
+                    <div>
+                        <div class="font-mono text-[10px] font-semibold tracking-[0.11em] uppercase text-fg-mute mb-2.5">Amount to credit</div>
+                        <div class="relative flex items-center">
+                            <input x-model="amount" @input="amount = amount.replace(/[^0-9.]/g, '')" inputmode="decimal"
+                                   class="w-full h-[52px] bg-input border rounded-control pl-4 pr-[72px] font-mono text-[22px] font-semibold tabular-nums text-fg-1 outline-none transition-[border-color,box-shadow] duration-fast"
+                                   :style="belowMin() ? 'border-color: var(--danger)' : 'border-color: var(--border)'"/>
+                            <span class="absolute right-4 font-mono text-[14px] font-semibold text-fg-mute">USDT</span>
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
+                            <template x-for="v in presets()" :key="v">
+                                <button type="button" @click="amount = String(v)"
+                                        class="appearance-none cursor-pointer font-mono text-[11px] font-semibold tabular-nums rounded-chip border border-line bg-surface-3 text-fg-2 py-1 px-2.5 transition-colors duration-fast hover:border-line-strong hover:text-fg-1"
+                                        x-text="(v === effMin() ? 'Min ' : '') + usdt2(v)"></button>
+                            </template>
+                        </div>
+                        <div class="text-[11.5px] mt-2 leading-snug" :class="belowMin() ? 'text-danger' : 'text-fg-mute'">
+                            <span x-show="belowMin()" class="font-semibold">Below minimum. </span>
+                            <template x-if="!covered()">
+                                <span>Minimum <span class="font-mono text-fg-2" x-text="`${usdt2(effMin())} USDT`"></span> — clears your renewal shortfall.</span>
+                            </template>
+                            <template x-if="covered()">
+                                <span>Minimum top-up is <span class="font-mono text-fg-2" x-text="`${usdt2(effMin())} USDT`"></span>. NOWPayments may set a higher floor for some coins.</span>
+                            </template>
+                        </div>
                     </div>
-                    <div class="p-6 max-[640px]:p-4 flex flex-col gap-5">
-                        <div class="flex items-start gap-3 rounded-control border px-4 py-3.5" style="border-color: color-mix(in srgb, var(--info) 38%, transparent); background: color-mix(in srgb, var(--info) 9%, transparent);">
-                            <span class="flex-shrink-0 mt-px" style="color: var(--info);"><x-feathericon-shield class="w-[17px] h-[17px]" stroke-width="1.75"/></span>
-                            <div class="text-[12.5px] text-fg-2 leading-snug">You'll be taken to <span class="font-semibold text-fg-1">NOWPayments</span> to complete this top-up — you're leaving Kraite. <span class="font-semibold text-fg-1">Choose your coin and network there</span>; non-USDT coins convert to USDT at the gateway rate. Your wallet credits automatically once the transfer confirms on-chain.</div>
-                        </div>
-                        <div class="rounded-control border border-line-soft overflow-hidden">
-                            <div class="flex items-center justify-between gap-4 py-3 px-4 border-b border-line-soft">
-                                <span class="text-[12.5px] text-fg-3">Credit to wallet</span>
-                                <span class="font-mono text-[13px] font-semibold text-fg-1 tabular-nums" x-text="`${usdt2(invoice.amount)} USDT`"></span>
-                            </div>
-                            <div class="flex items-center justify-between gap-4 py-3 px-4 border-b border-line-soft">
-                                <span class="text-[12.5px] text-fg-3">Pay with</span>
-                                <span class="font-mono text-[13px] font-semibold text-fg-1 tabular-nums">Chosen on NOWPayments</span>
-                            </div>
-                            <div class="flex items-center justify-between gap-4 py-3 px-4">
-                                <span class="text-[12.5px] text-fg-3">Gateway fee</span>
-                                <span class="font-mono text-[13px] font-semibold text-fg-1 tabular-nums">≈ 0.5% + network gas</span>
-                            </div>
-                        </div>
-                        <div class="flex items-center gap-2.5 flex-wrap">
-                            <button type="button" @click="continueGateway()" :disabled="busy" class="{{ $btnPrimary }} h-[40px] px-5 disabled:opacity-40 disabled:cursor-not-allowed">Continue to NOWPayments<x-feathericon-arrow-up-right class="w-[15px] h-[15px]" stroke-width="1.75"/></button>
-                            <button type="button" @click="invoice = null" class="{{ $btnSecondary }} h-[40px] px-4">Back</button>
-                        </div>
-                    </div>
-                </div>
-            </template>
 
-            {{-- amount step --}}
-            <template x-if="!invoice">
-                <div>
-                    <div class="flex items-center justify-between gap-3 py-[13px] px-6 bg-surface-2 border-b border-line-soft max-[640px]:px-4">
-                        <h4 class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap leading-none">
-                            <x-feathericon-plus class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Top up wallet
-                        </h4>
-                        <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.02em]">crypto · via NOWPayments</span>
-                    </div>
-                    <div class="p-6 max-[640px]:p-4 flex flex-col gap-5">
-                        <p class="text-[12.5px] text-fg-3 leading-snug max-w-[560px]">Enter how much USDT to add to your wallet. You'll pick the coin and network on the NOWPayments checkout — pay in USDT, USDC, BTC, ETH and more.</p>
-
-                        <div class="grid grid-cols-[1fr_auto] gap-5 items-start max-[640px]:grid-cols-1">
-                            <div>
-                                <div class="font-mono text-[10px] font-semibold tracking-[0.11em] uppercase text-fg-mute mb-2.5">Amount to credit</div>
-                                <div class="relative flex items-center">
-                                    <input x-model="amount" @input="amount = amount.replace(/[^0-9.]/g, '')" inputmode="decimal"
-                                           class="w-full h-[52px] bg-input border rounded-control pl-4 pr-[72px] font-mono text-[22px] font-semibold tabular-nums text-fg-1 outline-none transition-[border-color,box-shadow] duration-fast"
-                                           :style="belowMin() ? 'border-color: var(--danger)' : 'border-color: var(--border)'"/>
-                                    <span class="absolute right-4 font-mono text-[14px] font-semibold text-fg-mute">USDT</span>
-                                </div>
-                                <div class="flex items-center gap-1.5 mt-2.5 flex-wrap">
-                                    <template x-for="v in presets()" :key="v">
-                                        <button type="button" @click="amount = String(v)"
-                                                class="appearance-none cursor-pointer font-mono text-[11px] font-semibold tabular-nums rounded-chip border border-line bg-surface-3 text-fg-2 py-1 px-2.5 transition-colors duration-fast hover:border-line-strong hover:text-fg-1"
-                                                x-text="(v === effMin() ? 'Min ' : '') + usdt2(v)"></button>
-                                    </template>
-                                </div>
-                                <div class="text-[11.5px] mt-2 leading-snug" :class="belowMin() ? 'text-danger' : 'text-fg-mute'">
-                                    <span x-show="belowMin()" class="font-semibold">Below minimum. </span>
-                                    <template x-if="!covered()">
-                                        <span>Minimum <span class="font-mono text-fg-2" x-text="`${usdt2(effMin())} USDT`"></span> — clears your renewal shortfall.</span>
-                                    </template>
-                                    <template x-if="covered()">
-                                        <span>Minimum top-up is <span class="font-mono text-fg-2" x-text="`${usdt2(effMin())} USDT`"></span>. NOWPayments may set a higher floor for some coins.</span>
-                                    </template>
-                                </div>
-                            </div>
-
-                            <div class="flex flex-col gap-2.5 min-w-[230px] max-[640px]:min-w-0 self-end">
-                                <button type="button" :disabled="belowMin() || amtNum() <= 0" @click="topUpGo()"
-                                        :class="(belowMin() || amtNum() <= 0) ? 'opacity-40 cursor-not-allowed hover:bg-accent' : ''"
-                                        class="{{ $btnPrimary }} h-[52px] px-4 justify-center text-[13.5px]">
-                                    <span x-text="`Top up ${usdt2(amtNum())} USDT`"></span><x-feathericon-arrow-up-right class="w-[15px] h-[15px]" stroke-width="1.75"/>
-                                </button>
-                                <span class="font-mono text-[10px] text-fg-mute tracking-[0.03em] text-center max-[640px]:text-left">Continues to NOWPayments</span>
-                            </div>
-                        </div>
-
-                        {{-- accepted coins (informational) --}}
-                        <div class="flex items-center gap-3 flex-wrap pt-1 border-t border-line-soft mt-1">
-                            <span class="font-mono text-[9.5px] font-semibold tracking-[0.1em] uppercase text-fg-mute pt-3">Accepted</span>
-                            <div class="flex items-center gap-1.5 flex-wrap pt-3">
-                                @foreach($coins as $c)
-                                    <span class="inline-flex items-center gap-1.5 rounded-chip border border-line-soft bg-surface-2 pl-1 pr-2.5 py-1">
-                                        <span class="rounded-[8px] flex items-center justify-center flex-shrink-0 font-mono font-bold tracking-[0.01em] w-5 h-5 text-[7px]"
-                                              style="background: color-mix(in srgb, {{ $c['color'] }} 22%, transparent); color: {{ $c['color'] }}; box-shadow: inset 0 0 0 1px color-mix(in srgb, {{ $c['color'] }} 45%, transparent);">{{ substr($c['sym'], 0, 3) }}</span>
-                                        <span class="font-mono text-[11px] font-semibold text-fg-2">{{ $c['sym'] }}</span>
-                                    </span>
-                                @endforeach
-                                <span class="font-mono text-[10.5px] text-fg-faint tracking-[0.03em] ml-1">on Tron · BNB Chain · Solana · Bitcoin · Ethereum &amp; more</span>
-                            </div>
-                        </div>
+                    <div class="flex flex-col gap-2.5 min-w-[230px] max-[640px]:min-w-0 self-start pt-6 max-[640px]:pt-0">
+                        <button type="button" :disabled="busy || belowMin() || amtNum() <= 0" @click="topUpGo()"
+                                :class="(busy || belowMin() || amtNum() <= 0) ? 'opacity-40 cursor-not-allowed hover:bg-accent' : ''"
+                                class="{{ $btnPrimary }} h-[52px] px-4 justify-center text-[13.5px]">
+                            <span x-text="`Top up ${usdt2(amtNum())} USDT`"></span><x-feathericon-arrow-up-right class="w-[15px] h-[15px]" stroke-width="1.75"/>
+                        </button>
+                        <span class="font-mono text-[10px] text-fg-mute tracking-[0.03em] text-center max-[640px]:text-left">Continues to NOWPayments</span>
                     </div>
                 </div>
-            </template>
+
+                {{-- accepted coins (informational) --}}
+                <div class="flex items-center gap-3 flex-wrap pt-1 border-t border-line-soft mt-1">
+                    <span class="font-mono text-[9.5px] font-semibold tracking-[0.1em] uppercase text-fg-mute pt-3">Accepted</span>
+                    <div class="flex items-center gap-1.5 flex-wrap pt-3">
+                        @foreach($coins as $c)
+                            <span class="inline-flex items-center gap-1.5 rounded-chip border border-line-soft bg-surface-2 pl-1 pr-2.5 py-1">
+                                <span class="rounded-[8px] flex items-center justify-center flex-shrink-0 font-mono font-bold tracking-[0.01em] w-5 h-5 text-[7px]"
+                                      style="background: color-mix(in srgb, {{ $c['color'] }} 22%, transparent); color: {{ $c['color'] }}; box-shadow: inset 0 0 0 1px color-mix(in srgb, {{ $c['color'] }} 45%, transparent);">{{ substr($c['sym'], 0, 3) }}</span>
+                                <span class="font-mono text-[11px] font-semibold text-fg-2">{{ $c['sym'] }}</span>
+                            </span>
+                        @endforeach
+                        <span class="font-mono text-[10.5px] text-fg-faint tracking-[0.03em] ml-1">on Tron · BNB Chain · Solana · Bitcoin · Ethereum &amp; more</span>
+                    </div>
+                </div>
+            </div>
         </div>
 
         {{-- ===================== TRANSACTION HISTORY ===================== --}}

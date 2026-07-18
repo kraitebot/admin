@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.23.1] — 2026-07-18
+
+### Billing and local clones
+
+- [IMPROVED] **Wallet top-ups open NOWPayments directly in a new tab.** The
+  intermediate confirmation is removed while the billing page stays available.
+- [FIXED] **Local user quick-picks use the configured clone password.** The
+  shortcut remains local-only and never renders user credentials in production.
+
+### Tests
+
+- [ADDED] Regression coverage for direct hosted checkout and environment-gated
+  cloned-user quick-picks.
+- [VERIFIED] Targeted admin release tests pass: 21 tests / 110 assertions;
+  production frontend build passes.
+
 ## [0.23.0] — 2026-07-17
 
 ### Account safety and connectivity

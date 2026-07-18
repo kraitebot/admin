@@ -1,4 +1,4 @@
-@props(['devUsers' => collect()])
+@props(['devUsers' => collect(), 'devQuickPickPassword' => null])
 <x-auth-layout title="Kraite — Sign in">
     <div class="mb-5">
         <div class="font-mono text-[10px] font-medium tracking-[0.12em] uppercase text-fg-3 mb-1.5">Operator console</div>
@@ -44,10 +44,11 @@
     @if($devUsers->isNotEmpty())
         <div class="mt-7 pt-5 border-t border-ink-3">
             <div class="font-mono text-[10px] font-medium tracking-[0.12em] uppercase text-fg-3 mb-2.5">Dev quick-pick (local only)</div>
-            <div class="flex flex-col gap-1.5">
+            <div class="flex flex-col gap-1.5" data-quick-pick-password="{{ $devQuickPickPassword }}">
                 @foreach($devUsers as $u)
                     <button type="button"
-                            onclick="document.querySelector('input[name=email]').value = '{{ $u['email'] }}'; document.querySelector('input[name=password]').value = 'password';"
+                            data-quick-pick-user data-email="{{ $u['email'] }}"
+                            onclick="document.querySelector('input[name=email]').value = this.dataset.email; document.querySelector('input[name=password]').value = this.closest('[data-quick-pick-password]').dataset.quickPickPassword;"
                             class="appearance-none text-left py-2 px-2.5 bg-ink-0 border border-ink-3 rounded-control cursor-pointer transition-colors duration-fast ease-out hover:border-line-strong hover:bg-ink-2">
                         <div class="flex items-baseline gap-2">
                             <span class="font-sans font-semibold text-[12.5px] text-ink-9">{{ $u['name'] ?: $u['email'] }}</span>

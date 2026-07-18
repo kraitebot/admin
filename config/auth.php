@@ -114,4 +114,6 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    'local_quick_pick_password' => env('KRAITE_CLONE_LOCAL_PASSWORD', 'password'),
+
 ];
