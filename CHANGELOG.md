@@ -2,6 +2,23 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.25.0] — 2026-07-19
+
+### Mobile market-risk visibility
+
+- [NEW FEATURE] **The iPhone dashboard receives a compact BSCS summary.**
+  Traders can see the current score, band, posture, freshness, block state,
+  and configured block threshold without gaining any trading control.
+- [IMPROVED] The mobile contract remains bounded: BSCS sub-signals and
+  cooldown internals stay on the operator surfaces.
+
+### Tests
+
+- [ADDED] Regression coverage proves the exact mobile BSCS response, empty
+  first-compute state, critical boundary, read-only behavior, and omission of
+  operator-only fields.
+- [VERIFIED] Full admin suite passes: 161 tests / 775 assertions.
+
 ## [0.24.0] — 2026-07-19
 
 ### Read-only mobile API

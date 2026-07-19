@@ -40,10 +40,38 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    Schema::dropIfExists('market_regime_snapshots');
+    Schema::dropIfExists('account_balance_history');
+    Schema::dropIfExists('positions');
     Schema::dropIfExists('accounts');
     Schema::dropIfExists('api_systems');
     Schema::dropIfExists('personal_access_tokens');
 });
+
+function prepareMobileDashboardDataSchema(): void
+{
+    Schema::create('positions', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('account_id');
+        $table->unsignedBigInteger('exchange_symbol_id')->nullable();
+        $table->string('status');
+        $table->dateTime('opened_at')->nullable();
+        $table->dateTime('closed_at')->nullable();
+        $table->decimal('pnl', 18, 8)->nullable();
+        $table->timestamps();
+    });
+
+    Schema::create('account_balance_history', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('account_id');
+        $table->decimal('total_wallet_balance', 18, 8);
+        $table->timestamps();
+    });
+
+    Schema::create('market_regime_snapshots', function (Blueprint $table): void {
+        $table->id();
+    });
+}
 
 it('issues a scoped expiring token for valid credentials', function (): void {
     $now = CarbonImmutable::parse('2026-07-19 12:00:00');
@@ -182,6 +210,122 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
         ->assertJsonPath('data.accounts.0.id', $accountId)
         ->assertJsonPath('data.selected_account_id', $accountId)
         ->assertJsonPath('data.dashboard.positions', []);
+});
+
+it('returns the exact bounded BSCS summary for the mobile market-regime tile', function (): void {
+    $now = CarbonImmutable::parse('2026-07-19 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile BSCS fragile owner',
+        'email' => 'mobile-bscs-fragile@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'BSCS fragile account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('kraite')->where('id', 1)->update([
+        'bscs_score' => 67,
+        'bscs_band' => 'fragile',
+        'bscs_synced_at' => now()->subMinutes(30),
+        'bscs_block_threshold' => 80,
+        'bscs_cooldown_until' => null,
+    ]);
+    $before = DB::table('kraite')->where('id', 1)->first();
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $response = $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.score', 67)
+        ->assertJsonPath('data.dashboard.bscs.band', 'fragile')
+        ->assertJsonPath('data.dashboard.bscs.blocked', false)
+        ->assertJsonPath('data.dashboard.bscs.status', 'New trades use smaller size.')
+        ->assertJsonPath('data.dashboard.bscs.is_stale', false)
+        ->assertJsonPath('data.dashboard.bscs.block_threshold', 80)
+        ->assertJsonPath('data.dashboard.bscs.computed_ago', null)
+        ->assertJsonMissingPath('data.dashboard.bscs.components')
+        ->assertJsonMissingPath('data.dashboard.bscs.cooldown_until');
+
+    expect(array_keys($response->json('data.dashboard.bscs')))->toBe([
+        'score',
+        'band',
+        'blocked',
+        'status',
+        'is_stale',
+        'block_threshold',
+        'computed_ago',
+    ])->and(DB::table('kraite')->where('id', 1)->first())->toEqual($before);
+});
+
+it('returns an explicit stale no-data BSCS summary before the first compute', function (): void {
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile BSCS awaiting owner',
+        'email' => 'mobile-bscs-awaiting@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'BSCS awaiting account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.score', null)
+        ->assertJsonPath('data.dashboard.bscs.band', null)
+        ->assertJsonPath('data.dashboard.bscs.blocked', false)
+        ->assertJsonPath('data.dashboard.bscs.status', 'Awaiting first compute…')
+        ->assertJsonPath('data.dashboard.bscs.is_stale', true)
+        ->assertJsonPath('data.dashboard.bscs.block_threshold', 80);
+});
+
+it('returns the critical boundary as blocked while its cooldown is active', function (): void {
+    $now = CarbonImmutable::parse('2026-07-19 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile BSCS critical owner',
+        'email' => 'mobile-bscs-critical@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'BSCS critical account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('kraite')->where('id', 1)->update([
+        'bscs_score' => 80,
+        'bscs_band' => 'critical',
+        'bscs_synced_at' => now()->subMinutes(30),
+        'bscs_block_threshold' => 80,
+        'bscs_cooldown_until' => now()->addHours(20),
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.score', 80)
+        ->assertJsonPath('data.dashboard.bscs.band', 'critical')
+        ->assertJsonPath('data.dashboard.bscs.blocked', true)
+        ->assertJsonPath('data.dashboard.bscs.status', 'New trades paused.')
+        ->assertJsonPath('data.dashboard.bscs.is_stale', false)
+        ->assertJsonPath('data.dashboard.bscs.block_threshold', 80);
 });
 
 it('revokes only the current token on logout', function (): void {

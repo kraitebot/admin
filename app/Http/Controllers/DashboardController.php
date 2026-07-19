@@ -158,7 +158,8 @@ class DashboardController extends Controller
 
     /**
      * Bounded read-only payload for the first-party mobile dashboard.
-     * Deliberately omits activity, connectivity, global BTC and BSCS queries.
+     * Deliberately omits activity, connectivity and global BTC queries. BSCS
+     * is included as a bounded platform-risk summary for the mobile KPI tile.
      *
      * @return array<string, mixed>
      */
@@ -173,6 +174,7 @@ class DashboardController extends Controller
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
             ],
             'kpis' => $this->kpis($account, $positions),
+            'bscs' => $this->mobileBscsBadge(),
             'positions' => $positions,
             'generated_at' => now()->toIso8601String(),
         ];
@@ -525,6 +527,34 @@ class DashboardController extends Controller
             'open_count' => count($positions),
             'long_count' => $longCount,
             'short_count' => count($positions) - $longCount,
+        ];
+    }
+
+    /**
+     * Bounded BSCS contract for the first-party mobile dashboard.
+     *
+     * @return array{
+     *     score: ?int,
+     *     band: ?string,
+     *     blocked: bool,
+     *     status: string,
+     *     is_stale: bool,
+     *     block_threshold: int,
+     *     computed_ago: ?string,
+     * }
+     */
+    private function mobileBscsBadge(): array
+    {
+        $bscs = $this->bscsBadge();
+
+        return [
+            'score' => $bscs['score'],
+            'band' => $bscs['band'],
+            'blocked' => $bscs['blocked'],
+            'status' => $bscs['status'],
+            'is_stale' => $bscs['is_stale'],
+            'block_threshold' => $bscs['block_threshold'],
+            'computed_ago' => $bscs['computed_ago'],
         ];
     }
 
