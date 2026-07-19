@@ -2,6 +2,28 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.24.0] — 2026-07-19
+
+### Read-only mobile API
+
+- [NEW FEATURE] **Mobile users can authenticate with revocable device
+  tokens.** Valid trader credentials issue a 30-day token limited to dashboard
+  reads, while logout revokes only the current device.
+- [NEW FEATURE] **The first mobile dashboard is trader-owned and read-only.**
+  It returns the user's accounts, selected-account KPIs, and open positions
+  without exposing trading, account edits, billing, or engine controls.
+- [IMPROVED] Mobile routes have application throttling, failed-login lockout,
+  bounded cached payloads, and the same security headers as browser routes.
+- [IMPROVED] Gemini configuration uses the current 3.1 Pro Preview identifier
+  and the active 3 Flash Preview model.
+
+### Tests
+
+- [ADDED] Regression coverage for token issue, rejection, ability enforcement,
+  account isolation, bounded dashboard reads, and current-token logout.
+- [VERIFIED] Full admin suite passes: 158 tests / 749 assertions; production
+  frontend build passes.
+
 ## [0.23.1] — 2026-07-18
 
 ### Billing and local clones

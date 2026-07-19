@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "093cf843943b6d1dea5177419caa07b7",
+    "content-hash": "92087046319ec53a87b36a6ba7626c03",
     "packages": [
         {
             "name": "angle/chrono",
@@ -403,7 +403,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/brunocfalcao/step-dispatcher",
-                "reference": "a86143cc29f6f7ef5859ec6c41102c1f7bf562d5"
+                "reference": "15e76ec33b5cfdb3fdf7db53ac6f4075adfc3c94"
             },
             "require": {
                 "illuminate/console": "^11.0|^12.0|^13.0",
@@ -1543,7 +1543,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/kraitebot/core",
-                "reference": "88ceb999a50d8c39e89a4b787efb82d7c5b50e4c"
+                "reference": "1504f9a6155f4d6cafd6ac50963b454ed262df12"
             },
             "require": {
                 "angle/chrono": "^1.0",
@@ -2166,6 +2166,69 @@
                 "source": "https://github.com/laravel/prompts/tree/v0.3.21"
             },
             "time": "2026-06-26T00:11:25+00:00"
+        },
+        {
+            "name": "laravel/sanctum",
+            "version": "v4.3.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/laravel/sanctum.git",
+                "reference": "2a9bccc18e9907808e0018dd15fa643937886b1e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/laravel/sanctum/zipball/2a9bccc18e9907808e0018dd15fa643937886b1e",
+                "reference": "2a9bccc18e9907808e0018dd15fa643937886b1e",
+                "shasum": ""
+            },
+            "require": {
+                "ext-json": "*",
+                "illuminate/console": "^11.0|^12.0|^13.0",
+                "illuminate/contracts": "^11.0|^12.0|^13.0",
+                "illuminate/database": "^11.0|^12.0|^13.0",
+                "illuminate/support": "^11.0|^12.0|^13.0",
+                "php": "^8.2",
+                "symfony/console": "^7.0|^8.0"
+            },
+            "require-dev": {
+                "mockery/mockery": "^1.6",
+                "orchestra/testbench": "^9.15|^10.8|^11.0",
+                "phpstan/phpstan": "^1.10"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "Laravel\\Sanctum\\SanctumServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "Laravel\\Sanctum\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Taylor Otwell",
+                    "email": "taylor@laravel.com"
+                }
+            ],
+            "description": "Laravel Sanctum provides a featherweight authentication system for SPAs and simple APIs.",
+            "keywords": [
+                "auth",
+                "laravel",
+                "sanctum"
+            ],
+            "support": {
+                "issues": "https://github.com/laravel/sanctum/issues",
+                "source": "https://github.com/laravel/sanctum"
+            },
+            "time": "2026-04-30T11:46:25+00:00"
         },
         {
             "name": "laravel/sentinel",

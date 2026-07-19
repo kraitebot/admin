@@ -1,0 +1,197 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Http\Controllers\DashboardController as WebDashboardController;
+use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Laravel\Sanctum\Sanctum;
+
+beforeEach(function (): void {
+    Schema::create('personal_access_tokens', function (Blueprint $table): void {
+        $table->id();
+        $table->morphs('tokenable');
+        $table->text('name');
+        $table->string('token', 64)->unique();
+        $table->text('abilities')->nullable();
+        $table->timestamp('last_used_at')->nullable();
+        $table->timestamp('expires_at')->nullable()->index();
+        $table->timestamps();
+    });
+
+    Schema::create('api_systems', function (Blueprint $table): void {
+        $table->id();
+        $table->string('name');
+    });
+
+    Schema::create('accounts', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('user_id');
+        $table->unsignedBigInteger('api_system_id');
+        $table->string('name');
+        $table->boolean('is_active')->default(false);
+        $table->boolean('can_trade')->default(false);
+        $table->timestamps();
+        $table->softDeletes();
+    });
+});
+
+afterEach(function (): void {
+    Schema::dropIfExists('accounts');
+    Schema::dropIfExists('api_systems');
+    Schema::dropIfExists('personal_access_tokens');
+});
+
+it('issues a scoped expiring token for valid credentials', function (): void {
+    $now = CarbonImmutable::parse('2026-07-19 12:00:00');
+    $this->travelTo($now);
+
+    $user = User::factory()->create([
+        'email' => 'trader@kraite.test',
+        'password' => 'correct-password',
+    ]);
+
+    $response = $this->postJson('https://api.kraite.com/v1/auth/token', [
+        'email' => 'TRADER@kraite.test',
+        'password' => 'correct-password',
+        'device_name' => 'Bruno iPhone',
+    ])->assertOk()
+        ->assertHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+        ->assertJsonPath('token_type', 'Bearer')
+        ->assertJsonPath('user.id', $user->id)
+        ->assertJsonMissingPath('user.password');
+
+    expect($response->json('token'))->toBeString()->not->toBeEmpty()
+        ->and($response->json('expires_at'))->toBeString();
+
+    $this->assertDatabaseHas('personal_access_tokens', [
+        'tokenable_id' => $user->id,
+        'name' => 'Bruno iPhone',
+        'abilities' => json_encode(['dashboard:read']),
+        'expires_at' => $now->addDays(30)->format('Y-m-d H:i:s'),
+    ]);
+});
+
+it('rejects invalid credentials without issuing a token', function (): void {
+    User::factory()->create([
+        'email' => 'trader@kraite.test',
+        'password' => 'correct-password',
+    ]);
+
+    $this->postJson('https://api.kraite.com/v1/auth/token', [
+        'email' => 'trader@kraite.test',
+        'password' => 'wrong-password',
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('email');
+
+    $this->assertDatabaseCount('personal_access_tokens', 0);
+});
+
+it('locks repeated invalid mobile login attempts', function (): void {
+    User::factory()->create([
+        'email' => 'locked-trader@kraite.test',
+        'password' => 'correct-password',
+    ]);
+
+    foreach (range(1, 5) as $attempt) {
+        $this->postJson('https://api.kraite.com/v1/auth/token', [
+            'email' => 'locked-trader@kraite.test',
+            'password' => 'wrong-password-'.$attempt,
+        ])->assertUnprocessable();
+    }
+
+    $this->postJson('https://api.kraite.com/v1/auth/token', [
+        'email' => 'locked-trader@kraite.test',
+        'password' => 'correct-password',
+    ])->assertUnprocessable()
+        ->assertJsonPath(
+            'errors.email.0',
+            fn (string $message): bool => str_contains($message, 'Too many login attempts'),
+        );
+
+    $this->assertDatabaseCount('personal_access_tokens', 0);
+});
+
+it('requires the read ability for the mobile dashboard', function (): void {
+    Sanctum::actingAs(User::factory()->create(), ['profile:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard')
+        ->assertForbidden();
+});
+
+it('rejects a non-integer dashboard account identifier', function (): void {
+    Sanctum::actingAs(User::factory()->create(), ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id=not-an-id')
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('account_id');
+});
+
+it('returns only the authenticated traders accounts', function (): void {
+    $owner = User::factory()->create();
+    $intruder = User::factory()->create();
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $foreignAccountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Owner account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Sanctum::actingAs($intruder, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard')
+        ->assertOk()
+        ->assertJsonPath('data.accounts', [])
+        ->assertJsonPath('data.dashboard', null);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$foreignAccountId)
+        ->assertNotFound();
+});
+
+it('returns the bounded dashboard payload for an owned account', function (): void {
+    $owner = User::factory()->create();
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Main account',
+        'is_active' => false,
+        'can_trade' => false,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $dashboard = Mockery::mock(WebDashboardController::class);
+    $dashboard->shouldReceive('mobilePayload')->once()->andReturn([
+        'account' => ['id' => $accountId, 'name' => 'Main account', 'exchange' => 'Binance'],
+        'kpis' => ['open_count' => 0],
+        'positions' => [],
+        'generated_at' => now()->toIso8601String(),
+    ]);
+    app()->instance(WebDashboardController::class, $dashboard);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.accounts.0.id', $accountId)
+        ->assertJsonPath('data.selected_account_id', $accountId)
+        ->assertJsonPath('data.dashboard.positions', []);
+});
+
+it('revokes only the current token on logout', function (): void {
+    $user = User::factory()->create();
+    $current = $user->createToken('Current', ['dashboard:read']);
+    $user->createToken('Other device', ['dashboard:read']);
+
+    $this->withToken($current->plainTextToken)
+        ->deleteJson('https://api.kraite.com/v1/auth/token')
+        ->assertNoContent();
+
+    expect($user->tokens()->pluck('name')->all())->toBe(['Other device']);
+});

@@ -95,8 +95,8 @@ return [
                 'o4-mini',
             ],
             'gemini' => [
-                'gemini-2.5-pro',
-                'gemini-2.5-flash',
+                'gemini-3.1-pro-preview',
+                'gemini-3-flash-preview',
             ],
             'groq' => [
                 'llama-3.3-70b-versatile',
@@ -139,7 +139,7 @@ return [
         'cheap_models' => [
             'anthropic' => 'claude-haiku-4-5-20251001',
             'openai' => 'gpt-4.1-mini',
-            'gemini' => 'gemini-2.5-flash',
+            'gemini' => 'gemini-3-flash-preview',
             'groq' => 'llama-3.3-70b-versatile',
             'deepseek' => 'deepseek-chat',
             'mistral' => 'mistral-large-latest',

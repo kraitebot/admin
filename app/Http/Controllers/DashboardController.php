@@ -137,24 +137,7 @@ class DashboardController extends Controller
      */
     private function payload(Account $account): array
     {
-        $rawPositions = $account->positions()
-            ->whereIn('status', self::OPEN_POSITION_STATUSES)
-            ->with(['exchangeSymbol.symbol', 'orders'])
-            ->orderBy('opened_at')
-            ->get();
-
-        $candleOpensByExchangeSymbol = $this->loadCandleOpens(
-            $rawPositions->pluck('exchange_symbol_id')->filter()->unique()->all()
-        );
-
-        // Sort by worst AlphaLimit first — high alpha_limit_pct = price
-        // is closest to filling the next ladder rung, which is what the
-        // operator most wants to see at the top of the grid.
-        $positions = $rawPositions
-            ->map(fn ($position) => $this->serializePosition($position, $candleOpensByExchangeSymbol))
-            ->sortByDesc(fn (array $p) => (float) ($p['alpha_limit_pct'] ?? 0))
-            ->values()
-            ->all();
+        $positions = $this->openPositions($account);
 
         return [
             'account' => [
@@ -171,6 +154,51 @@ class DashboardController extends Controller
             'connectivity_servers' => $this->connectivityServers(),
             'generated_at' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * Bounded read-only payload for the first-party mobile dashboard.
+     * Deliberately omits activity, connectivity, global BTC and BSCS queries.
+     *
+     * @return array<string, mixed>
+     */
+    public function mobilePayload(Account $account): array
+    {
+        $positions = $this->openPositions($account);
+
+        return [
+            'account' => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'exchange' => $account->apiSystem?->name ?? 'Unknown',
+            ],
+            'kpis' => $this->kpis($account, $positions),
+            'positions' => $positions,
+            'generated_at' => now()->toIso8601String(),
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function openPositions(Account $account): array
+    {
+        $rawPositions = $account->positions()
+            ->whereIn('status', self::OPEN_POSITION_STATUSES)
+            ->with(['exchangeSymbol.symbol', 'orders'])
+            ->orderBy('opened_at')
+            ->get();
+
+        $candleOpensByExchangeSymbol = $this->loadCandleOpens(
+            $rawPositions->pluck('exchange_symbol_id')->filter()->unique()->all()
+        );
+
+        // Sort by worst AlphaLimit first — high alpha_limit_pct = price
+        // is closest to filling the next ladder rung, which is what the
+        // operator most wants to see at the top of the grid.
+        return $rawPositions
+            ->map(fn ($position) => $this->serializePosition($position, $candleOpensByExchangeSymbol))
+            ->sortByDesc(fn (array $p) => (float) ($p['alpha_limit_pct'] ?? 0))
+            ->values()
+            ->all();
     }
 
     /**

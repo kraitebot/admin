@@ -6,6 +6,7 @@ use Dotenv\Dotenv;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
 
 // Load the shared kraite env file BEFORE Laravel boots config. If
 // this runs inside a service provider's register() instead, the
@@ -18,11 +19,16 @@ if (is_readable($kraiteEnv)) {
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
         commands: __DIR__.'/../routes/console.php',
         health: '/up',
+        apiPrefix: '',
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->web(append: [
+            SecurityHeaders::class,
+        ]);
+        $middleware->api(append: [
             SecurityHeaders::class,
         ]);
 
@@ -37,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'admin' => EnsureAdmin::class,
+            'ability' => CheckAbilities::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
