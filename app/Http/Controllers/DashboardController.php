@@ -769,6 +769,13 @@ class DashboardController extends Controller
         $profitOrder = $position->profitOrder();
         $currentTp = $profitOrder?->price !== null ? (string) $profitOrder->price : null;
         $nextLimit = $position->nextPendingLimitOrderPrice();
+        $stopLossOrder = $position->orders
+            ->where('type', 'STOP-MARKET')
+            ->whereNotNull('exchange_order_id')
+            ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
+            ->sortByDesc('id')
+            ->first();
+        $stopLoss = $stopLossOrder?->price !== null ? (string) $stopLossOrder->price : null;
 
         $fmtPrice = fn (?string $v) => $exchangeSymbol && $v !== null && is_numeric($v)
             ? api_format_price($v, $exchangeSymbol)
@@ -803,6 +810,11 @@ class DashboardController extends Controller
         // dashboard we want the live mark from the exchange feed).
         $alphaPathPct = $this->computeAlphaPathPercent($firstProfit, $lastLimit, $currentPrice);
         $alphaLimitPct = $this->computeAlphaLimitPercent($currentTp, $nextLimit, $currentPrice);
+        $trackProgressPct = $this->computeAlphaLimitPercent(
+            $currentTp,
+            $nextLimit ?? $stopLoss,
+            $currentPrice,
+        );
 
         $quantity = (string) ($position->quantity ?? '0');
         $size = $this->computeSize($quantity, $currentPrice);
@@ -820,7 +832,7 @@ class DashboardController extends Controller
         // Lifecycle-track geometry — the design's stage grammar, not a
         // price-proportional scale (real ladders cluster the markers into
         // an unreadable left-edge pile). See trackGeometry().
-        $track = $this->trackGeometry($filledCount, $totalLimits, (float) $alphaLimitPct);
+        $track = $this->trackGeometry($filledCount, $totalLimits, (float) $trackProgressPct);
 
         return [
             'id' => $position->id,
@@ -855,6 +867,7 @@ class DashboardController extends Controller
             'profit_price' => $fmtPrice($currentTp),
             'next_limit_price' => $fmtPrice($nextLimit),
             'last_limit_price' => $fmtPrice($lastLimit),
+            'stop_loss_price' => $fmtPrice($stopLoss),
 
             'track' => $track,
 
@@ -995,13 +1008,15 @@ class DashboardController extends Controller
      *
      *  - Ladder rungs occupy fixed slots spread across 26%…80%; rungs that
      *    have FILLED disappear from the ladder.
+     *  - SL owns the final 100% stage after the deepest configured rung.
      *  - TP starts hard-left (0% — a fresh position's first TP). Each WAP
      *    (filled rung) slides it right to that rung's slot; the tile draws
      *    a trace from 0% to the current TP so the slide stays visible.
      *  - PX marker travels from TP toward the NEXT pending rung's slot,
-     *    proportional to alpha_limit (which measures exactly that leg).
+     *    proportional to that leg's progress. After every rung fills, PX
+     *    travels from the WAP-adjusted TP toward SL instead.
      *
-     * @return array{tp_pct: float, px_pct: float, gain_left: float, gain_width: float, rungs: array<int, array<string, mixed>>}|null
+     * @return array{tp_pct: float, px_pct: float, sl_pct: float, gain_left: float, gain_width: float, rungs: array<int, array<string, mixed>>}|null
      */
     private function trackGeometry(int $filledCount, int $totalLimits, float $alphaLimitPct): ?array
     {
@@ -1018,7 +1033,7 @@ class DashboardController extends Controller
         };
 
         $tp = $filledCount === 0 ? 0.0 : $slot(min($filledCount, $totalLimits));
-        $nextAnchor = $filledCount < $totalLimits ? $slot($filledCount + 1) : 92.0;
+        $nextAnchor = $filledCount < $totalLimits ? $slot($filledCount + 1) : 100.0;
 
         $fraction = max(0.0, min(100.0, $alphaLimitPct)) / 100.0;
         $px = round($tp + ($nextAnchor - $tp) * $fraction, 1);
@@ -1031,6 +1046,7 @@ class DashboardController extends Controller
         return [
             'tp_pct' => $tp,
             'px_pct' => $px,
+            'sl_pct' => 100.0,
             'gain_left' => round(min($tp, $px), 1),
             'gain_width' => round(abs($px - $tp), 1),
             'rungs' => $rungs,

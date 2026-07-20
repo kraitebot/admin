@@ -617,7 +617,7 @@
                                         $filledHelp = "The bot lines up a few backup buy orders below your entry. This shows how many have filled so far, out of the total.\n\n**0 / 4** means none of the 4 backups have triggered yet — the price has not dropped far enough to need them.";
                                         $entryHelp = "The price this trade is measured against.\n\n- **Open** — the price the bot first bought at to start the trade.\n- **WAP** — shown once the bot has bought more lower down. It is the new **average** price across all those buys, which is a fairer break-even point.";
                                         $tpHelp = "**Take-profit** — the price the bot is trying to sell at for a small win.\n\nIf the market reaches this price, the trade closes in the green. It shifts as the bot buys more (the average changes, so the target moves with it).";
-                                        $nextHelp = "The price of the bot's **next** backup buy.\n\nIf the market falls to here, the bot buys a little more to lower its average price — giving the trade a better chance to recover.";
+                                        $nextHelp = "The next adverse-price protection point.\n\n- **Next** — the next backup buy while ladder rungs remain.\n- **SL** — the stop-loss once every backup buy has filled.";
                                         $pxHelp = "**PX** is the live price of this market right now.\n\nIt keeps changing as the market moves. The bot watches it against your entry and targets to decide what to do next.";
                                         $pnlHelp = "How much this trade is up or down right now, in dollars.\n\n- **Green** — the trade is winning.\n- **Red** — the trade is losing.\n\nIt is a live number that moves with the market, and it only becomes final when the trade actually closes.";
                                     @endphp
@@ -651,6 +651,10 @@
                                         <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2] transition-[left] duration-slow ease-snap" :style="`left: ${p.track.px_pct}%`">
                                             <span class="font-mono text-[9px] font-bold tracking-[0.06em] text-fg-2">PX</span>
                                             <span class="w-[10px] h-[10px] rounded-full bg-fg-1 mt-[3px]" style="box-shadow: 0 0 0 3px color-mix(in srgb, var(--fg-1) 20%, transparent);"></span>
+                                        </div>
+                                        <div class="absolute top-0 -translate-x-1/2 flex flex-col items-center z-[2]" :style="`left: ${p.track.sl_pct}%`">
+                                            <span class="font-mono text-[9px] font-bold tracking-[0.06em] text-pnldown">SL</span>
+                                            <span class="w-[11px] h-[11px] rounded-full mt-[3px] bg-pnldown-bg border-[2px] border-pnldown"></span>
                                         </div>
                                     </div>
                                 </template>
@@ -695,9 +699,9 @@
                                     </div>
                                     <div class="text-right">
                                         <div class="font-mono text-[9.5px] font-medium tracking-[0.08em] uppercase flex items-center justify-end gap-[5px] mb-[5px]" :class="p.direction === 'LONG' ? 'text-accent' : 'text-pnldown'">
-                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/>Next<x-ui.help-dot title="Next buy" :body="$nextHelp" tip="The price of the bot's next backup buy." />
+                                            <x-feathericon-arrow-down class="w-[11px] h-[11px]" stroke-width="1.75"/><span x-text="p.next_limit_price ? 'Next' : 'SL'"></span><x-ui.help-dot title="Next protection point" :body="$nextHelp" tip="The next backup buy, then stop-loss after the final rung." />
                                         </div>
-                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px] text-fg-1" x-text="p.next_limit_price ?? '—'"></div>
+                                        <div class="font-mono font-semibold tabular-nums tracking-[-0.01em] text-[13px]" :class="p.next_limit_price ? 'text-fg-1' : 'text-pnldown'" x-text="p.next_limit_price ?? p.stop_loss_price ?? '—'"></div>
                                     </div>
                                 </div>
 

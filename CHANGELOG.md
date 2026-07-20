@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.26.0] — 2026-07-20
+
+### Position lifecycle clarity
+
+- [IMPROVED] The open-position lifecycle rail now ends at the live stop-loss.
+  After all averaging orders fill, the next adverse-price point changes from
+  the final ladder rung to SL while TP, price, and completed rungs remain clear.
+- [ADDED] Serialization and geometry regression coverage for active and
+  cancelled protection orders, WAP progress, and the fully-filled ladder.
+
 ## [0.25.1] — 2026-07-20
 
 ### Core 1.76.0 + account tuning
