@@ -2,6 +2,17 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.25.1] — 2026-07-20
+
+### Core 1.76.0 + account tuning
+
+- Ships `kraitebot/core` 1.76.0 — Bitget unified-account reads, the
+  evidence-driven own-activity protection flags, and connectivity probe
+  message translation reach the operator console (step records now carry
+  plain-language probe errors).
+- Account settings accept a single-position slot configuration
+  (total positions long/short may now be 1).
+
 ## [0.25.0] — 2026-07-19
 
 ### Mobile market-risk visibility

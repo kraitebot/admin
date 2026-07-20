@@ -55,8 +55,8 @@ final class UpdateAccountRequest extends FormRequest
             'profit_percentage' => ['required', 'numeric', Rule::in(['0.360', '0.380', '0.400'])],
             'stop_market_initial_percentage' => ['required', 'numeric', Rule::in(['2.50', '5.00', '7.50'])],
 
-            'total_positions_long' => ['required', 'integer', Rule::in([4, 5, 6])],
-            'total_positions_short' => ['required', 'integer', Rule::in([4, 5, 6])],
+            'total_positions_long' => ['required', 'integer', Rule::in([1, 4, 5, 6])],
+            'total_positions_short' => ['required', 'integer', Rule::in([1, 4, 5, 6])],
 
             'position_leverage_long' => ['required', 'integer', Rule::in([10, 15, 20])],
             'position_leverage_short' => ['required', 'integer', Rule::in([10, 15, 20])],
