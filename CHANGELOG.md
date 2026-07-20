@@ -2,6 +2,13 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.26.1] — 2026-07-20
+
+### Shared trading reliability
+
+- Ships `kraitebot/core` 1.77.2 so every Kraite application uses the same
+  working-order synchronization and fresh signed-retry contract.
+
 ## [0.26.0] — 2026-07-20
 
 ### Position lifecycle clarity
