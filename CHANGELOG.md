@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.1] — 2026-07-21
+
+### BSCS and mobile dashboard
+
+- [IMPROVED] Admin BSCS consumers use the shared account-scoped facade for
+  state and effective directional position caps.
+- [IMPROVED] The mobile dashboard reports the selected account's latest clean
+  position close and its current BSCS-adjusted LONG/SHORT cap.
+
 ## [0.27.0] — 2026-07-21
 
 ### Mobile passkeys and market-risk clarity

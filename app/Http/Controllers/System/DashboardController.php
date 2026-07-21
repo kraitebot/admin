@@ -14,7 +14,7 @@ use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\MarketRegimeSnapshot;
 use Kraite\Core\Support\Fleet\FleetMetricsRepository;
-use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
+use Kraite\Core\Support\MarketRegime\Bscs;
 
 class DashboardController extends Controller
 {
@@ -258,7 +258,7 @@ class DashboardController extends Controller
         // Accessors instead of toArray(): the lossless dump also computes
         // portfolio risk, which this panel doesn't render — no point paying
         // its queries on every poll.
-        $index = BlackSwanIndex::current();
+        $index = Bscs::current();
         $band = $index->band()?->value;
 
         $override = $this->bscsOverride();

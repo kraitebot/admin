@@ -34,6 +34,8 @@ beforeEach(function (): void {
         $table->string('name');
         $table->boolean('is_active')->default(false);
         $table->boolean('can_trade')->default(false);
+        $table->unsignedInteger('total_positions_long')->default(6);
+        $table->unsignedInteger('total_positions_short')->default(6);
         $table->timestamps();
         $table->softDeletes();
     });
@@ -198,6 +200,7 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
     $dashboard->shouldReceive('mobilePayload')->once()->andReturn([
         'account' => ['id' => $accountId, 'name' => 'Main account', 'exchange' => 'Binance'],
         'kpis' => ['open_count' => 0],
+        'last_position_closed_at' => null,
         'positions' => [],
         'generated_at' => now()->toIso8601String(),
     ]);
@@ -209,7 +212,102 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
         ->assertOk()
         ->assertJsonPath('data.accounts.0.id', $accountId)
         ->assertJsonPath('data.selected_account_id', $accountId)
+        ->assertJsonPath('data.dashboard.last_position_closed_at', null)
         ->assertJsonPath('data.dashboard.positions', []);
+});
+
+it('returns the latest clean close for only the selected account', function (): void {
+    $now = CarbonImmutable::parse('2026-07-21 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create();
+    $otherOwner = User::factory()->create();
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Selected account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $otherAccountId = DB::table('accounts')->insertGetId([
+        'user_id' => $otherOwner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Other account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('positions')->insert([
+        [
+            'account_id' => $accountId,
+            'status' => 'closed',
+            'closed_at' => $now->subMinutes(20),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'account_id' => $accountId,
+            'status' => 'closed',
+            'closed_at' => $now->subMinutes(5),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'account_id' => $accountId,
+            'status' => 'cancelled',
+            'closed_at' => $now->subMinute(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'account_id' => $otherAccountId,
+            'status' => 'closed',
+            'closed_at' => $now,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+    $before = DB::table('positions')->orderBy('id')->get()->all();
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath(
+            'data.dashboard.last_position_closed_at',
+            $now->subMinutes(5)->toIso8601String(),
+        );
+
+    expect(DB::table('positions')->orderBy('id')->get()->all())->toEqual($before);
+});
+
+it('returns no last close when the account has never cleanly closed a position', function (): void {
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create();
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Never closed account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('positions')->insert([
+        'account_id' => $accountId,
+        'status' => 'failed',
+        'closed_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.last_position_closed_at', null);
 });
 
 it('returns the exact bounded BSCS summary for the mobile market-regime tile', function (): void {
@@ -226,6 +324,8 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         'user_id' => $owner->id,
         'api_system_id' => $apiSystemId,
         'name' => 'BSCS fragile account',
+        'total_positions_long' => 6,
+        'total_positions_short' => 6,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -249,6 +349,11 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         ->assertJsonPath('data.dashboard.bscs.is_stale', false)
         ->assertJsonPath('data.dashboard.bscs.block_threshold', 80)
         ->assertJsonPath('data.dashboard.bscs.computed_ago', null)
+        ->assertJsonPath('data.dashboard.bscs.position_cap.long.effective', 3)
+        ->assertJsonPath('data.dashboard.bscs.position_cap.long.maximum', 6)
+        ->assertJsonPath('data.dashboard.bscs.position_cap.short.effective', 3)
+        ->assertJsonPath('data.dashboard.bscs.position_cap.short.maximum', 6)
+        ->assertJsonPath('data.dashboard.bscs.position_cap.ratio_percent', 50)
         ->assertJsonMissingPath('data.dashboard.bscs.components')
         ->assertJsonMissingPath('data.dashboard.bscs.cooldown_until');
 
@@ -260,6 +365,7 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         'is_stale',
         'block_threshold',
         'computed_ago',
+        'position_cap',
     ])->and(DB::table('kraite')->where('id', 1)->first())->toEqual($before);
 });
 

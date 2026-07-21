@@ -16,6 +16,7 @@ Kraite Admin is the back-office interface for managing the Kraite trading infras
 
 - **Exchange Symbol Management** — view, configure, and override trading parameters per symbol
 - **Position Monitoring** — real-time position tracking, P&L, ladder state across all exchanges
+- **Read-only Mobile Dashboard** — trader-owned KPIs, BSCS-adjusted position caps, latest clean close, and open-position lifecycle data
 - **Account Management** — multi-exchange account configuration and balance overview
 - **Backtesting Review** — approve/reject backtesting results, manage symbol eligibility
 - **System Diagnostics** — step dispatcher status, queue health, API error logs

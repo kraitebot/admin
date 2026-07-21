@@ -9,7 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\View\View;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\MarketRegimeSnapshot;
-use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
+use Kraite\Core\Support\MarketRegime\Bscs;
 use Throwable;
 
 /**
@@ -18,7 +18,7 @@ use Throwable;
  * Educational + live-state surface for the regime detector. Shows the
  * current score, the 4 bands, all 5 sub-signals with plain-English
  * explanations, the 30-day score timeline, and the cooldown mechanics.
- * Pulls live state via BlackSwanIndex; pulls history via
+ * Pulls live state via BSCS; pulls history via
  * MarketRegimeSnapshot.
  */
 final class BscsController extends Controller
@@ -32,9 +32,9 @@ final class BscsController extends Controller
 
     public function data(): JsonResponse
     {
-        $payload = BlackSwanIndex::current()->toArray();
+        $payload = Bscs::current()->toArray();
 
-        // BlackSwanIndex::toArray() doesn't surface the override reason —
+        // The BSCS state payload doesn't surface the override reason —
         // pull it directly so the override-active panel can show the audit
         // string the operator submitted.
         $payload['override_reason'] = Kraite::query()->value('bscs_override_reason');

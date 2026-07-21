@@ -19,8 +19,7 @@ use Kraite\Core\Models\Position;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\Window;
-use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
-use Kraite\Core\Support\MarketRegime\RegimeCountMultiplier;
+use Kraite\Core\Support\MarketRegime\Bscs;
 
 class DashboardController extends Controller
 {
@@ -176,9 +175,21 @@ class DashboardController extends Controller
             ],
             'kpis' => $this->kpis($account, $positions),
             'bscs' => $this->mobileBscsBadge($account),
+            'last_position_closed_at' => $this->lastPositionClosedAt($account),
             'positions' => $positions,
             'generated_at' => now()->toIso8601String(),
         ];
+    }
+
+    private function lastPositionClosedAt(Account $account): ?string
+    {
+        return $account->positions()
+            ->where('status', 'closed')
+            ->whereNotNull('closed_at')
+            ->latest('closed_at')
+            ->first(['closed_at'])
+            ?->closed_at
+            ?->toIso8601String();
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -542,6 +553,7 @@ class DashboardController extends Controller
      *     is_stale: bool,
      *     block_threshold: int,
      *     computed_ago: ?string,
+     *     position_cap: array{long: array{effective: int, maximum: int}, short: array{effective: int, maximum: int}, ratio_percent: int},
      * }
      */
     private function mobileBscsBadge(Account $account): array
@@ -556,6 +568,7 @@ class DashboardController extends Controller
             'is_stale' => $bscs['is_stale'],
             'block_threshold' => $bscs['block_threshold'],
             'computed_ago' => $bscs['computed_ago'],
+            'position_cap' => $bscs['position_cap'],
         ];
     }
 
@@ -568,7 +581,8 @@ class DashboardController extends Controller
      */
     private function bscsBadge(Account $account): array
     {
-        $index = BlackSwanIndex::current();
+        $bscs = Bscs::forAccount($account);
+        $index = $bscs->details();
         $score = $index->score();
         $band = $index->band()?->value;
         $blocked = $index->shouldBlockOpens();
@@ -641,27 +655,7 @@ class DashboardController extends Controller
             'computed_ago' => $this->humanAgo($snapshot?->computed_at),
             'next_compute_in' => $this->nextBscsComputeIn(),
             'components' => $components,
-            'position_cap' => $this->bscsPositionCap($account, $score),
-        ];
-    }
-
-    /** @return array{long: array{effective: int, maximum: int}, short: array{effective: int, maximum: int}, ratio_percent: int} */
-    private function bscsPositionCap(Account $account, ?int $score): array
-    {
-        $ratio = RegimeCountMultiplier::for($score);
-        $maximumLong = (int) $account->total_positions_long;
-        $maximumShort = (int) $account->total_positions_short;
-
-        return [
-            'long' => [
-                'effective' => (int) floor($maximumLong * $ratio),
-                'maximum' => $maximumLong,
-            ],
-            'short' => [
-                'effective' => (int) floor($maximumShort * $ratio),
-                'maximum' => $maximumShort,
-            ],
-            'ratio_percent' => (int) round($ratio * 100),
+            'position_cap' => $bscs->positions()->max()->toArray(),
         ];
     }
 
