@@ -843,11 +843,74 @@
             {{-- Right column --}}
             <div class="flex flex-col gap-5 min-w-0">
 
+                @php
+                    $bscsHelp = <<<'MARKDOWN'
+A market-wide risk score built from five warning signals using hourly BTC, ETH, SOL, BNB, and XRP data.
+
+Each signal that fires adds **0.20**, so the score runs from **0.00 to 1.00**.
+
+New registrations save a maximum of **6 long + 6 short** positions. Existing accounts keep their own saved maximum.
+
+- **Calm (0.00–0.39)** — uses 100% of the account's saved position maximum.
+- **Elevated (0.40–0.59)** — uses 75% of the saved maximum.
+- **Fragile (0.60–0.79)** — uses 50% of the saved maximum, with smaller new positions.
+- **Critical (0.80–1.00)** — new positions are paused.
+
+The result rounds down to whole positions. BSCS never rewrites the saved account maximum or closes existing positions when the temporary cap falls.
+MARKDOWN;
+
+                    $volExpansionHelp = <<<'MARKDOWN'
+Compares how sharply BTC moved during the last 24 hours with its normal movement over the last 14 days.
+
+**1.00** means normal volatility. **1.30** means the last day was 30% more volatile than the baseline.
+
+It fires above **1.30**.
+MARKDOWN;
+
+                    $rangeBlowoutHelp = <<<'MARKDOWN'
+Compares BTC's full high-to-low range during the last 24 hours with the average daily range over the previous 14 days.
+
+**1.00** means a normal-sized day. **1.50** means today's range is 50% wider than normal.
+
+It fires above **1.50**.
+MARKDOWN;
+
+                    $correlationRegimeHelp = <<<'MARKDOWN'
+Measures how closely BTC, ETH, SOL, BNB, and XRP moved together over the last 48 hours.
+
+A higher value means the market is moving as one, so diversification offers less protection.
+
+It fires above **0.70**.
+MARKDOWN;
+
+                    $rejectionHelp = <<<'MARKDOWN'
+Shows how far BTC's latest close sits below its highest price from the last 14 days.
+
+A negative number means BTC has fallen from that high. **−5.0%** means it is 5% below the peak.
+
+It fires below **−5.0%**.
+MARKDOWN;
+
+                    $futuresVolumeHelp = <<<'MARKDOWN'
+Compares BTC futures trading volume during the last 24 hours with the average daily volume over the last 14 days.
+
+**1.00** means normal volume. **1.20** means activity is 20% above normal.
+
+It fires above **1.20**.
+MARKDOWN;
+                @endphp
+
                 {{-- BSCS card — real score, band, sub-signals --}}
                 <div class="card">
                     <div class="flex items-center justify-between gap-3 py-[15px] px-5 border-b border-line-soft">
                         <div class="font-sans font-semibold text-[14px] text-fg-1 flex items-center gap-[9px] whitespace-nowrap">
-                            <x-feathericon-shield class="w-4 h-4 text-fg-3" stroke-width="1.75"/>Black Swan Composite
+                            <x-feathericon-shield class="w-4 h-4 text-fg-3" stroke-width="1.75"/>
+                            <span>Black Swan Composite</span>
+                            <x-ui.help-dot
+                                title="Black Swan Composite Score"
+                                :body="$bscsHelp"
+                                tip="Market-wide risk score used to adjust or pause new positions."
+                            />
                         </div>
                         <span class="inline-flex items-center gap-[7px] py-[5px] px-[13px] rounded-chip border font-mono text-[11px] font-semibold tracking-[0.1em] uppercase whitespace-nowrap"
                               :style="`background: color-mix(in srgb, ${bandMeta().color} 12%, transparent); border-color: color-mix(in srgb, ${bandMeta().color} 38%, transparent); color: ${bandMeta().color}`">
@@ -882,6 +945,19 @@
                             </div>
                         </div>
                         <div class="text-[12px] text-fg-3" x-text="d?.bscs?.status"></div>
+                        <div x-show="d?.bscs?.position_cap" x-cloak
+                             class="flex flex-col gap-1 py-[9px] px-[11px] rounded-control border border-line-soft bg-surface-2">
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="font-mono text-[9px] font-semibold tracking-[0.08em] uppercase text-fg-mute">BSCS position cap</span>
+                                <span class="font-mono text-[11px] font-semibold tabular-nums whitespace-nowrap"
+                                      :style="`color: ${bandMeta().color}`"
+                                      x-text="`${d.bscs.position_cap.long.effective} LONG + ${d.bscs.position_cap.short.effective} SHORT`"></span>
+                            </div>
+                            <span class="text-[10.5px] leading-[1.4] text-fg-mute">
+                                <span x-text="`${d.bscs.position_cap.ratio_percent}% of saved ${d.bscs.position_cap.long.maximum} LONG + ${d.bscs.position_cap.short.maximum} SHORT.`"></span>
+                                Saved limit unchanged; BSCS does not close existing positions.
+                            </span>
+                        </div>
                         <div x-show="d?.bscs?.blocked" x-cloak
                              class="flex items-start gap-[9px] py-[11px] px-[13px] rounded-control bg-pnldown-bg text-pnldown text-[12px] leading-[1.45] border" style="border-color: color-mix(in srgb, var(--danger) 38%, transparent);">
                             <x-feathericon-alert-triangle class="w-[15px] h-[15px] flex-shrink-0 mt-0.5" stroke-width="1.75"/>
@@ -891,7 +967,54 @@
                         <div class="flex flex-col gap-[9px] pt-[3px]">
                             <template x-for="c in (d?.bscs?.components || [])" :key="c.label">
                                 <div class="flex items-center gap-[11px]">
-                                    <span class="text-[12px] text-fg-3 flex-1" x-text="c.label"></span>
+                                    <div class="flex items-center gap-1.5 flex-1 min-w-0">
+                                        <span class="text-[12px] text-fg-3" x-text="c.label"></span>
+                                        <template x-if="c.label === 'Vol expansion'">
+                                            <span class="inline-flex">
+                                                <x-ui.help-dot
+                                                    title="Vol expansion"
+                                                    :body="$volExpansionHelp"
+                                                    tip="Is BTC moving much faster than its recent norm?"
+                                                />
+                                            </span>
+                                        </template>
+                                        <template x-if="c.label === 'Range blowout'">
+                                            <span class="inline-flex">
+                                                <x-ui.help-dot
+                                                    title="Range blowout"
+                                                    :body="$rangeBlowoutHelp"
+                                                    tip="Is today's BTC trading range unusually wide?"
+                                                />
+                                            </span>
+                                        </template>
+                                        <template x-if="c.label === 'Correlation regime'">
+                                            <span class="inline-flex">
+                                                <x-ui.help-dot
+                                                    title="Correlation regime"
+                                                    :body="$correlationRegimeHelp"
+                                                    tip="Are the major coins all moving together?"
+                                                />
+                                            </span>
+                                        </template>
+                                        <template x-if="c.label === 'Rejection %'">
+                                            <span class="inline-flex">
+                                                <x-ui.help-dot
+                                                    title="Rejection percentage"
+                                                    :body="$rejectionHelp"
+                                                    tip="How far has BTC fallen from its recent high?"
+                                                />
+                                            </span>
+                                        </template>
+                                        <template x-if="c.label === 'Futures vol'">
+                                            <span class="inline-flex">
+                                                <x-ui.help-dot
+                                                    title="Futures volume"
+                                                    :body="$futuresVolumeHelp"
+                                                    tip="Is BTC futures activity unusually high?"
+                                                />
+                                            </span>
+                                        </template>
+                                    </div>
                                     <span class="font-mono text-[11px] tabular-nums" :class="c.fired ? 'text-fg-1 font-semibold' : 'text-fg-mute'" x-text="c.value === null ? '—' : c.value"></span>
                                     <span class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip w-[52px] text-center"
                                           :style="c.fired ? 'color: var(--warn); background: color-mix(in srgb, var(--warn) 14%, transparent)' : 'color: var(--fg-faint); background: var(--bg-elev-3)'"

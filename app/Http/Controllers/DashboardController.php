@@ -20,6 +20,7 @@ use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\BlackSwanIndex;
+use Kraite\Core\Support\MarketRegime\RegimeCountMultiplier;
 
 class DashboardController extends Controller
 {
@@ -148,7 +149,7 @@ class DashboardController extends Controller
             'metrics' => $this->accountMetrics($account),
             'kpis' => $this->kpis($account, $positions),
             'btc' => $this->btcStrip(),
-            'bscs' => $this->bscsBadge(),
+            'bscs' => $this->bscsBadge($account),
             'positions' => $positions,
             'activity' => $this->activityFeed($account),
             'connectivity_servers' => $this->connectivityServers(),
@@ -174,7 +175,7 @@ class DashboardController extends Controller
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
             ],
             'kpis' => $this->kpis($account, $positions),
-            'bscs' => $this->mobileBscsBadge(),
+            'bscs' => $this->mobileBscsBadge($account),
             'positions' => $positions,
             'generated_at' => now()->toIso8601String(),
         ];
@@ -543,9 +544,9 @@ class DashboardController extends Controller
      *     computed_ago: ?string,
      * }
      */
-    private function mobileBscsBadge(): array
+    private function mobileBscsBadge(Account $account): array
     {
-        $bscs = $this->bscsBadge();
+        $bscs = $this->bscsBadge($account);
 
         return [
             'score' => $bscs['score'],
@@ -559,14 +560,13 @@ class DashboardController extends Controller
     }
 
     /**
-     * Compact BSCS payload for the user dashboard — score + band + a single
-     * status line. The full sub-signal grid lives on the system dashboard;
-     * end-users just need the posture signal ("are new opens flowing or
-     * paused"). Falls back to a calm-display when no compute has landed yet.
+     * Compact BSCS payload for the user dashboard — score, band, posture,
+     * and the account-specific position cap. Falls back to a calm-display
+     * when no compute has landed yet.
      *
      * @return array<string, mixed>
      */
-    private function bscsBadge(): array
+    private function bscsBadge(Account $account): array
     {
         $index = BlackSwanIndex::current();
         $score = $index->score();
@@ -641,6 +641,27 @@ class DashboardController extends Controller
             'computed_ago' => $this->humanAgo($snapshot?->computed_at),
             'next_compute_in' => $this->nextBscsComputeIn(),
             'components' => $components,
+            'position_cap' => $this->bscsPositionCap($account, $score),
+        ];
+    }
+
+    /** @return array{long: array{effective: int, maximum: int}, short: array{effective: int, maximum: int}, ratio_percent: int} */
+    private function bscsPositionCap(Account $account, ?int $score): array
+    {
+        $ratio = RegimeCountMultiplier::for($score);
+        $maximumLong = (int) $account->total_positions_long;
+        $maximumShort = (int) $account->total_positions_short;
+
+        return [
+            'long' => [
+                'effective' => (int) floor($maximumLong * $ratio),
+                'maximum' => $maximumLong,
+            ],
+            'short' => [
+                'effective' => (int) floor($maximumShort * $ratio),
+                'maximum' => $maximumShort,
+            ],
+            'ratio_percent' => (int) round($ratio * 100),
         ];
     }
 

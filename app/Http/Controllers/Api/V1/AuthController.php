@@ -6,28 +6,18 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\LoginRequest;
+use App\Services\MobileTokenIssuer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AuthController extends Controller
 {
-    public function store(LoginRequest $request): JsonResponse
+    public function store(LoginRequest $request, MobileTokenIssuer $tokens): JsonResponse
     {
         $user = $request->authenticate();
-        $expiresAt = now()->addDays(30);
         $deviceName = $request->string('device_name')->trim()->toString() ?: 'Kraite iPhone';
-        $token = $user->createToken($deviceName, ['dashboard:read'], $expiresAt);
 
-        return response()->json([
-            'token' => $token->plainTextToken,
-            'token_type' => 'Bearer',
-            'expires_at' => $expiresAt->toIso8601String(),
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
-        ]);
+        return response()->json($tokens->issue($user, $deviceName));
     }
 
     public function destroy(Request $request): JsonResponse

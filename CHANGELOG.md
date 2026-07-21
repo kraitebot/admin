@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.0] — 2026-07-21
+
+### Mobile passkeys and market-risk clarity
+
+- [NEW FEATURE] The read-only mobile API supports single-use passkey
+  registration, sign-in, listing, and deletion, with exact Apple
+  web-credentials association for the signed Kraite app.
+- [IMPROVED] Password and passkey login share one revocable 30-day
+  `dashboard:read` token contract.
+- [IMPROVED] The trader dashboard explains each BSCS signal and shows the
+  account-specific temporary LONG and SHORT cap without changing saved limits.
+- [FIXED] Mobile BSCS serialization uses the selected account when computing
+  its effective position cap, and malformed passkeys return validation errors.
+- [SECURITY] Guzzle and PSR-7 are refreshed to advisory-free releases.
+
+### Verification
+
+- [VERIFIED] Full admin suite passes: 179 tests / 860 assertions.
+
 ## [0.26.1] — 2026-07-20
 
 ### Shared trading reliability
