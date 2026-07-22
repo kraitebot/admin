@@ -81,6 +81,17 @@ it('renders the engine page for admins with the live state seeded', function ():
     $response->assertSee('Mark resolved', false);
 });
 
+it('filters processing classes by their visible running count including block classes', function (): void {
+    $admin = User::factory()->create(['is_admin' => true, 'email' => 'eng-processing-filter@kraite.test']);
+
+    $response = $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/engine')
+        ->assertSuccessful();
+
+    $response->assertSee('return rows.filter((r) => (r.states.Running ?? 0) > 0);', false);
+    $response->assertDontSee('!r.is_parent &&', false);
+});
+
 it('degrades the gauges to placeholders when the step tables are unavailable', function (): void {
     $admin = User::factory()->create(['is_admin' => true, 'email' => 'eng-degrade@kraite.test']);
 

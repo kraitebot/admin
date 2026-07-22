@@ -13,7 +13,7 @@
             failuresLoading: false,
             busyClass: null,                   // class currently being AI-triaged
             verdictFor: null,                  // failure row shown in the verdict popup
-            onlyProcessing: false,             // fleet tabs: show only classes with running leaf work
+            onlyProcessing: false,             // fleet tabs: show only classes with running work
             resolveAllArmed: false,            // master resolve needs a second tap
             syncing: false,                    // header indicator spins while a refresh is in flight
             toast: null,
@@ -121,9 +121,7 @@
             fleetRows(prefix) {
                 const rows = this.fleet[prefix]?.rows || [];
                 if (!this.onlyProcessing) return rows;
-                // Leaf classes with work genuinely running: parents excluded,
-                // and at least one step in the Running state.
-                return rows.filter((r) => !r.is_parent && (r.states.Running ?? 0) > 0);
+                return rows.filter((r) => (r.states.Running ?? 0) > 0);
             },
             flash(text, kind) {
                 this.toast = { text, kind };
@@ -276,7 +274,7 @@
                         <span x-text="prefix === 'default' ? 'Calculation fleet' : 'Trading fleet'"></span>
                     </h4>
                     <div class="flex items-center gap-3.5">
-                        {{-- only-processing switcher: leaf classes with running work --}}
+                        {{-- only-processing switcher: classes with running work --}}
                         <button type="button" @click="onlyProcessing = !onlyProcessing"
                                 class="appearance-none bg-transparent border-0 cursor-pointer inline-flex items-center gap-2 p-0">
                             <span class="w-[30px] h-[17px] rounded-chip relative transition-colors duration-fast"

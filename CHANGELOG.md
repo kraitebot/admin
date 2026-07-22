@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.2] — 2026-07-22
+
+### Engine processing filter
+
+- [FIXED] **Only processing** now keeps every class with a visible Running
+  count, including active parent block classes.
+- [VERIFIED] Targeted Engine tests pass: 8 tests / 39 assertions; production
+  frontend build passes.
+
 ## [0.27.1] — 2026-07-21
 
 ### BSCS and mobile dashboard
