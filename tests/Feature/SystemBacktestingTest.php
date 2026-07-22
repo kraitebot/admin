@@ -228,7 +228,8 @@ it('renders the backtesting workspace for admins', function (): void {
     // Every adjustment candidate row carries a one-click apply-and-re-run button.
     $response->assertSee('Apply this config and backtest again', false);
     $response->assertSee('Immediate Tradeable', false);
-    $response->assertSee('filters.top100 && s.rank > 100', false);
+    $response->assertSee('filters.top100 && (s.rank == null || s.rank > 100)', false);
+    $response->assertSee('s.rank != null && s.rank <= 100', false);
     $response->assertSee('filters.immediateTradeable && ! s.immediateTradeable', false);
 });
 

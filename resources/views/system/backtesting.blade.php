@@ -160,7 +160,7 @@
                 const q = this.query.toLowerCase();
                 return this.symbols.filter((s) => {
                     // Token-universe filters (the checkboxes below the selector).
-                    if (this.filters.top100 && s.rank > 100) return false;
+                    if (this.filters.top100 && (s.rank == null || s.rank > 100)) return false;
                     // Every checked filter narrows the current result set. This
                     // keeps combinations such as Immediate Tradeable + Top 100
                     // as a strict intersection.
@@ -173,7 +173,7 @@
             },
             // Live universe counts — always over the FULL symbol set, so each
             // checkbox shows its total reach regardless of the others' state.
-            get countTop100() { return this.symbols.filter((s) => s.rank <= 100).length; },
+            get countTop100() { return this.symbols.filter((s) => s.rank != null && s.rank <= 100).length; },
             get countApproved() { return this.symbols.filter((s) => s.status === 'approved').length; },
             get countNotConcluded() { return this.symbols.filter((s) => s.status == null).length; },
             get countImmediateTradeable() { return this.symbols.filter((s) => s.immediateTradeable).length; },

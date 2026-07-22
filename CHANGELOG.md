@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.7] — 2026-07-23
+
+### Strict Top 100 intersection
+
+- [FIXED] Top 100 filters now exclude unranked symbols, including when
+  combined with Immediate Tradeable.
+- [VERIFIED] Focused Backtesting coverage and production frontend build pass.
+
 ## [0.27.6] — 2026-07-23
 
 ### Immediate tradeable approval queue
