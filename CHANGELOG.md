@@ -2,6 +2,20 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.5] — 2026-07-23
+
+### Immediate trading stop
+
+- [FIXED] Switching an account to **NOT TRADING** persists immediately and
+  changes only its opening permission; unrelated unsaved configuration stays
+  untouched.
+- [FIXED] The switch shows the stored account permission and remains available
+  for turning off during degraded connectivity or an inactive subscription.
+- [SAFETY] Ships `kraitebot/core` 1.79.1 so queued openings recheck trading
+  readiness before market entry while existing exposure remains managed.
+- [VERIFIED] Account endpoint/UI regressions pass: 23 tests / 130 assertions;
+  production frontend build passes.
+
 ## [0.27.3] — 2026-07-22
 
 ### Engine polling reliability

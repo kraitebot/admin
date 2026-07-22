@@ -213,6 +213,24 @@ class AccountController extends Controller
             ->with('updated_account_id', $account->id);
     }
 
+    public function disableTrading(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'account_id' => ['required', 'integer'],
+        ]);
+
+        $account = $this->accountForCurrentUser((int) $validated['account_id']);
+        $account->update(['can_trade' => false]);
+
+        return response()->json([
+            'message' => 'Trading disabled for this account.',
+            'account' => [
+                'id' => $account->id,
+                'can_trade' => (bool) $account->can_trade,
+            ],
+        ]);
+    }
+
     public function saveCredentials(Request $request, AccountServerConnectivityService $connectivity): JsonResponse
     {
         $validated = $request->validate([

@@ -309,6 +309,7 @@ window.acctCard = (init) => ({
     cfgSaved: 'idle',
     cfgError: null,
     stopTradingOpen: false,
+    tradingToggleSaving: false,
     connDone: false,
     connError: null,
     connSaving: false,
@@ -357,7 +358,11 @@ window.acctCard = (init) => ({
         );
     },
     canChangeTrading() {
-        return this.subscriptionActive && this.connectionUsable();
+        if (this.tradingToggleSaving || !this.hasCredentials) {
+            return false;
+        }
+
+        return this.cfg.canTrade || (this.subscriptionActive && this.connectionUsable());
     },
     tradingDisabled() {
         return this.hasCredentials && (!this.cfg.canTrade || !this.isActive || !this.subscriptionActive);
@@ -391,7 +396,7 @@ window.acctCard = (init) => ({
 
         return defaultText;
     },
-    requestCanTradeToggle() {
+    async requestCanTradeToggle() {
         if (!this.canChangeTrading()) {
             return;
         }
@@ -404,11 +409,32 @@ window.acctCard = (init) => ({
             return;
         }
 
-        this.cfg.canTrade = false;
+        await this.disableTrading();
     },
-    confirmStopTrading() {
-        this.cfg.canTrade = false;
+    async confirmStopTrading() {
         this.stopTradingOpen = false;
+        await this.disableTrading();
+    },
+    async disableTrading() {
+        this.tradingToggleSaving = true;
+        this.cfgError = null;
+
+        const response = await window.hubUiFetch(init.urls.disableTrading, {
+            method: 'PATCH',
+            body: {
+                account_id: init.accountId,
+            },
+        });
+
+        this.tradingToggleSaving = false;
+
+        if (!response.ok) {
+            this.cfg.canTrade = true;
+            this.cfgError = response.data?.error || 'Could not stop opening new positions.';
+            return;
+        }
+
+        this.cfg.canTrade = response.data.account.can_trade;
     },
     connectedCount() {
         return this.rows.filter((server) => server.status === 'connected').length;

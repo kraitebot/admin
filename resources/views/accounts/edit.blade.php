@@ -113,6 +113,7 @@
                             'status' => route('accounts.connectivity.status', '__UUID__'),
                             'save' => route('accounts.connectivity.credentials'),
                             'update' => route('accounts.update'),
+                            'disableTrading' => route('accounts.trading.disable'),
                         ],
                     ];
                 @endphp
@@ -190,10 +191,10 @@
                                         </x-form.field>
                                         <x-form.field label="Trading enabled">
                                             <div class="h-[42px] flex items-center gap-3 px-3.5 rounded-control border border-line bg-input">
-                                                <x-form.toggle model="cfg.canTrade" checkedExpr="tradingActive()" clickExpr="requestCanTradeToggle()" disabledExpr="!canChangeTrading()"/>
+                                                <x-form.toggle model="cfg.canTrade" checkedExpr="cfg.canTrade" clickExpr="requestCanTradeToggle()" disabledExpr="!canChangeTrading()"/>
                                                 <span class="font-mono text-[12px] font-semibold tracking-[0.03em]"
-                                                      :style="`color: ${tradingActive() ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`"
-                                                      x-text="tradingActive() ? 'CAN TRADE' : 'NOT TRADING'"></span>
+                                                      :style="`color: ${cfg.canTrade ? 'var(--pnl-up-fg)' : 'var(--fg-mute)'}`"
+                                                      x-text="cfg.canTrade ? 'CAN TRADE' : 'NOT TRADING'"></span>
                                                 <span x-show="!subscriptionActive" class="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase text-warn">Subscription inactive</span>
                                                 <span x-show="subscriptionActive && !connectionUsable()" class="ml-auto font-mono text-[9.5px] tracking-[0.06em] uppercase text-fg-faint">needs connection</span>
                                             </div>
@@ -430,7 +431,7 @@
                                 </button>
                             </div>
                             <div class="p-5 flex flex-col gap-4">
-                                <p class="text-[12.5px] text-fg-2 leading-normal">This account has <span class="font-mono font-semibold text-fg-1" x-text="openPositionsCount"></span> open <span x-text="openPositionsCount === 1 ? 'position' : 'positions'"></span>. After saving, the bot will continue managing <span x-text="openPositionsCount === 1 ? 'it' : 'them'"></span> until closed, but it will not open new positions.</p>
+                                <p class="text-[12.5px] text-fg-2 leading-normal">This account has <span class="font-mono font-semibold text-fg-1" x-text="openPositionsCount"></span> open <span x-text="openPositionsCount === 1 ? 'position' : 'positions'"></span>. After stopping, the bot will continue managing <span x-text="openPositionsCount === 1 ? 'it' : 'them'"></span> until closed, but it will not open new positions.</p>
                                 <div class="flex items-center gap-2.5 flex-wrap">
                                     <button type="button" @click="confirmStopTrading()" class="appearance-none font-sans font-semibold rounded-control border border-transparent cursor-pointer inline-flex items-center gap-[7px] h-[40px] px-4 text-[12px] bg-accent text-accent-on hover:bg-accent-hover">Stop opening new positions</button>
                                     <button type="button" @click="stopTradingOpen = false" class="appearance-none font-sans font-semibold rounded-control border border-line-strong cursor-pointer inline-flex items-center h-[40px] px-4 text-[12px] bg-transparent text-fg-1 hover:bg-hover">Cancel</button>

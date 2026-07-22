@@ -152,6 +152,60 @@ function validAccountConfigurationPayload(Account $account, array $overrides = [
     ], $overrides);
 }
 
+it('turns trading off immediately without saving other edited configuration', function (): void {
+    $user = User::factory()->create([
+        'name' => 'Immediate Stop Owner',
+        'email' => 'immediate-stop-owner@kraite.test',
+    ]);
+    $account = createAccountForConnectivityTest($user, true);
+    $account->forceFill([
+        'can_trade' => true,
+        'name' => 'Stored account name',
+        'profit_percentage' => '0.3600',
+        'position_leverage_long' => 20,
+    ])->save();
+
+    $this->actingAs($user)
+        ->patchJson('https://admin.kraite.test/accounts/trading/disable', [
+            'account_id' => $account->id,
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('account.id', $account->id)
+        ->assertJsonPath('account.can_trade', false);
+
+    expect($account->refresh())
+        ->can_trade->toBeFalse()
+        ->name->toBe('Stored account name')
+        ->profit_percentage->toBe(0.36)
+        ->position_leverage_long->toBe(20);
+});
+
+it('cannot turn trading off for another traders account', function (): void {
+    $owner = User::factory()->create();
+    $otherTrader = User::factory()->create();
+    $account = createAccountForConnectivityTest($owner, true);
+    $account->forceFill(['can_trade' => true])->save();
+
+    $this->actingAs($otherTrader)
+        ->patchJson('https://admin.kraite.test/accounts/trading/disable', [
+            'account_id' => $account->id,
+        ])
+        ->assertNotFound();
+
+    expect($account->refresh()->can_trade)->toBeTrue();
+});
+
+it('wires the trading off toggle to the immediate disable endpoint', function (): void {
+    expect(file_get_contents(resource_path('js/app.js')))
+        ->toContain('window.hubUiFetch(init.urls.disableTrading')
+        ->toContain('await this.disableTrading();');
+
+    expect(file_get_contents(resource_path('views/accounts/edit.blade.php')))
+        ->toContain("'disableTrading' => route('accounts.trading.disable')")
+        ->toContain('checkedExpr="cfg.canTrade"')
+        ->not->toContain('checkedExpr="tradingActive()"');
+});
+
 it('passes only live API connectivity servers to the accounts page', function (): void {
     DB::table('servers')->insert([
         ['hostname' => 'test-athena', 'ip_address' => '203.0.113.10', 'is_apiable' => true, 'needs_whitelisting' => true, 'type' => 'ingestion'],

@@ -84,6 +84,7 @@ Route::domain(config('domains.admin'))->group(function () {
         Route::get('/accounts/edit', [AccountController::class, 'edit'])->name('accounts.edit');
         Route::get('/accounts/edit/quotes', [AccountController::class, 'quotes'])->name('accounts.quotes');
         Route::patch('/accounts/edit', [AccountController::class, 'update'])->name('accounts.update');
+        Route::patch('/accounts/trading/disable', [AccountController::class, 'disableTrading'])->name('accounts.trading.disable');
         Route::patch('/accounts/connectivity/credentials', [AccountController::class, 'saveCredentials'])->name('accounts.connectivity.credentials');
         Route::post('/accounts/connectivity/test', [AccountController::class, 'testConnectivity'])->middleware('throttle:10,1')->name('accounts.connectivity.test');
         Route::get('/accounts/connectivity/{blockUuid}', [AccountController::class, 'connectivityStatus'])
