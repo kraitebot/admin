@@ -6,6 +6,7 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Support\Backtest\CandleCoverageVerifier;
 
 /**
@@ -15,10 +16,16 @@ use Kraite\Core\Support\Backtest\CandleCoverageVerifier;
  * suite (see TestCase), so stub the minimum shape the listing query selects.
  */
 beforeEach(function (): void {
+    DB::connection()->getPdo()->sqliteCreateFunction(
+        'CONCAT',
+        static fn (mixed ...$parts): string => implode('', $parts),
+    );
+
     if (! Schema::hasTable('api_systems')) {
         Schema::create('api_systems', function (Blueprint $table): void {
             $table->id();
             $table->string('canonical')->nullable();
+            $table->boolean('is_active')->default(true);
         });
     }
     if (! Schema::hasTable('symbols')) {
@@ -35,6 +42,7 @@ beforeEach(function (): void {
             $table->id();
             $table->unsignedBigInteger('symbol_id');
             $table->unsignedBigInteger('api_system_id');
+            $table->string('token')->nullable();
             $table->string('quote')->nullable();
             $table->string('percentage_gap_long')->nullable();
             $table->string('percentage_gap_short')->nullable();
@@ -43,6 +51,19 @@ beforeEach(function (): void {
             $table->boolean('was_backtesting_approved')->default(false);
             $table->string('backtesting_review_status')->nullable();
             $table->boolean('is_manually_enabled')->default(false);
+            $table->json('api_statuses')->nullable();
+            $table->boolean('has_no_indicator_data')->default(false);
+            $table->boolean('is_marked_for_delisting')->default(false);
+            $table->dateTime('system_disabled_at')->nullable();
+            $table->boolean('is_price_aligned')->default(true);
+            $table->boolean('has_price_trend_misalignment')->default(false);
+            $table->boolean('has_early_direction_change')->default(false);
+            $table->boolean('has_invalid_indicator_direction')->default(false);
+            $table->json('leverage_brackets')->nullable();
+            $table->string('direction')->nullable();
+            $table->dateTime('tradeable_at')->nullable();
+            $table->string('indicators_timeframe')->nullable();
+            $table->json('btc_correlation_rolling')->nullable();
         });
     }
     if (! Schema::hasTable('accounts')) {
@@ -78,6 +99,7 @@ function seedBacktestableToken(): int
     return (int) DB::table('exchange_symbols')->insertGetId([
         'symbol_id' => $symbolId,
         'api_system_id' => $apiSystemId,
+        'token' => 'BTC',
         'quote' => 'USDT',
         'percentage_gap_long' => '0.60',
         'percentage_gap_short' => '0.60',
@@ -87,6 +109,58 @@ function seedBacktestableToken(): int
         'backtesting_review_status' => 'approved',
         'is_manually_enabled' => true,
     ]);
+}
+
+/**
+ * Seed a Binance symbol that becomes fully tradeable when approval also
+ * enables it manually, unless one of the supplied gate overrides blocks it.
+ *
+ * @param  array<string, mixed>  $overrides
+ */
+function seedImmediateTradeableToken(array $overrides = []): int
+{
+    $token = $overrides['token'] ?? 'ETH';
+    $cmcRanking = $overrides['cmc_ranking'] ?? 2;
+    unset($overrides['token'], $overrides['cmc_ranking']);
+
+    $apiSystemId = DB::table('api_systems')->insertGetId([
+        'canonical' => 'binance',
+        'is_active' => true,
+    ]);
+    $symbolId = DB::table('symbols')->insertGetId([
+        'token' => $token,
+        'cmc_ranking' => $cmcRanking,
+        'cmc_category' => 'Layer 1',
+        'image_url' => null,
+    ]);
+
+    return (int) DB::table('exchange_symbols')->insertGetId(array_merge([
+        'symbol_id' => $symbolId,
+        'api_system_id' => $apiSystemId,
+        'token' => $token,
+        'quote' => 'USDT',
+        'percentage_gap_long' => '0.60',
+        'percentage_gap_short' => '0.60',
+        'total_limit_orders' => 4,
+        'limit_quantity_multipliers' => '[2,2,2,2]',
+        'was_backtesting_approved' => false,
+        'backtesting_review_status' => null,
+        // Approval deliberately changes this false gate to true.
+        'is_manually_enabled' => false,
+        'api_statuses' => json_encode(['has_taapi_data' => true], JSON_THROW_ON_ERROR),
+        'has_no_indicator_data' => false,
+        'is_marked_for_delisting' => false,
+        'system_disabled_at' => null,
+        'is_price_aligned' => true,
+        'has_price_trend_misalignment' => false,
+        'has_early_direction_change' => false,
+        'has_invalid_indicator_direction' => false,
+        'leverage_brackets' => '[]',
+        'direction' => 'long',
+        'tradeable_at' => null,
+        'indicators_timeframe' => '1d',
+        'btc_correlation_rolling' => json_encode(['1d' => 0.72], JSON_THROW_ON_ERROR),
+    ], $overrides));
 }
 
 /**
@@ -153,6 +227,45 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('Stop-loss coverage', false);
     // Every adjustment candidate row carries a one-click apply-and-re-run button.
     $response->assertSee('Apply this config and backtest again', false);
+    $response->assertSee('Immediate Tradeable', false);
+    $response->assertSee('filters.top100 && s.rank > 100', false);
+    $response->assertSee('filters.immediateTradeable && ! s.immediateTradeable', false);
+});
+
+it('marks only symbols where approval is the final tradeability action', function (): void {
+    $immediateId = seedImmediateTradeableToken();
+    $blockedId = seedImmediateTradeableToken([
+        'token' => 'SOL',
+        'cmc_ranking' => 5,
+        'direction' => null,
+    ]);
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $response = $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/backtesting')
+        ->assertSuccessful();
+
+    $symbols = collect($response->viewData('symbols'))
+        ->flatMap(static fn (array $group): array => $group)
+        ->keyBy('id');
+
+    expect($symbols[$immediateId]['is_immediately_tradeable'])->toBeTrue()
+        ->and($symbols[$blockedId]['is_immediately_tradeable'])->toBeFalse();
+});
+
+it('turns an immediate candidate tradeable through approval alone', function (): void {
+    $exchangeSymbolId = seedImmediateTradeableToken();
+
+    expect(ExchangeSymbol::query()->whereKey($exchangeSymbolId)->awaitingBacktestingApproval()->exists())->toBeTrue()
+        ->and(ExchangeSymbol::query()->whereKey($exchangeSymbolId)->tradeable()->exists())->toBeFalse();
+
+    DB::table('exchange_symbols')->where('id', $exchangeSymbolId)->update([
+        'was_backtesting_approved' => true,
+        'is_manually_enabled' => true,
+    ]);
+
+    expect(ExchangeSymbol::query()->whereKey($exchangeSymbolId)->awaitingBacktestingApproval()->exists())->toBeFalse()
+        ->and(ExchangeSymbol::query()->whereKey($exchangeSymbolId)->tradeable()->exists())->toBeTrue();
 });
 
 it('no longer hard-blocks a backtest run on stale candle data (soft coverage gate)', function (): void {

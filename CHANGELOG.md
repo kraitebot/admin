@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.6] — 2026-07-23
+
+### Immediate tradeable approval queue
+
+- [ADDED] Backtesting has an **Immediate Tradeable** filter for Binance
+  symbols where approval is the final action before live eligibility.
+- [CHANGED] Every checked token filter now intersects, including **Immediate
+  Tradeable** + **Top 100**.
+- [SAFETY] Ships `kraitebot/core` 1.79.2 so the filter uses the live
+  new-position eligibility policy instead of a UI approximation.
+- [VERIFIED] Focused Backtesting coverage passes: 7 tests / 30 assertions;
+  production frontend and operator documentation builds pass.
+
 ## [0.27.5] — 2026-07-23
 
 ### Immediate trading stop

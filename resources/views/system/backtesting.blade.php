@@ -25,6 +25,7 @@
                 'orders' => $it['total_limit_orders'],
                 'mult' => is_array($mult) ? implode(',', $mult) : '',
                 'status' => $it['backtesting_review_status'] ?: null,
+                'immediateTradeable' => $it['is_immediately_tradeable'],
             ];
         }
     }
@@ -67,7 +68,7 @@
             selOpen: false,
             cfgOpen: false,                      // Config card collapsed by default
             query: '',
-            filters: { top100: false, approved: false, notConcluded: false },
+            filters: { top100: false, approved: false, notConcluded: false, immediateTradeable: false },
 
             // ---- async results ----
             cov: null,
@@ -160,13 +161,12 @@
                 return this.symbols.filter((s) => {
                     // Token-universe filters (the checkboxes below the selector).
                     if (this.filters.top100 && s.rank > 100) return false;
-                    // The two status filters combine as a union: when either is on,
-                    // the token must match one of them. AND'd with Top 100 above.
-                    if (this.filters.approved || this.filters.notConcluded) {
-                        const ok = (this.filters.approved && s.status === 'approved')
-                            || (this.filters.notConcluded && s.status == null);
-                        if (! ok) return false;
-                    }
+                    // Every checked filter narrows the current result set. This
+                    // keeps combinations such as Immediate Tradeable + Top 100
+                    // as a strict intersection.
+                    if (this.filters.approved && s.status !== 'approved') return false;
+                    if (this.filters.notConcluded && s.status != null) return false;
+                    if (this.filters.immediateTradeable && ! s.immediateTradeable) return false;
                     // Search query.
                     return (s.token + ' ' + s.quote).toLowerCase().includes(q);
                 });
@@ -176,6 +176,7 @@
             get countTop100() { return this.symbols.filter((s) => s.rank <= 100).length; },
             get countApproved() { return this.symbols.filter((s) => s.status === 'approved').length; },
             get countNotConcluded() { return this.symbols.filter((s) => s.status == null).length; },
+            get countImmediateTradeable() { return this.symbols.filter((s) => s.immediateTradeable).length; },
             get quoteGroups() {
                 const quotes = [...new Set(this.filteredSymbols.map((s) => s.quote))]
                     .sort((a, b) => this.quoteOrder(a) - this.quoteOrder(b) || a.localeCompare(b));
@@ -449,6 +450,7 @@
                 this.symbols.forEach((s) => {
                     if (s.token !== decidedToken) return;
                     s.status = data.backtesting_review_status;
+                    if (approve) s.immediateTradeable = false;
                     this.reviews[s.id] = data.backtesting_review_status;
                 });
                 this.flashToast(approve ? 'Approved — config live' : 'Rejected — no config pushed', approve ? 'ok' : 'reject');
@@ -734,6 +736,7 @@
                                 ['key' => 'top100', 'label' => 'Top 100', 'count' => 'countTop100'],
                                 ['key' => 'approved', 'label' => 'Only approved', 'count' => 'countApproved'],
                                 ['key' => 'notConcluded', 'label' => 'Not concluded', 'count' => 'countNotConcluded'],
+                                ['key' => 'immediateTradeable', 'label' => 'Immediate Tradeable', 'count' => 'countImmediateTradeable'],
                             ] as $f)
                                 {{-- Filters are locked with the selector while a run is in
                                      flight — a filter flip can auto-switch the selected token. --}}

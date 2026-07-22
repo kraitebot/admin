@@ -927,6 +927,11 @@ SYS;
      */
     private function enabledSymbolGroups(): array
     {
+        $immediatelyTradeableIds = ExchangeSymbol::query()
+            ->awaitingBacktestingApproval()
+            ->pluck('exchange_symbols.id')
+            ->flip();
+
         $rows = DB::table('exchange_symbols as es')
             ->join('symbols as s', 's.id', '=', 'es.symbol_id')
             ->join('api_systems as ap', 'ap.id', '=', 'es.api_system_id')
@@ -970,6 +975,7 @@ SYS;
                 'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
                 'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
                 'backtesting_review_status' => $row->backtesting_review_status,
+                'is_immediately_tradeable' => $immediatelyTradeableIds->has((int) $row->id),
             ];
         }
 
