@@ -24,6 +24,7 @@ afterEach(function (): void {
     Schema::dropIfExists('subscriptions');
     Schema::dropIfExists('wallet_transactions');
     Schema::dropIfExists('servers');
+    Schema::dropIfExists('accounts');
 });
 
 it('gates the overview data feed to sysadmins', function (): void {
@@ -38,18 +39,34 @@ it('gates the overview data feed to sysadmins', function (): void {
 
 it('serves real trader counts and degrades every core-owned section to its placeholder shape', function (): void {
     $admin = User::factory()->create(['is_admin' => true, 'email' => 'ovw-admin@kraite.test']);
-    User::factory()->create(['is_admin' => false, 'email' => 'ovw-active@kraite.test']);
-    User::factory()->create(['is_admin' => false, 'is_active' => false, 'email' => 'ovw-inactive@kraite.test']);
+    $connectedTrader = User::factory()->create(['is_admin' => false, 'email' => 'ovw-active@kraite.test']);
+    User::factory()->create(['is_admin' => false, 'email' => 'ovw-no-account@kraite.test']);
+    $inactiveTrader = User::factory()->create(['is_admin' => false, 'is_active' => false, 'email' => 'ovw-inactive@kraite.test']);
+
+    // The suite runs without core migrations, so the accounts table the
+    // traders KPI joins against is created inline like the other core-owned
+    // sources stubbed in this file.
+    Schema::create('accounts', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('user_id');
+        $table->boolean('is_active')->default(false);
+        $table->timestamps();
+    });
+    DB::table('accounts')->insert([
+        ['user_id' => $connectedTrader->id, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+        ['user_id' => $inactiveTrader->id, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+    ]);
 
     $response = $this->actingAs($admin)
         ->get('https://admin.kraite.test/system/dashboard/data')
         ->assertSuccessful();
 
-    // Traders: the users table is real — inactive users are excluded from the
-    // count while every fresh signup lands in the 24h window; a count that
-    // grew only by signups yields no delta badge (previous <= 0).
-    $response->assertJsonPath('kpis.traders.count', 2)
-        ->assertJsonPath('kpis.traders.signups_24h', 3)
+    // Traders: only active users holding an active trading account count —
+    // the sysadmin, the accountless signup, and the deactivated trader are
+    // all excluded. The lone trader signed up inside the 24h window, so the
+    // count grew only by signups and no delta badge renders (previous <= 0).
+    $response->assertJsonPath('kpis.traders.count', 1)
+        ->assertJsonPath('kpis.traders.signups_24h', 1)
         ->assertJsonPath('kpis.traders.delta_pct', null);
 
     // Every core-owned source is absent in this suite — each section must

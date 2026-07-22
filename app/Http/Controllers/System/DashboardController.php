@@ -111,10 +111,22 @@ class DashboardController extends Controller
      */
     private function tradersKpi(): array
     {
+        // A "trader" is an active user with at least one active trading
+        // account — sysadmins and half-finished signups never count.
+        $tradersWithActiveAccount = static function ($query): void {
+            $query->where('users.is_active', true)
+                ->whereExists(static function ($accounts): void {
+                    $accounts->from('accounts')
+                        ->whereColumn('accounts.user_id', 'users.id')
+                        ->where('accounts.is_active', true);
+                });
+        };
+
         // Users are written by the web apps (UTC frame), so a PHP-side window
         // is safe here — and it keeps this query portable across drivers.
-        $count = (int) DB::table('users')->where('is_active', true)->count();
+        $count = (int) DB::table('users')->where($tradersWithActiveAccount)->count();
         $signups = (int) DB::table('users')
+            ->where($tradersWithActiveAccount)
             ->where('created_at', '>=', now()->subDay())
             ->count();
         $previous = $count - $signups;
