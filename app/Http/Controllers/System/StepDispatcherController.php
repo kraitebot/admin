@@ -49,22 +49,24 @@ final class StepDispatcherController extends Controller
             return DB::table($table)
                 ->select('class', 'state', 'is_throttled', DB::raw('COUNT(*) as total'))
                 ->groupBy('class', 'state', 'is_throttled')
-                ->get();
+                ->get()
+                ->map(static fn (object $row): array => (array) $row)
+                ->all();
         });
 
         $pivot = [];
         foreach ($rows as $row) {
-            $class = $row->class ?? '(no class)';
-            $state = class_basename($row->state);
+            $class = $row['class'] ?? '(no class)';
+            $state = class_basename($row['state']);
 
-            if ($state === 'Pending' && $row->is_throttled) {
+            if ($state === 'Pending' && $row['is_throttled']) {
                 $state = 'Throttled';
             }
 
             if (! isset($pivot[$class])) {
                 $pivot[$class] = [];
             }
-            $pivot[$class][$state] = ($pivot[$class][$state] ?? 0) + (int) $row->total;
+            $pivot[$class][$state] = ($pivot[$class][$state] ?? 0) + (int) $row['total'];
         }
 
         ksort($pivot);
@@ -106,13 +108,13 @@ final class StepDispatcherController extends Controller
 
         $totals = [];
         foreach ($rows as $row) {
-            $state = class_basename($row->state);
+            $state = class_basename($row['state']);
 
-            if ($state === 'Pending' && $row->is_throttled) {
+            if ($state === 'Pending' && $row['is_throttled']) {
                 $state = 'Throttled';
             }
 
-            $totals[$state] = ($totals[$state] ?? 0) + (int) $row->total;
+            $totals[$state] = ($totals[$state] ?? 0) + (int) $row['total'];
         }
 
         return response()->json([
@@ -311,26 +313,28 @@ final class StepDispatcherController extends Controller
             return DB::table($table)
                 ->select('class', 'state', 'is_throttled', DB::raw('COUNT(*) as total'))
                 ->groupBy('class', 'state', 'is_throttled')
-                ->get();
+                ->get()
+                ->map(static fn (object $row): array => (array) $row)
+                ->all();
         });
 
         $totals = [];
         foreach ($rows as $row) {
-            if (isset($parentClasses[$row->class])) {
+            if (isset($parentClasses[$row['class']])) {
                 continue;
             }
 
-            $state = class_basename($row->state);
+            $state = class_basename($row['state']);
 
             if ($state === 'NotRunnable') {
                 continue;
             }
 
-            if ($state === 'Pending' && $row->is_throttled) {
+            if ($state === 'Pending' && $row['is_throttled']) {
                 $state = 'Throttled';
             }
 
-            $totals[$state] = ($totals[$state] ?? 0) + (int) $row->total;
+            $totals[$state] = ($totals[$state] ?? 0) + (int) $row['total'];
         }
 
         return $totals;

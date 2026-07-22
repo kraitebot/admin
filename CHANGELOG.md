@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.27.3] — 2026-07-22
+
+### Engine polling reliability
+
+- [FIXED] Dispatcher state aggregates now remain readable through the locked
+  production cache policy, keeping repeated Engine polling healthy.
+- [VERIFIED] Targeted Engine and dispatcher-cache tests pass; production
+  frontend build passes.
+
 ## [0.27.2] — 2026-07-22
 
 ### Engine processing filter
