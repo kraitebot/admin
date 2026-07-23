@@ -69,6 +69,8 @@ Route::domain(config('domains.admin'))->group(function () {
         // Projections
         Route::get('/projections', [ProjectionsController::class, 'index'])->name('projections');
         Route::get('/projections/data', [ProjectionsController::class, 'data'])->name('projections.data');
+        Route::get('/projections/yearly', [ProjectionsController::class, 'yearly'])->name('projections.yearly');
+        Route::get('/projections/yearly/data', [ProjectionsController::class, 'yearlyData'])->name('projections.yearly.data');
 
         // BSCS — Black Swan Composite Score: regime detection feature page.
         // Read surface is public (educational + status). Override controls

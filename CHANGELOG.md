@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.31.0] — 2026-07-23
+
+### Five-year portfolio projections
+
+- [ADDED] Projections expands into Monthly and Yearly views while preserving
+  the existing Monthly account calendar and milestone behavior.
+- [ADDED] Yearly combines the trader's visible account wallets and projects
+  the current year-end plus four following year-ends.
+- [ADDED] Pessimistic, neutral, and optimistic paths report projected wallet,
+  profit from today, growth, portfolio multiple, and compounding days.
+- [SAFETY] Trader portfolios remain owner-scoped; sysadmin retains global
+  visibility. Invalid complete-loss rates are shown as unavailable.
+- [SAFETY] Ships `kraitebot/core` 1.82.0 for exact long-range decimal
+  compounding without floating-point drift.
+- [VERIFIED] Focused Projections coverage passes: 15 tests / 122 assertions;
+  production frontend, Blade, and operator documentation builds pass.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.30.0] — 2026-07-23
 
 ### Profit-funded milestone

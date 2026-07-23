@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Models\User;
+use App\Services\YearlyProjectionPlanner;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -76,6 +77,48 @@ function seedProjectionAccount(): array
     ]);
 
     return [$owner->id, $accountId];
+}
+
+function seedAdditionalProjectionAccount(
+    int $userId,
+    string $startWallet,
+    string $currentWallet,
+    string $pnl,
+): int {
+    $api = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $userId,
+        'api_system_id' => $api,
+        'name' => 'Additional',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    DB::table('account_balance_history')->insert([
+        [
+            'account_id' => $accountId,
+            'total_wallet_balance' => $startWallet,
+            'created_at' => now()->startOfMonth()->addHour(),
+            'updated_at' => now(),
+        ],
+        [
+            'account_id' => $accountId,
+            'total_wallet_balance' => $currentWallet,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    DB::table('positions')->insert([
+        'account_id' => $accountId,
+        'status' => 'closed',
+        'pnl' => $pnl,
+        'closed_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    return $accountId;
 }
 
 it('serves the month feed with realized actuals and observed scenarios', function (): void {
@@ -306,4 +349,150 @@ it('rejects an out-of-range month', function (): void {
     $this->actingAs(User::findOrFail($userId))
         ->getJson('https://admin.kraite.test/projections/data?account_id='.$accountId.'&year=2026&month=13')
         ->assertStatus(422);
+});
+
+it('serves a five-year global outlook from the owners combined portfolio', function (): void {
+    [$userId] = seedProjectionAccount();
+    seedAdditionalProjectionAccount(
+        userId: $userId,
+        startWallet: '2000',
+        currentWallet: '2020',
+        pnl: '20',
+    );
+
+    $response = $this->actingAs(User::findOrFail($userId))
+        ->getJson('https://admin.kraite.test/projections/yearly/data')
+        ->assertSuccessful()
+        ->assertJsonPath('account_count', 2)
+        ->assertJsonPath('current_wallet', '3030.00000000')
+        ->assertJsonPath('days_observed', 1)
+        ->assertJsonPath('today', '2026-07-23')
+        ->assertJsonPath('outlook.years', 5)
+        ->assertJsonPath('outlook.scenarios.pessimistic.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.neutral.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.optimistic.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.neutral.available', true)
+        ->assertJsonPath('outlook.scenarios.neutral.milestones.0.label', 'Until end of year')
+        ->assertJsonPath('outlook.scenarios.neutral.milestones.0.end_date', '2026-12-31')
+        ->assertJsonPath('outlook.scenarios.neutral.milestones.4.label', '2030 end')
+        ->assertJsonPath('outlook.scenarios.neutral.milestones.4.end_date', '2030-12-31');
+
+    expect($response->json('outlook.scenarios.neutral.milestones'))
+        ->toHaveCount(5)
+        ->and(array_column($response->json('outlook.scenarios.neutral.milestones'), 'year'))
+        ->toBe([2026, 2027, 2028, 2029, 2030]);
+});
+
+it('compounds every yearly scenario exactly without floating point drift', function (): void {
+    $outlook = app(YearlyProjectionPlanner::class)->plan(
+        currentWallet: '1000',
+        scenarios: [
+            'pessimistic_pct' => '-0.01',
+            'neutral_pct' => '0',
+            'optimistic_pct' => '0.01',
+            'days_observed' => 2,
+        ],
+        now: CarbonImmutable::parse('2026-12-29 12:00:00'),
+        years: 1,
+    );
+
+    expect($outlook['scenarios']['pessimistic']['milestones'][0])
+        ->toMatchArray([
+            'end_wallet' => '980.10000000',
+            'projected_profit' => '-19.90000000',
+            'growth_pct' => '-1.99000000',
+            'multiple' => '0.98010000',
+        ])
+        ->and($outlook['scenarios']['neutral']['milestones'][0])
+        ->toMatchArray([
+            'end_wallet' => '1000.00000000',
+            'projected_profit' => '0.00000000',
+            'growth_pct' => '0.00000000',
+            'multiple' => '1.00000000',
+        ])
+        ->and($outlook['scenarios']['optimistic']['milestones'][0])
+        ->toMatchArray([
+            'end_wallet' => '1020.10000000',
+            'projected_profit' => '20.10000000',
+            'growth_pct' => '2.01000000',
+            'multiple' => '1.02010000',
+        ]);
+});
+
+it('does not include another traders accounts in the yearly outlook', function (): void {
+    [$userId] = seedProjectionAccount();
+    $otherTrader = User::factory()->create();
+    seedAdditionalProjectionAccount(
+        userId: $otherTrader->id,
+        startWallet: '9000',
+        currentWallet: '9900',
+        pnl: '900',
+    );
+
+    $this->actingAs(User::findOrFail($userId))
+        ->getJson('https://admin.kraite.test/projections/yearly/data')
+        ->assertSuccessful()
+        ->assertJsonPath('account_count', 1)
+        ->assertJsonPath('current_wallet', '1010.00000000')
+        ->assertJsonPath('outlook.scenarios.neutral.daily_pct', '0.01000000');
+});
+
+it('marks yearly scenarios unavailable when their inputs cannot be projected', function (): void {
+    $planner = app(YearlyProjectionPlanner::class);
+    $now = CarbonImmutable::parse('2026-07-23 12:00:00');
+
+    $withoutWallet = $planner->plan(
+        currentWallet: null,
+        scenarios: [
+            'pessimistic_pct' => '0.01',
+            'neutral_pct' => '0.01',
+            'optimistic_pct' => '0.01',
+            'days_observed' => 1,
+        ],
+        now: $now,
+    );
+    $withoutObservations = $planner->plan(
+        currentWallet: '1000',
+        scenarios: [
+            'pessimistic_pct' => null,
+            'neutral_pct' => null,
+            'optimistic_pct' => null,
+            'days_observed' => 0,
+        ],
+        now: $now,
+    );
+    $invalidRate = $planner->plan(
+        currentWallet: '1000',
+        scenarios: [
+            'pessimistic_pct' => '-1',
+            'neutral_pct' => '-1',
+            'optimistic_pct' => '-1',
+            'days_observed' => 1,
+        ],
+        now: $now,
+    );
+
+    expect($withoutWallet['scenarios']['neutral'])
+        ->toMatchArray(['available' => false, 'reason' => 'no_wallet'])
+        ->and($withoutObservations['scenarios']['neutral'])
+        ->toMatchArray(['available' => false, 'reason' => 'no_observations'])
+        ->and($invalidRate['scenarios']['neutral'])
+        ->toMatchArray(['available' => false, 'reason' => 'invalid_rate'])
+        ->and($invalidRate['scenarios']['neutral']['milestones'][0]['end_wallet'])
+        ->toBeNull();
+});
+
+it('renders the yearly outlook and nested monthly and yearly navigation', function (): void {
+    [$userId] = seedProjectionAccount();
+
+    $this->actingAs(User::findOrFail($userId))
+        ->get('https://admin.kraite.test/projections/yearly')
+        ->assertSuccessful()
+        ->assertSeeText('Yearly projections')
+        ->assertSeeText('Five-year capital horizon')
+        ->assertSeeText('Monthly')
+        ->assertSeeText('Yearly')
+        ->assertSee('data-id="projections-monthly"', false)
+        ->assertSee('data-id="projections-yearly"', false)
+        ->assertSee(route('projections.yearly.data'), false);
 });

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use App\Services\YearlyProjectionPlanner;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -12,6 +13,7 @@ use Illuminate\View\View;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\Position;
 use Kraite\Core\Support\Financial\AccountFinancials;
+use Kraite\Core\Support\Financial\FleetFinancials;
 use Kraite\Core\Support\Financial\Window;
 
 class ProjectionsController extends Controller
@@ -112,6 +114,45 @@ class ProjectionsController extends Controller
                 'is_complete' => $investmentBasis['is_complete'],
             ],
             'today' => $now->toDateString(),
+        ]);
+    }
+
+    public function yearly(): View
+    {
+        $isAdmin = (bool) Auth::user()->is_admin;
+
+        $noPositions = rescue(fn (): bool => ! Position::query()
+            ->when(! $isAdmin, fn ($query) => $query->whereIn(
+                'account_id',
+                Account::where('user_id', Auth::id())->select('id'),
+            ))
+            ->exists(), false);
+
+        return view('projections.yearly', [
+            'noPositions' => $noPositions,
+        ]);
+    }
+
+    public function yearlyData(YearlyProjectionPlanner $planner): JsonResponse
+    {
+        $accounts = Account::query()
+            ->when(! Auth::user()->is_admin, fn ($query) => $query->where('user_id', Auth::id()))
+            ->get(['id']);
+        $now = CarbonImmutable::now();
+        $financials = new FleetFinancials($accounts);
+        $scenarios = $financials->scenarios(Window::thisMonth($now));
+        $currentWallet = $financials->totalCurrentWallet();
+
+        return response()->json([
+            'account_count' => $financials->count(),
+            'current_wallet' => $currentWallet,
+            'days_observed' => $scenarios['days_observed'],
+            'today' => $now->toDateString(),
+            'outlook' => $planner->plan(
+                currentWallet: $currentWallet,
+                scenarios: $scenarios,
+                now: $now,
+            ),
         ]);
     }
 

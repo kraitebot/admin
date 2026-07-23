@@ -22,12 +22,20 @@
             ['id' => 'settings',   'label' => 'Settings',   'route' => 'system.settings',   'params' => [],          'icon' => 'sliders'],
         ]
         : [
-            ['id' => 'dashboard',   'label' => 'Dashboard',   'route' => 'dashboard',         'params' => [], 'icon' => 'grid'],
-            ['id' => 'positions',   'label' => 'Positions',   'route' => 'accounts.positions','params' => [], 'icon' => 'layers'],
-            ['id' => 'projections', 'label' => 'Projections', 'route' => 'projections',       'params' => [], 'icon' => 'trending-up'],
-            ['id' => 'accounts',    'label' => 'Accounts',    'route' => 'accounts.edit',     'params' => [], 'icon' => 'link'],
-            ['id' => 'billing',     'label' => 'Billing',     'route' => 'billing',           'params' => [], 'icon' => 'credit-card'],
-            ['id' => 'profile',     'label' => 'Profile',     'route' => 'profile.edit',      'params' => [], 'icon' => 'user'],
+            ['id' => 'dashboard', 'label' => 'Dashboard', 'route' => 'dashboard', 'params' => [], 'icon' => 'grid'],
+            ['id' => 'positions', 'label' => 'Positions', 'route' => 'accounts.positions', 'params' => [], 'icon' => 'layers'],
+            [
+                'id' => 'projections',
+                'label' => 'Projections',
+                'icon' => 'trending-up',
+                'children' => [
+                    ['id' => 'projections-monthly', 'label' => 'Monthly', 'route' => 'projections', 'params' => []],
+                    ['id' => 'projections-yearly', 'label' => 'Yearly', 'route' => 'projections.yearly', 'params' => []],
+                ],
+            ],
+            ['id' => 'accounts', 'label' => 'Accounts', 'route' => 'accounts.edit', 'params' => [], 'icon' => 'link'],
+            ['id' => 'billing', 'label' => 'Billing', 'route' => 'billing', 'params' => [], 'icon' => 'credit-card'],
+            ['id' => 'profile', 'label' => 'Profile', 'route' => 'profile.edit', 'params' => [], 'icon' => 'user'],
         ];
 @endphp
 {{-- The rail is persisted across wire:navigate swaps and Alpine re-inits it
@@ -53,24 +61,60 @@
                          before:content-[''] before:absolute before:-left-3 before:top-1/2 before:-translate-y-1/2 before:w-[3px] before:h-[22px] before:bg-accent before:rounded-chip"></span>
 
             @foreach($items as $item)
-                <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
-                   data-id="{{ $item['id'] }}"
-                   wire:navigate.hover
-                   wire:current.ignore
-                   @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
-                   {{-- color transition matches the pill slide (420ms, same curve) so the
-                        arriving label darkens in sync with the green sliding beneath it.
-                        `hover:text-fg-on-accent` on the active item is load-bearing: the
-                        global `a:hover { color: var(--accent) }` (tokens.css) outranks a
-                        plain `text-fg-on-accent` on specificity, so without it the active
-                        link turns accent-on-accent (invisible) the moment the pointer
-                        rests on it after a click. The hover utility ties that selector and
-                        wins on source order (utilities layer is emitted last). --}}
-                   :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
-                   class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
-                    <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
-                    <span class="whitespace-nowrap">{{ $item['label'] }}</span>
-                </a>
+                @if(isset($item['children']))
+                    <div class="relative z-[1] flex flex-col">
+                        <button type="button"
+                                @click="$store.rail.toggleSection('{{ $item['id'] }}')"
+                                :aria-expanded="$store.rail.openSection === '{{ $item['id'] }}'"
+                                :class="$store.rail.activeId?.startsWith('{{ $item['id'] }}-') || $store.rail.openSection === '{{ $item['id'] }}' ? 'text-ink-9' : 'text-ink-7 hover:text-ink-9'"
+                                class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase transition-colors duration-fast">
+                            <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
+                            <span class="flex items-center gap-1 whitespace-nowrap">
+                                {{ $item['label'] }}
+                                <x-feathericon-chevron-down class="w-2.5 h-2.5 transition-transform duration-fast"
+                                                            ::class="$store.rail.openSection === '{{ $item['id'] }}' ? 'rotate-180' : ''"
+                                                            stroke-width="2"/>
+                            </span>
+                        </button>
+
+                        <div x-show="$store.rail.openSection === '{{ $item['id'] }}'"
+                             x-cloak
+                             x-collapse
+                             class="flex flex-col gap-0.5 mt-0.5">
+                            @foreach($item['children'] as $child)
+                                <a href="{{ route($child['route'], $child['params']) }}"
+                                   data-id="{{ $child['id'] }}"
+                                   data-parent="{{ $item['id'] }}"
+                                   wire:navigate.hover
+                                   wire:current.ignore
+                                   @click="window.railGo('{{ $child['id'] }}', $event.currentTarget)"
+                                   :class="$store.rail.activeId === '{{ $child['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
+                                   class="appearance-none border-0 cursor-pointer bg-transparent flex items-center justify-center h-8 px-1 rounded-control font-mono text-[9px] font-medium tracking-[0.07em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
+                                    <span class="whitespace-nowrap">{{ $child['label'] }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @else
+                    <a href="{{ $item['route'] ? route($item['route'], $item['params']) : '#' }}"
+                       data-id="{{ $item['id'] }}"
+                       wire:navigate.hover
+                       wire:current.ignore
+                       @click="window.railGo('{{ $item['id'] }}', $event.currentTarget)"
+                       {{-- color transition matches the pill slide (420ms, same curve) so the
+                            arriving label darkens in sync with the green sliding beneath it.
+                            `hover:text-fg-on-accent` on the active item is load-bearing: the
+                            global `a:hover { color: var(--accent) }` (tokens.css) outranks a
+                            plain `text-fg-on-accent` on specificity, so without it the active
+                            link turns accent-on-accent (invisible) the moment the pointer
+                            rests on it after a click. The hover utility ties that selector and
+                            wins on source order (utilities layer is emitted last). --}}
+                       :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
+                       class="appearance-none border-0 cursor-pointer bg-transparent flex flex-col items-center gap-[5px] pt-2.5 pb-2 px-1 rounded-control font-mono text-[10px] font-medium tracking-[0.06em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
+                        <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[22px] h-[22px]" stroke-width="1.75"/>
+                        <span class="whitespace-nowrap">{{ $item['label'] }}</span>
+                    </a>
+                @endif
             @endforeach
         </div>
     </div>
@@ -123,17 +167,51 @@
         </div>
         <div class="flex flex-col gap-1 px-3">
             @foreach($items as $item)
-                <a href="{{ route($item['route'], $item['params']) }}"
-                   data-id="{{ $item['id'] }}"
-                   wire:navigate
-                   wire:current.ignore
-                   @click="window.railGo('{{ $item['id'] }}', null)"
-                   x-bind:style="$store.rail.drawerOpen && 'animation: drawer-item-in 240ms cubic-bezier(0.16,1,0.3,1) both; animation-delay: {{ 40 + $loop->index * 22 }}ms'"
-                   :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'bg-accent text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
-                   class="flex items-center gap-3.5 h-12 px-4 rounded-control font-mono text-[12px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
-                    <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[20px] h-[20px] flex-shrink-0" stroke-width="1.75"/>
-                    <span>{{ $item['label'] }}</span>
-                </a>
+                @if(isset($item['children']))
+                    <div x-bind:style="$store.rail.drawerOpen && 'animation: drawer-item-in 240ms cubic-bezier(0.16,1,0.3,1) both; animation-delay: {{ 40 + $loop->index * 22 }}ms'">
+                        <button type="button"
+                                @click="$store.rail.toggleSection('{{ $item['id'] }}')"
+                                :aria-expanded="$store.rail.openSection === '{{ $item['id'] }}'"
+                                :class="$store.rail.activeId?.startsWith('{{ $item['id'] }}-') || $store.rail.openSection === '{{ $item['id'] }}' ? 'text-ink-9 bg-ink-1' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
+                                class="appearance-none border-0 cursor-pointer bg-transparent w-full flex items-center gap-3.5 h-12 px-4 rounded-control font-mono text-[12px] font-medium tracking-[0.06em] uppercase transition-colors duration-fast">
+                            <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[20px] h-[20px] flex-shrink-0" stroke-width="1.75"/>
+                            <span>{{ $item['label'] }}</span>
+                            <x-feathericon-chevron-down class="w-3.5 h-3.5 ml-auto transition-transform duration-fast"
+                                                        ::class="$store.rail.openSection === '{{ $item['id'] }}' ? 'rotate-180' : ''"
+                                                        stroke-width="2"/>
+                        </button>
+
+                        <div x-show="$store.rail.openSection === '{{ $item['id'] }}'"
+                             x-cloak
+                             x-collapse
+                             class="flex flex-col gap-1 mt-1 ml-[34px]">
+                            @foreach($item['children'] as $child)
+                                <a href="{{ route($child['route'], $child['params']) }}"
+                                   data-id="{{ $child['id'] }}"
+                                   data-parent="{{ $item['id'] }}"
+                                   wire:navigate
+                                   wire:current.ignore
+                                   @click="window.railGo('{{ $child['id'] }}', null)"
+                                   :class="$store.rail.activeId === '{{ $child['id'] }}' ? 'bg-accent text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
+                                   class="flex items-center h-10 px-4 rounded-control font-mono text-[11px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
+                                    <span>{{ $child['label'] }}</span>
+                                </a>
+                            @endforeach
+                        </div>
+                    </div>
+                @else
+                    <a href="{{ route($item['route'], $item['params']) }}"
+                       data-id="{{ $item['id'] }}"
+                       wire:navigate
+                       wire:current.ignore
+                       @click="window.railGo('{{ $item['id'] }}', null)"
+                       x-bind:style="$store.rail.drawerOpen && 'animation: drawer-item-in 240ms cubic-bezier(0.16,1,0.3,1) both; animation-delay: {{ 40 + $loop->index * 22 }}ms'"
+                       :class="$store.rail.activeId === '{{ $item['id'] }}' ? 'bg-accent text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
+                       class="flex items-center gap-3.5 h-12 px-4 rounded-control font-mono text-[12px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
+                        <x-dynamic-component :component="'feathericon-' . $item['icon']" class="w-[20px] h-[20px] flex-shrink-0" stroke-width="1.75"/>
+                        <span>{{ $item['label'] }}</span>
+                    </a>
+                @endif
             @endforeach
         </div>
     </aside>

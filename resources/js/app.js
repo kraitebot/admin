@@ -13,7 +13,22 @@ window.Alpine = Alpine;
 // closures; instance state desyncs (the source of the vanishing-link bugs).
 // A store + functions defined once here are immune to re-init counts.
 // ---------------------------------------------------------------------------
-Alpine.store('rail', { activeId: null, hl: null, drawerOpen: false });
+Alpine.store('rail', {
+    activeId: null,
+    hl: null,
+    drawerOpen: false,
+    openSection: null,
+    toggleSection(id) {
+        const opening = this.openSection !== id;
+        this.openSection = opening ? id : null;
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            const active = opening
+                ? railNav()?.querySelector(`a[data-id='${this.activeId}']`) || null
+                : null;
+            railMeasure(active);
+        }));
+    },
+});
 
 // ---------------------------------------------------------------------------
 // Global help/explainer store. Backs the reusable `<x-ui.help-dot>` [?] dots
@@ -110,8 +125,14 @@ const railSyncFromUrl = () => {
     const here = location.origin + location.pathname.replace(/\/$/, '');
     const match = Array.from(nav.querySelectorAll('a[href][data-id]'))
         .find(a => a.href.replace(/\/$/, '') === here);
-    Alpine.store('rail').activeId = match ? match.dataset.id : null;
-    railMeasure(match || null);
+    const store = Alpine.store('rail');
+    store.activeId = match ? match.dataset.id : null;
+
+    if (match?.dataset.parent) {
+        store.openSection = match.dataset.parent;
+    }
+
+    requestAnimationFrame(() => railMeasure(match || null));
 };
 
 window.railGo = (id, el) => {
