@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.28.0] — 2026-07-23
+
+### Operator clarity
+
+- [ADDED] Account settings explain how runtime BSCS controls can reduce saved
+  trading limits without changing profit target or stop-loss.
+- [ADDED] Backtesting token rows show their concluded direction.
+- [CHANGED] The retired Revenue navigation entry is removed.
+- [SAFETY] Ships `kraitebot/core` 1.80.0 and uses its typed backtest timeframe
+  contract across validation and tests.
+- [VERIFIED] Focused coverage passes: 38 tests / 192 assertions; after a
+  compatibility correction, the full suite passes: 191 tests / 919 assertions.
+
 ## [0.27.7] — 2026-07-23
 
 ### Strict Top 100 intersection

@@ -25,6 +25,7 @@
                 'orders' => $it['total_limit_orders'],
                 'mult' => is_array($mult) ? implode(',', $mult) : '',
                 'status' => $it['backtesting_review_status'] ?: null,
+                'direction' => $it['direction'],
                 'immediateTradeable' => $it['is_immediately_tradeable'],
             ];
         }
@@ -719,6 +720,12 @@
                                                     </template>
                                                     <span class="font-mono font-bold text-[13px] text-fg-1 w-[44px]" x-text="s.token"></span>
                                                     <span class="font-mono text-[11px] text-fg-mute" x-text="s.exchange"></span>
+                                                    <span x-show="s.direction"
+                                                          class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip flex-shrink-0"
+                                                          :style="s.direction === 'LONG'
+                                                              ? 'color: var(--pnl-up-fg); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)'
+                                                              : 'color: var(--pnl-down-fg); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)'"
+                                                          x-text="s.direction"></span>
                                                     <span x-show="s.rank" class="font-mono text-[9.5px] tabular-nums text-fg-faint ml-auto" x-text="'#' + s.rank"></span>
                                                     <span x-show="s.status" class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :class="!s.rank ? 'ml-auto' : ''" :style="`background: ${reviewMeta(s.status).color}`"></span>
                                                 </button>

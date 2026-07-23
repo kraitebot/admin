@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Kraite\Core\Enums\BacktestTimeframe;
 use Kraite\Core\Jobs\Backtest\EnsureBacktestCandleCoverageStep;
 use Kraite\Core\Jobs\Backtest\VerifyCoverageResultStep;
 use Kraite\Core\Models\Account;
@@ -77,7 +78,7 @@ final class BacktrackingController extends Controller
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
             'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'since' => ['nullable', 'date'],
@@ -187,7 +188,7 @@ final class BacktrackingController extends Controller
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
         ]);
 
         try {
@@ -217,7 +218,7 @@ final class BacktrackingController extends Controller
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'since' => ['nullable', 'date'],
             'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
@@ -330,7 +331,7 @@ final class BacktrackingController extends Controller
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'tp_percent' => ['required', 'numeric', 'gt:0'],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
@@ -426,7 +427,7 @@ final class BacktrackingController extends Controller
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'tp_percent' => ['required', 'numeric', 'gt:0'],
             'sl_percent' => ['required', 'numeric', 'gt:0'],
             'gap_long_percent' => ['required', 'numeric', 'gt:0'],
@@ -529,7 +530,7 @@ final class BacktrackingController extends Controller
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
             'approve' => ['required', 'boolean'],
-            'timeframe' => ['nullable', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['nullable', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
             'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
             'tp_percent' => ['nullable', 'numeric', 'gt:0'],
@@ -600,7 +601,7 @@ final class BacktrackingController extends Controller
 
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', array_keys(CandleCoverageVerifier::INTERVAL_SECONDS))],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
             'totals' => ['required', 'array'],
             'regimes' => ['nullable', 'array'],
             'meta' => ['required', 'array'],
@@ -868,7 +869,8 @@ SYS;
      */
     private function compactFailureRows(array $rows, string $timeframe): array
     {
-        $intervalSeconds = CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe] ?? 86400;
+        $intervalSeconds = BacktestTimeframe::tryFrom($timeframe)?->seconds()
+            ?? BacktestTimeframe::OneDay->seconds();
 
         return array_slice(array_map(static function ($r) use ($intervalSeconds) {
             $start = isset($r['start_candle']) ? strtotime((string) $r['start_candle']) : false;
@@ -951,6 +953,7 @@ SYS;
                 'es.limit_quantity_multipliers',
                 'es.was_backtesting_approved',
                 'es.backtesting_review_status',
+                'es.direction',
             ]);
 
         // Bucket by quote currency. USDT and USDC come first (operator's primary
@@ -975,6 +978,7 @@ SYS;
                 'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
                 'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
                 'backtesting_review_status' => $row->backtesting_review_status,
+                'direction' => $row->direction !== null ? mb_strtoupper((string) $row->direction) : null,
                 'is_immediately_tradeable' => $immediatelyTradeableIds->has((int) $row->id),
             ];
         }
@@ -1023,7 +1027,7 @@ SYS;
         }
 
         if ($candlesBack !== null) {
-            $hours = $candlesBack * (CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe] / 3600);
+            $hours = $candlesBack * (BacktestTimeframe::from($timeframe)->seconds() / 3600);
 
             return max(1, min(48, (int) ceil($hours / (30 * 24))));
         }
@@ -1048,7 +1052,7 @@ SYS;
         }
 
         if ($candlesBack !== null) {
-            $seconds = $candlesBack * CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe];
+            $seconds = $candlesBack * BacktestTimeframe::from($timeframe)->seconds();
 
             return Carbon::now()->subSeconds($seconds);
         }
@@ -1068,13 +1072,13 @@ SYS;
     private function availableTimeframes(): array
     {
         $raw = collect(Kraite::timeframes())
-            ->filter(fn ($tf) => isset(CandleCoverageVerifier::INTERVAL_SECONDS[$tf]))
+            ->filter(fn ($tf) => BacktestTimeframe::tryFrom((string) $tf) !== null)
             ->unique()
-            ->sortBy(fn ($tf) => CandleCoverageVerifier::INTERVAL_SECONDS[$tf])
+            ->sortBy(fn ($tf) => BacktestTimeframe::from((string) $tf)->seconds())
             ->values()
             ->all();
 
-        return empty($raw) ? array_keys(CandleCoverageVerifier::INTERVAL_SECONDS) : $raw;
+        return empty($raw) ? BacktestTimeframe::values() : $raw;
     }
 
     private function parseMultipliers(?string $input): ?array

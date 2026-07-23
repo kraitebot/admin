@@ -18,7 +18,6 @@
             ['id' => 'infra',      'label' => 'Infra',      'route' => 'system.infra',      'params' => [],          'icon' => 'server'],
             ['id' => 'exchanges',  'label' => 'Exchanges',  'route' => 'system.exchanges',  'params' => [],          'icon' => 'shuffle'],
             ['id' => 'sql',        'label' => 'SQL',        'route' => 'system.sql-query',  'params' => [],          'icon' => 'database'],
-            ['id' => 'revenue',    'label' => 'Revenue',    'route' => 'system.revenue',    'params' => [],          'icon' => 'credit-card'],
             ['id' => 'billing',    'label' => 'Billing',    'route' => 'system.users',      'params' => [],          'icon' => 'dollar-sign'],
             ['id' => 'settings',   'label' => 'Settings',   'route' => 'system.settings',   'params' => [],          'icon' => 'sliders'],
         ]

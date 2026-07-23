@@ -228,6 +228,30 @@ it('passes only live API connectivity servers to the accounts page', function ()
         ]);
 });
 
+it('explains how runtime overrides apply to saved trading configuration', function (): void {
+    $user = User::factory()->create([
+        'name' => 'Configuration Override Owner',
+        'email' => 'configuration-override-owner@kraite.test',
+    ]);
+    createAccountForConnectivityTest($user, true);
+
+    $response = $this->actingAs($user)
+        ->get('https://admin.kraite.test/accounts/edit')
+        ->assertSuccessful()
+        ->assertSee('Runtime overrides may apply')
+        ->assertSee('How overrides work')
+        ->assertSee('BSCS does not change profit target or stop-loss.', false)
+        ->assertSee('Existing positions', false);
+
+    $document = new DOMDocument;
+    $document->loadHTML((string) $response->getContent(), LIBXML_NOERROR | LIBXML_NOWARNING);
+    $xpath = new DOMXPath($document);
+    $trigger = $xpath->query('//*[@data-config-overrides-help]')->item(0);
+
+    expect($trigger)->not->toBeNull()
+        ->and($trigger->getAttribute('x-on:click.stop'))->toContain('$store.help.showInline');
+});
+
 it('serializes inactive subscription state and only currently open positions', function (): void {
     $subscriptionId = DB::table('subscriptions')->insertGetId([
         'name' => 'Expired test plan',

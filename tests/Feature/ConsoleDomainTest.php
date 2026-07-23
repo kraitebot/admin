@@ -63,6 +63,25 @@ it('uses one full-width footer for the rail status and footer content', function
         ->and($xpath->query('//*[@data-rail]//*[@data-rail-status]')->length)->toBe(0);
 });
 
+it('omits the retired revenue link from sysadmin navigation', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'shell-navigation-'.uniqid().'@example.test',
+        'is_admin' => true,
+    ]);
+
+    $html = (string) $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/dashboard')
+        ->assertSuccessful()
+        ->getContent();
+
+    $document = new DOMDocument;
+    $document->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
+    $xpath = new DOMXPath($document);
+
+    expect($xpath->query('//*[@data-id="revenue"]')->length)->toBe(0)
+        ->and($xpath->query('//*[@data-id="billing"]')->length)->toBe(2);
+});
+
 it('sends sysadmin logins to the system dashboard', function (): void {
     $admin = User::factory()->create([
         'is_admin' => true,

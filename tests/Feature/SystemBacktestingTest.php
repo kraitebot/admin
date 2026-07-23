@@ -6,8 +6,8 @@ use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Kraite\Core\Enums\BacktestTimeframe;
 use Kraite\Core\Models\ExchangeSymbol;
-use Kraite\Core\Support\Backtest\CandleCoverageVerifier;
 
 /**
  * The console backtesting index reads three kraitebot/core-owned tables
@@ -108,6 +108,7 @@ function seedBacktestableToken(): int
         'was_backtesting_approved' => true,
         'backtesting_review_status' => 'approved',
         'is_manually_enabled' => true,
+        'direction' => 'long',
     ]);
 }
 
@@ -168,7 +169,7 @@ function seedImmediateTradeableToken(array $overrides = []): int
  */
 function seedCandles(int $exchangeSymbolId, string $timeframe, int $count, int $endTs): void
 {
-    $iv = CandleCoverageVerifier::INTERVAL_SECONDS[$timeframe];
+    $iv = BacktestTimeframe::from($timeframe)->seconds();
     $rows = [];
     for ($i = 0; $i < $count; $i++) {
         $rows[] = [
@@ -209,6 +210,9 @@ it('renders the backtesting workspace for admins', function (): void {
     // The token's logo URL is wired into the selector config for the avatar.
     // (@js escapes slashes, so assert the slash-free host segment.)
     $response->assertSee('s2.coinmarketcap.com', false);
+    expect(data_get($response->viewData('symbols'), 'USDT.0.direction'))->toBe('LONG');
+    $response->assertSee('x-show="s.direction"', false);
+    $response->assertSee('x-text="s.direction"', false);
     // The endpoints the workspace drives are wired into the bootstrap.
     // (@js escapes slashes, so assert the unique hyphenated path segments.)
     $response->assertSee('fetch-candles', false);
@@ -271,7 +275,7 @@ it('turns an immediate candidate tradeable through approval alone', function ():
 
 it('no longer hard-blocks a backtest run on stale candle data (soft coverage gate)', function (): void {
     $esId = seedBacktestableToken();
-    $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
+    $iv = BacktestTimeframe::OneDay->seconds();
     // Contiguous daily candles, but the latest is ~6 days old → stale for 1d.
     $staleLatest = intdiv(time(), $iv) * $iv - (6 * $iv);
     seedCandles($esId, '1d', 60, $staleLatest);
@@ -294,7 +298,7 @@ it('no longer hard-blocks a backtest run on stale candle data (soft coverage gat
 
 it('no longer blocks approval on stale candle data (admin final call)', function (): void {
     $esId = seedBacktestableToken();
-    $iv = CandleCoverageVerifier::INTERVAL_SECONDS['1d'];
+    $iv = BacktestTimeframe::OneDay->seconds();
     $staleLatest = intdiv(time(), $iv) * $iv - (6 * $iv);
     seedCandles($esId, '1d', 60, $staleLatest);
     $admin = User::factory()->create(['is_admin' => true]);

@@ -58,6 +58,17 @@
         'lev'    => $union(['10', '15', '20'], collect($cards)->flatMap(fn ($c) => [$c['cfg']['lL'], $c['cfg']['lS']])->all()),
         'margin' => $union(['4.00', '5.00', '6.00'], collect($cards)->flatMap(fn ($c) => [$c['cfg']['mL'], $c['cfg']['mS']])->all()),
     ];
+
+    $configurationOverridesHelp = <<<'MARKDOWN'
+Your saved settings remain the defaults and maximums for new positions.
+
+- **Position slots** — BSCS keeps your saved limit in Calm, reduces it to 75% in Elevated and 50% in Fragile, and allows no new opens in Critical.
+- **Leverage** — Your saved value is a maximum. Exchange token limits may cap it first; BSCS then reduces it to 66% in Elevated or 50% in Fragile. Critical blocks new opens.
+- **Margin** — Uses your saved percentage as the base. Fragile conditions and directional crowding can reduce the actual margin.
+- **Profit target and stop-loss** — BSCS does not change profit target or stop-loss. A validated token-specific value wins when available; otherwise your saved value is used.
+- **Token ladder** — Token-specific gap, order-count, and quantity settings are used when configured.
+- **Existing positions** — Values are captured when a position opens. Later changes or overrides do not rewrite or close an existing position.
+MARKDOWN;
 @endphp
 
 <x-app-layout active="accounts" :title="'Kraite — Accounts'">
@@ -259,6 +270,14 @@
                                             </template>
                                         </button>
                                         <span class="font-mono text-[10.5px] text-fg-mute tracking-[0.04em] max-[560px]:text-center">Applies to new positions opened after saving</span>
+                                        <button type="button"
+                                                data-config-overrides-help
+                                                x-on:click.stop="$store.help.showInline(@js('How configuration overrides work'), @js($configurationOverridesHelp))"
+                                                class="appearance-none ml-auto inline-flex items-center gap-2 bg-transparent border-0 p-0 font-mono text-[10.5px] tracking-[0.04em] text-fg-mute hover:text-accent transition-colors duration-fast cursor-pointer max-[560px]:ml-0 max-[560px]:justify-center">
+                                            <x-feathericon-shield class="w-[13px] h-[13px] flex-shrink-0" stroke-width="1.75"/>
+                                            <span>Runtime overrides may apply</span>
+                                            <span class="text-accent underline underline-offset-2">How overrides work</span>
+                                        </button>
                                     </div>
                                     <div x-show="cfgError" x-cloak class="border-t border-line-soft px-6 py-3 max-[640px]:px-4">
                                         <div class="rounded-control border border-danger/40 bg-danger/10 px-4 py-3 text-[12px] text-danger" x-text="cfgError"></div>
