@@ -1,6 +1,14 @@
 # WhereAreWe
 
-_Last updated: 2026-07-06_
+_Last updated: 2026-07-23_
+
+## Session 2026-07-23 — honest backtest history coverage (v0.28.1)
+
+- Fresh, gap-free candles are no longer enough to display **Complete & live**;
+  the archive must also reach the requested history boundary.
+- A run attempts to fill that complete window first. If source history remains
+  thin, the final result stays advisory and the operator sees the warning.
+- Focused regression coverage passes: 15 tests / 58 assertions.
 
 ## Session 2026-07-06 — backtesting hardening (v0.13.0, uncommitted)
 

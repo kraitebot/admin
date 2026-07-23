@@ -235,6 +235,12 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('filters.top100 && (s.rank == null || s.rank > 100)', false);
     $response->assertSee('s.rank != null && s.rank <= 100', false);
     $response->assertSee('filters.immediateTradeable && ! s.immediateTradeable', false);
+    $response->assertSee('coverageHealthy(c)', false);
+    $response->assertSee('coverageWindowCovered(c)', false);
+    $response->assertSee('Thin history — ${c.candles} candles', false);
+    expect(file_get_contents(app_path('Http/Controllers/System/BacktrackingController.php')))
+        ->toContain('Coverage: contiguous')
+        ->not->toContain('Coverage: complete');
 });
 
 it('marks only symbols where approval is the final tradeability action', function (): void {

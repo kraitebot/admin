@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.28.1] — 2026-07-23
+
+### Honest backtest coverage
+
+- [FIXED] A short but fresh candle series is labelled **Thin history** instead
+  of **Complete & live**.
+- [FIXED] Running a backtest now attempts the full requested history window,
+  and the final verdict keeps the warning when sources cannot fill it.
+- [SAFETY] Ships `kraitebot/core` 1.80.1 so pre-fetch and post-fetch coverage
+  decisions share the same history-depth rule.
+- [VERIFIED] Focused coverage passes: 15 tests / 58 assertions; production
+  frontend build passes.
+
 ## [0.28.0] — 2026-07-23
 
 ### Operator clarity

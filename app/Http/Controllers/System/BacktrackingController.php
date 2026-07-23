@@ -1180,7 +1180,7 @@ SYS;
                 );
             } else {
                 $parts[] = sprintf(
-                    'Coverage: complete (%d candles, earliest %s, latest %s)',
+                    'Coverage: contiguous (%d candles, earliest %s, latest %s)',
                     $coverage['total_present'] ?? 0,
                     $coverage['earliest'] ?? 'n/a',
                     $coverage['latest'] ?? 'n/a'

@@ -214,6 +214,24 @@
                     staleness_hours: c.staleness_hours != null ? c.staleness_hours : null,
                 };
             },
+            coverageWindowCovered(c) {
+                if (!c || !c.earliest || c.earliest === '—') return false;
+                const earliest = new Date(c.earliest.replace(' ', 'T') + 'Z');
+                const requiredSince = new Date();
+                requiredSince.setUTCHours(0, 0, 0, 0);
+                requiredSince.setUTCDate(1);
+                requiredSince.setUTCMonth(requiredSince.getUTCMonth() - Number(this.cfg.max_months || 24));
+                return earliest <= requiredSince;
+            },
+            coverageHealthy(c) {
+                return !!c && c.is_fresh && c.holes === 0 && this.coverageWindowCovered(c);
+            },
+            coverageLabel(c) {
+                if (!c.is_fresh) return `Stale — ${c.staleness_hours != null ? Math.round(c.staleness_hours) + 'h behind' : 'not current'}`;
+                if (c.holes > 0) return `${c.holes} gap${c.holes > 1 ? 's' : ''} · ${c.contiguity}% contiguity`;
+                if (!this.coverageWindowCovered(c)) return `Thin history — ${c.candles} candles`;
+                return 'Complete & live';
+            },
 
             async doFetch() {
                 if (!this.selected || this.busy) return false;
@@ -985,11 +1003,11 @@
                 </div>
                 <template x-if="cov">
                     <div class="card card--flat overflow-hidden">
-                        <div class="flex items-center gap-2.5 py-2.5 px-4 border-b border-line-soft" :style="`background: color-mix(in srgb, ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'} 8%, transparent)`">
-                            <span class="w-[8px] h-[8px] rounded-chip flex-shrink-0" :style="`background: ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"></span>
-                            <span class="font-mono text-[11px] font-bold tracking-[0.04em] uppercase" :style="`color: ${(cov.is_fresh && cov.holes === 0) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"
-                                  x-text="!cov.is_fresh ? `Stale — ${cov.staleness_hours != null ? Math.round(cov.staleness_hours) + 'h behind' : 'not current'}` : (cov.holes === 0 ? 'Complete &amp; live' : `${cov.holes} gap${cov.holes > 1 ? 's' : ''} · ${cov.contiguity}% contiguity`)"></span>
-                            <span x-show="!cov.is_fresh || cov.holes > 0" class="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Run tops up before grading</span>
+                        <div class="flex items-center gap-2.5 py-2.5 px-4 border-b border-line-soft" :style="`background: color-mix(in srgb, ${coverageHealthy(cov) ? 'var(--pnl-up-fg)' : 'var(--warn)'} 8%, transparent)`">
+                            <span class="w-[8px] h-[8px] rounded-chip flex-shrink-0" :style="`background: ${coverageHealthy(cov) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"></span>
+                            <span class="font-mono text-[11px] font-bold tracking-[0.04em] uppercase" :style="`color: ${coverageHealthy(cov) ? 'var(--pnl-up-fg)' : 'var(--warn)'}`"
+                                  x-text="coverageLabel(cov)"></span>
+                            <span x-show="!coverageHealthy(cov)" class="font-mono text-[10px] text-fg-mute ml-auto max-[520px]:hidden">Run tops up before grading</span>
                         </div>
                         <div class="grid grid-cols-4 gap-3 py-3 px-4 max-[520px]:grid-cols-2 max-[520px]:gap-y-3">
                             <div class="flex flex-col gap-1 min-w-0">
