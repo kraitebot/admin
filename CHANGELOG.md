@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.29.0] — 2026-07-23
+
+### Stop-loss recency
+
+- [ADDED] Each LONG and SHORT stop-loss coverage panel shows how long ago its
+  newest simulated stop occurred.
+- [UNCHANGED] Recency is review context only; approval bands and automatic
+  trading eligibility remain unchanged.
+- [SAFETY] Ships `kraitebot/core` 1.80.2 with accurate rejected-slot
+  diagnostics.
+- [VERIFIED] Focused Backtesting coverage passes: 9 tests / 46 assertions;
+  production frontend build and formatting pass.
+
 ## [0.28.2] — 2026-07-23
 
 ### Selected-token direction

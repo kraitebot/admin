@@ -231,6 +231,9 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('resolvedSims === 0', false);
     // The SL-coverage tiers panel renders from totals.sl_coverage.
     $response->assertSee('Stop-loss coverage', false);
+    $response->assertSee('Latest SL · ', false);
+    $response->assertSee('relativeAge(d.latest_stop_at)', false);
+    $response->assertSee("if (!value) return '—';", false);
     // Every adjustment candidate row carries a one-click apply-and-re-run button.
     $response->assertSee('Apply this config and backtest again', false);
     $response->assertSee('Immediate Tradeable', false);

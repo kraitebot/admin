@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
+use App\Services\BacktestStopLossRecency;
 use BrunoCFalcao\AiBridge\Chat\ChatManager;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
@@ -327,7 +328,7 @@ final class BacktrackingController extends Controller
         ]);
     }
 
-    public function run(Request $request): JsonResponse
+    public function run(Request $request, BacktestStopLossRecency $stopLossRecency): JsonResponse
     {
         $validated = $request->validate([
             'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
@@ -384,6 +385,10 @@ final class BacktrackingController extends Controller
                 specificCandle: null,
                 since: $windowSince,
             );
+
+            foreach ($stopLossRecency->latestByDirection($result['rows']) as $direction => $stoppedAt) {
+                $result['totals']['sl_coverage'][$direction]['latest_stop_at'] = $stoppedAt;
+            }
 
             // Row cap — shipping all 10k rows in one JSON response is a
             // UI hazard. Truncate on the API, the UI can always ask for

@@ -608,6 +608,35 @@
                 const dirs = (this.slCoverage || []).filter((d) => this.dirFilter === 'all' || d.dir === this.dirFilter);
                 return dirs.length ? dirs : null;
             },
+            relativeAge(value) {
+                if (!value) return '—';
+
+                const stoppedAt = new Date(value);
+                if (Number.isNaN(stoppedAt.getTime())) return '—';
+
+                let seconds = Math.max(0, Math.floor((Date.now() - stoppedAt.getTime()) / 1000));
+                if (seconds < 60) return 'just now';
+
+                const units = [
+                    ['year', 31557600],
+                    ['month', 2629800],
+                    ['day', 86400],
+                    ['hour', 3600],
+                    ['minute', 60],
+                ];
+                const parts = [];
+
+                for (const [unit, size] of units) {
+                    const amount = Math.floor(seconds / size);
+                    if (amount === 0) continue;
+
+                    parts.push(`${amount} ${unit}${amount === 1 ? '' : 's'}`);
+                    seconds -= amount * size;
+                    if (parts.length === 2) break;
+                }
+
+                return `${parts.join(' and ')} ago`;
+            },
 
             // ---- config echo (meta from the run) ----
             get configEcho() {
@@ -1161,6 +1190,7 @@
                                                         <div class="flex items-center gap-2 mb-2.5">
                                                             <span class="font-mono text-[9.5px] font-bold tracking-[0.05em] py-[2px] px-[7px] rounded-chip" :style="`color: ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'}; background: color-mix(in srgb, ${d.dir === 'LONG' ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)'} 13%, transparent)`" x-text="d.dir"></span>
                                                             <span class="font-mono text-[10.5px] text-fg-mute tabular-nums" x-text="d.count + (d.count === 1 ? ' stop' : ' stops')"></span>
+                                                            <span class="ml-auto font-mono text-[10px] text-fg-faint tabular-nums whitespace-nowrap" x-text="'Latest SL · ' + relativeAge(d.latest_stop_at)"></span>
                                                         </div>
                                                         <div class="flex flex-col gap-1.5">
                                                             <template x-for="t in SL_TIERS" :key="t[0]">
