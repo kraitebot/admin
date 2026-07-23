@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.29.1] — 2026-07-23
+
+### Backtesting toast centering
+
+- [FIXED] Backtesting status messages remain horizontally centered while their
+  entrance animation runs.
+- [IMPROVED] Long warning messages wrap within the viewport.
+
 ## [0.29.0] — 2026-07-23
 
 ### Stop-loss recency

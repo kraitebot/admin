@@ -234,6 +234,10 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('Latest SL · ', false);
     $response->assertSee('relativeAge(d.latest_stop_at)', false);
     $response->assertSee("if (!value) return '—';", false);
+    // Toast centering and entrance animation use separate elements because
+    // animate-dd-in owns transform and would otherwise override -translate-x-1/2.
+    $response->assertSee('left-1/2 -translate-x-1/2 z-[90] w-max', false);
+    $response->assertSee('max-w-full flex items-center gap-2.5', false);
     // Every adjustment candidate row carries a one-click apply-and-re-run button.
     $response->assertSee('Apply this config and backtest again', false);
     $response->assertSee('Immediate Tradeable', false);
