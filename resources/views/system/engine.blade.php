@@ -428,9 +428,14 @@
         </div>
 
         {{-- ===================== TOAST ===================== --}}
-        <div x-show="toast" x-cloak
-             class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[90] font-mono text-[12px] font-semibold py-2.5 px-4 rounded-control border shadow-3"
-             :style="`color: ${toast?.kind === 'error' ? 'var(--danger)' : 'var(--pnl-up-fg)'}; background: var(--bg-elev-3); border-color: color-mix(in srgb, ${toast?.kind === 'error' ? 'var(--danger)' : 'var(--pnl-up-fg)'} 40%, transparent)`"
-             x-text="toast?.text"></div>
+        <template x-teleport="body">
+            <div x-show="toast" x-cloak
+                 :data-theme="contentDark ? 'dark' : 'light'"
+                 class="fixed inset-x-0 bottom-[calc(41px+1.5rem)] z-[90] flex justify-center px-4 pointer-events-none max-[820px]:bottom-[calc(64px+1.5rem)]">
+                <div class="w-max max-w-full font-mono text-[12px] font-semibold py-2.5 px-4 rounded-control border shadow-3 pointer-events-auto"
+                     :style="`color: ${toast?.kind === 'error' ? 'var(--danger)' : 'var(--pnl-up-fg)'}; background: var(--bg-elev-3); border-color: color-mix(in srgb, ${toast?.kind === 'error' ? 'var(--danger)' : 'var(--pnl-up-fg)'} 40%, transparent)`"
+                     x-text="toast?.text"></div>
+            </div>
+        </template>
     </div>
 </x-app-layout>

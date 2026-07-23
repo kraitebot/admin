@@ -234,10 +234,13 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('Latest SL · ', false);
     $response->assertSee('relativeAge(d.latest_stop_at)', false);
     $response->assertSee("if (!value) return '—';", false);
-    // Toast centering and entrance animation use separate elements because
-    // animate-dd-in owns transform and would otherwise override -translate-x-1/2.
-    $response->assertSee('left-1/2 -translate-x-1/2 z-[90] w-max', false);
-    $response->assertSee('max-w-full flex items-center gap-2.5', false);
+    // The toast is teleported outside the scroll shell and centered without
+    // Tailwind transform utilities, whose defaults are absent with Preflight off.
+    $response->assertSee('x-teleport="body"', false);
+    $response->assertSee(':data-theme="contentDark ? \'dark\' : \'light\'"', false);
+    $response->assertSee('fixed inset-x-0 bottom-[calc(41px+1.5rem)] z-[90] flex justify-center px-4', false);
+    $response->assertSee('w-max max-w-full flex items-center gap-2.5', false);
+    $response->assertDontSee('left-1/2 -translate-x-1/2 z-[90] w-max', false);
     // Every adjustment candidate row carries a one-click apply-and-re-run button.
     $response->assertSee('Apply this config and backtest again', false);
     $response->assertSee('Immediate Tradeable', false);

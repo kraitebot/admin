@@ -79,6 +79,10 @@ it('renders the engine page for admins with the live state seeded', function ():
     $response->assertSee('enginePage(JSON.parse(', false);
     $response->assertSee('Troubleshoot with AI', false);
     $response->assertSee('Mark resolved', false);
+    $response->assertSee('x-teleport="body"', false);
+    $response->assertSee(':data-theme="contentDark ? \'dark\' : \'light\'"', false);
+    $response->assertSee('fixed inset-x-0 bottom-[calc(41px+1.5rem)] z-[90] flex justify-center px-4', false);
+    $response->assertDontSee('left-1/2 -translate-x-1/2 z-[90]', false);
 });
 
 it('filters processing classes by their visible running count including block classes', function (): void {

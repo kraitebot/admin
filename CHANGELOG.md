@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.29.2] — 2026-07-23
+
+### Toast positioning
+
+- [FIXED] Backtesting and Engine status messages use transform-free viewport
+  centering and remain above the application footer.
+- [VERIFIED] WebKit and Chromium geometry checks pass at desktop and mobile
+  widths; focused coverage passes with 15 tests / 92 assertions.
+
 ## [0.29.1] — 2026-07-23
 
 ### Backtesting toast centering

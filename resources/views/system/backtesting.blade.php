@@ -1292,16 +1292,19 @@
         </div>
 
         {{-- ===================== TOAST ===================== --}}
-        <template x-if="toast">
-            <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-[90] w-max max-w-[calc(100vw-2rem)]">
-                <div class="max-w-full flex items-center gap-2.5 py-2.5 px-4 rounded-control bg-surface border shadow-3 animate-dd-in" :style="`border-color: color-mix(in srgb, ${toast.kind === 'error' ? 'var(--danger)' : toast.kind === 'reject' ? 'var(--pnl-down-fg)' : toast.kind === 'warn' ? 'var(--warn)' : 'var(--pnl-up-fg)'} 45%, var(--border))`">
-                    <x-feathericon-alert-triangle x-show="toast.kind === 'error'" class="w-4 h-4 flex-shrink-0" style="color: var(--danger)" stroke-width="1.75"/>
-                    <x-feathericon-alert-triangle x-show="toast.kind === 'warn'" class="w-4 h-4 flex-shrink-0" style="color: var(--warn)" stroke-width="1.75"/>
-                    <x-feathericon-power x-show="toast.kind === 'reject'" class="w-4 h-4 flex-shrink-0" style="color: var(--pnl-down-fg)" stroke-width="1.75"/>
-                    <x-feathericon-check x-show="toast.kind === 'ok'" class="w-4 h-4 flex-shrink-0" style="color: var(--pnl-up-fg)" stroke-width="2"/>
-                    <span class="min-w-0 font-sans text-[12.5px] font-semibold leading-snug text-fg-1" x-text="toast.text"></span>
+        <template x-teleport="body">
+            <template x-if="toast">
+                <div :data-theme="contentDark ? 'dark' : 'light'"
+                     class="fixed inset-x-0 bottom-[calc(41px+1.5rem)] z-[90] flex justify-center px-4 pointer-events-none max-[820px]:bottom-[calc(64px+1.5rem)]">
+                    <div class="w-max max-w-full flex items-center gap-2.5 py-2.5 px-4 rounded-control bg-surface border shadow-3 pointer-events-auto animate-dd-in" :style="`border-color: color-mix(in srgb, ${toast.kind === 'error' ? 'var(--danger)' : toast.kind === 'reject' ? 'var(--pnl-down-fg)' : toast.kind === 'warn' ? 'var(--warn)' : 'var(--pnl-up-fg)'} 45%, var(--border))`">
+                        <x-feathericon-alert-triangle x-show="toast.kind === 'error'" class="w-4 h-4 flex-shrink-0" style="color: var(--danger)" stroke-width="1.75"/>
+                        <x-feathericon-alert-triangle x-show="toast.kind === 'warn'" class="w-4 h-4 flex-shrink-0" style="color: var(--warn)" stroke-width="1.75"/>
+                        <x-feathericon-power x-show="toast.kind === 'reject'" class="w-4 h-4 flex-shrink-0" style="color: var(--pnl-down-fg)" stroke-width="1.75"/>
+                        <x-feathericon-check x-show="toast.kind === 'ok'" class="w-4 h-4 flex-shrink-0" style="color: var(--pnl-up-fg)" stroke-width="2"/>
+                        <span class="min-w-0 font-sans text-[12.5px] font-semibold leading-snug text-fg-1" x-text="toast.text"></span>
+                    </div>
                 </div>
-            </div>
+            </template>
         </template>
     </div>
 </x-app-layout>
