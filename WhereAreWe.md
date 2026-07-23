@@ -2,6 +2,13 @@
 
 _Last updated: 2026-07-23_
 
+## Session 2026-07-23 — selected-token direction (v0.28.2)
+
+- The backtesting selector now keeps the selected token's concluded LONG or
+  SHORT direction visible after the dropdown closes.
+- Focused Backtesting coverage passes: 7 tests / 41 assertions; the production
+  frontend build passes.
+
 ## Session 2026-07-23 — honest backtest history coverage (v0.28.1)
 
 - Fresh, gap-free candles are no longer enough to display **Complete & live**;

@@ -213,6 +213,8 @@ it('renders the backtesting workspace for admins', function (): void {
     expect(data_get($response->viewData('symbols'), 'USDT.0.direction'))->toBe('LONG');
     $response->assertSee('x-show="s.direction"', false);
     $response->assertSee('x-text="s.direction"', false);
+    $response->assertSee('x-show="selected.direction"', false);
+    $response->assertSee('x-text="selected.direction"', false);
     // The endpoints the workspace drives are wired into the bootstrap.
     // (@js escapes slashes, so assert the unique hyphenated path segments.)
     $response->assertSee('fetch-candles', false);

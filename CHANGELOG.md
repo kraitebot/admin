@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.28.2] — 2026-07-23
+
+### Selected-token direction
+
+- [IMPROVED] The backtesting selector keeps the selected token's concluded
+  LONG or SHORT direction visible after the dropdown closes.
+- [VERIFIED] Focused Backtesting coverage passes: 7 tests / 41 assertions;
+  production frontend build passes.
+
 ## [0.28.1] — 2026-07-23
 
 ### Honest backtest coverage

@@ -707,6 +707,12 @@
                                         <span class="font-mono font-bold text-[14px] text-fg-1" x-text="selected.token"></span>
                                         <span class="font-mono text-[12px] text-fg-mute" x-text="'· ' + selected.quote"></span>
                                         <span x-show="selected.rank" class="font-mono text-[9.5px] font-bold tabular-nums py-[2px] px-[6px] rounded-chip" style="color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent)" x-text="'#' + selected.rank"></span>
+                                        <span x-show="selected.direction"
+                                              class="font-mono text-[8.5px] font-bold tracking-[0.08em] uppercase py-[2px] px-1.5 rounded-chip flex-shrink-0"
+                                              :style="selected.direction === 'LONG'
+                                                  ? 'color: var(--pnl-up-fg); background: color-mix(in srgb, var(--pnl-up-fg) 13%, transparent)'
+                                                  : 'color: var(--pnl-down-fg); background: color-mix(in srgb, var(--pnl-down-fg) 13%, transparent)'"
+                                              x-text="selected.direction"></span>
                                     </span>
                                 </template>
                                 <span x-show="!selected" class="text-[13px] text-fg-mute">Select a token…</span>
