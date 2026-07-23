@@ -56,9 +56,11 @@ class ProjectionsController extends Controller
 
     /**
      * Per-month feed for the projections calendar. Returns:
-     *  - `actuals`     : map of YYYY-MM-DD → realised wallet delta for that
-     *                    day (only days with at least one snapshot).
+     *  - `actuals`     : map of YYYY-MM-DD → exchange-reported net PnL from
+     *                    positions closed on that day.
      *  - `current_wallet`: latest `total_wallet_balance` for the account.
+     *  - `investment_basis`: auto-assessed personal capital still funding
+     *                    the account, plus PnL-coverage metadata.
      *  - `scenarios`   : pessimistic / neutral / optimistic *daily*
      *                    percentages, computed from the **current calendar
      *                    month** to-date (independent of which month the
@@ -90,15 +92,25 @@ class ProjectionsController extends Controller
         $currentMonthWindow = Window::thisMonth($now);
 
         $financials = new AccountFinancials($account);
+        $investmentBasis = $financials->investmentBasis();
 
         return response()->json([
             'account_id' => $account->id,
             'year' => $year,
             'month' => $month,
             'actuals' => $this->normalizeRevenues($financials->dailyRevenues($monthWindow)),
-            'current_wallet' => $financials->currentWallet(),
+            'current_wallet' => $investmentBasis['current_wallet'],
             'month_start_wallet' => $financials->startWallet($monthWindow),
             'scenarios' => $this->normalizeScenarios($financials->scenarios($currentMonthWindow)),
+            'investment_basis' => [
+                'amount' => $this->normalizeMoney($investmentBasis['amount']),
+                'known_realized_pnl' => $this->normalizeMoney($investmentBasis['known_realized_pnl']),
+                'tracking_started_at' => $investmentBasis['tracking_started_at'],
+                'tracking_ended_at' => $investmentBasis['tracking_ended_at'],
+                'closed_positions' => $investmentBasis['closed_positions'],
+                'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
+                'is_complete' => $investmentBasis['is_complete'],
+            ],
             'today' => $now->toDateString(),
         ]);
     }
@@ -118,6 +130,11 @@ class ProjectionsController extends Controller
         }
 
         return $out;
+    }
+
+    private function normalizeMoney(?string $value): ?string
+    {
+        return $value === null ? null : number_format((float) $value, 4, '.', '');
     }
 
     /**

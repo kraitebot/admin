@@ -16,9 +16,9 @@
 <x-app-layout active="projections" :title="'Kraite — Projections'">
 
     <script>
-        // Projections page model — straight port of the design's client-side
-        // calendar. Past days replay a seeded rng reconciled to the account
-        // wallet; future days compound the wallet at an observed daily rate.
+        // Projections page model. Past days render exchange-reported net PnL;
+        // future days and capital milestones compound the live wallet at an
+        // observed daily rate.
         window.projectionsPage = (accounts, initialAccountId, dataUrl) => {
             // ---- constants ----
             const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -52,6 +52,7 @@
             const fmtSigned     = (n) => (n >= 0 ? '+' : '−') + fmtAbs(Math.abs(n));
             const fmtSignedFull = (n) => (n >= 0 ? '+' : '−') + fmtAbsFull(Math.abs(n));
             const fmtFull       = (n) => (n < 0 ? '−' : '') + fmtAbsFull(Math.abs(n));
+            const fmtMoney      = (n) => (n < 0 ? '−' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             const fmtPct        = (n, d = 2) => (n >= 0 ? '+' : '−') + Math.abs(n).toFixed(d) + '%';
             const dimOf = (y, m) => new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
 
@@ -80,6 +81,7 @@
                 acctIdx: Math.max(0, ACCTS.findIndex(a => a.id === initialAccountId)),
                 accountId: initialAccountId,
                 scenario: 'neutral',
+                additionalInvestment: '',
                 ym: { year: null, month: null },
                 // server-anchored "today" — set from the first data response so
                 // past/current/future never depends on the browser clock.
@@ -122,15 +124,112 @@
                 leadCells() { return Array.from({ length: this.m.firstWeekday }); },
                 trailCells() { const t = this.m.firstWeekday + this.m.dim; return Array.from({ length: (7 - t % 7) % 7 }); },
                 mix(pct, base) { return `color-mix(in srgb, ${this.tone().css} ${pct}%, ${base})`; },
+                additionalAmount() {
+                    const amount = parseFloat(this.additionalInvestment);
+                    return Number.isFinite(amount) && amount > 0 ? amount : 0;
+                },
+                investment() {
+                    const assessment = (this.fetched && this.fetched.investment_basis) || {};
+                    const autoBasis = assessment.amount == null ? null : parseFloat(assessment.amount);
+                    const currentWallet = this.fetched && this.fetched.current_wallet != null
+                        ? parseFloat(this.fetched.current_wallet)
+                        : null;
+
+                    if (!Number.isFinite(autoBasis) || !Number.isFinite(currentWallet)) {
+                        return { available: false, autoBasis: null, additional: 0, basis: null, wallet: null, target: null, needed: null, isComplete: false, missingPnl: 0 };
+                    }
+
+                    const additional = this.additionalAmount();
+                    const basis = Math.max(0, autoBasis) + additional;
+                    const wallet = currentWallet + additional;
+                    const target = basis * 2;
+
+                    return {
+                        available: true,
+                        autoBasis,
+                        additional,
+                        basis,
+                        wallet,
+                        target,
+                        needed: Math.max(0, target - wallet),
+                        isComplete: assessment.is_complete !== false,
+                        missingPnl: assessment.missing_pnl_positions || 0,
+                    };
+                },
+                milestoneRows() {
+                    const capital = this.investment();
+                    const rates = this.rates();
+
+                    return this.scens.map(([key, label]) => {
+                        const rate = rates[key];
+                        const row = { key, label, rate, css: TONE[key].css, date: '—', detail: '', state: 'unavailable' };
+
+                        if (!capital.available) {
+                            row.detail = 'No wallet history';
+                            return row;
+                        }
+
+                        if (capital.basis <= 0 || capital.wallet >= capital.target) {
+                            row.date = 'Milestone reached';
+                            row.detail = 'Personal capital is already covered';
+                            row.state = 'reached';
+                            return row;
+                        }
+
+                        if (rates.n < 1 || rate == null || !Number.isFinite(rate)) {
+                            row.date = 'Not enough data';
+                            row.detail = 'No observed trading days this month';
+                            return row;
+                        }
+
+                        if (rate <= 0 || capital.wallet <= 0) {
+                            row.date = 'Not reachable';
+                            row.detail = 'At the current daily rate';
+                            row.state = 'unreachable';
+                            return row;
+                        }
+
+                        const days = Math.max(0, Math.ceil(Math.log(capital.target / capital.wallet) / Math.log1p(rate)));
+                        if (!Number.isFinite(days)) {
+                            row.date = 'Not reachable';
+                            row.detail = 'At the current daily rate';
+                            row.state = 'unreachable';
+                            return row;
+                        }
+
+                        const date = new Date(Date.UTC(this.curY, this.curM, this.curD));
+                        date.setUTCDate(date.getUTCDate() + days);
+                        row.date = date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+                        row.detail = this.milestoneDuration(days);
+                        row.state = 'projected';
+
+                        return row;
+                    });
+                },
+                milestoneDuration(days) {
+                    if (days === 0) return 'Milestone reached';
+
+                    const years = Math.floor(days / 365);
+                    const months = Math.floor((days % 365) / 30);
+                    const remainingDays = days - years * 365 - months * 30;
+                    const parts = [];
+
+                    if (years) parts.push(`${years} ${years === 1 ? 'year' : 'years'}`);
+                    if (months && parts.length < 2) parts.push(`${months} ${months === 1 ? 'month' : 'months'}`);
+                    if (!parts.length || (remainingDays && parts.length < 2)) parts.push(`${remainingDays} ${remainingDays === 1 ? 'day' : 'days'}`);
+
+                    return 'in ' + parts.join(' and ');
+                },
 
                 // formatters (exposed)
                 fSigned: fmtSigned,
                 fSignedFull: fmtSignedFull,
                 fFull: fmtFull,
+                fMoney: fmtMoney,
                 fPct: fmtPct,
 
                 // ---- actions ----
-                setAcct(i) { this.acctIdx = i; this.accountId = ACCTS[i].id; this.acctOpen = false; this.recompute(true); },
+                setAcct(i) { this.acctIdx = i; this.accountId = ACCTS[i].id; this.additionalInvestment = ''; this.acctOpen = false; this.recompute(true); },
                 setScenario(k) { if (this.m && this.m.type === 'past') return; this.scenario = k; if (this.fetched) { this.m = this.buildMonth(); this.totalsCells = this.buildTotals(); } },
                 pickYm(y, m) { this.ym = { year: y, month: m }; this.monOpen = false; this.recompute(true); },
                 shift(n) {
@@ -191,7 +290,7 @@
                 idxOf(y, m, d) { return Math.round((Date.UTC(y, m, d) - Date.UTC(this.curY, this.curM, this.curD)) / 86400000); },
                 rates() {
                     const sc = (this.fetched && this.fetched.scenarios) || {};
-                    const num = (v) => v == null ? 0 : parseFloat(v);
+                    const num = (v) => v == null ? null : parseFloat(v);
                     return { pess: num(sc.pessimistic_pct), neutral: num(sc.neutral_pct), opt: num(sc.optimistic_pct), n: sc.days_observed || 0 };
                 },
 
@@ -469,6 +568,105 @@
                         <span class="font-mono text-[17px] font-semibold tabular-nums tracking-[-0.01em]" :style="`color: ${tone().css}`" x-text="fSignedFull(m.cumFromToday)"></span>
                         <span class="font-mono text-[9px] tracking-[0.08em] uppercase" :style="`color: color-mix(in srgb, ${tone().css} 70%, var(--fg-mute))`">PROJECTED</span>
                     </div>
+                </div>
+
+                {{-- ===================== PROFIT-FUNDED MILESTONE ===================== --}}
+                <div class="card card--flat mb-6">
+                    <div class="{{ $cardHead }} max-[640px]:items-start max-[640px]:flex-col">
+                        <div class="{{ $cardTitle }}">
+                            <x-feathericon-target class="w-4 h-4 text-fg-3" stroke-width="1.75"/>
+                            <span>Profit-funded milestone</span>
+                            @php
+                                $milestoneHelp = "The milestone is reached when account equity is twice the personal capital still funding it. At that point, that capital can be withdrawn while an equal amount — generated by profit — remains trading.\n\nThe investment basis is assessed automatically as the latest wallet balance minus exchange-reported net trading PnL since the first recorded wallet snapshot. Deposits raise it; withdrawals reduce it.\n\n**Additional investment** is a temporary what-if simulation. It changes the projected wallet and target, but does not alter real account data.";
+                            @endphp
+                            <x-ui.help-dot title="Profit-funded milestone" :body="$milestoneHelp" tip="When profit can replace all personal capital still funding the bot." />
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span x-show="investment().available" x-cloak class="font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-success bg-surface-3 px-2 py-[3px] rounded-chip">Auto-assessed</span>
+                            <span x-show="investment().available && !investment().isComplete" x-cloak class="font-mono text-[9px] font-semibold tracking-[0.1em] uppercase text-warn bg-surface-3 px-2 py-[3px] rounded-chip">Partial PnL</span>
+                        </div>
+                    </div>
+
+                    <template x-if="investment().available">
+                        <div>
+                            <div class="grid grid-cols-1 min-[680px]:grid-cols-2 min-[1180px]:grid-cols-4">
+                                <div class="flex flex-col gap-1.5 py-4 px-5 border-b border-line-soft min-[680px]:border-r min-[1180px]:border-b-0">
+                                    <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Net personal investment</span>
+                                    <span class="font-mono text-[22px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-fg-1" x-text="fMoney(investment().autoBasis)"></span>
+                                    <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">Automatically assessed</span>
+                                </div>
+
+                                <label class="flex flex-col gap-1.5 py-4 px-5 border-b border-line-soft min-[1180px]:border-b-0 min-[1180px]:border-r">
+                                    <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Additional investment · what-if</span>
+                                    <span class="relative flex items-center">
+                                        <span class="absolute left-3 font-mono text-[14px] text-fg-mute pointer-events-none">$</span>
+                                        <input type="number" min="0" step="0.01" inputmode="decimal" x-model="additionalInvestment"
+                                               aria-label="Hypothetical additional investment"
+                                               placeholder="0.00"
+                                               class="appearance-none w-full h-[38px] rounded-control border border-line bg-input pl-7 pr-14 font-mono text-[14px] font-semibold text-fg-1 tabular-nums placeholder:text-fg-faint focus:border-line-focus focus:ring-0"/>
+                                        <button type="button" x-show="additionalAmount() > 0" x-cloak @click="additionalInvestment = ''"
+                                                class="absolute right-2 appearance-none bg-transparent border-0 p-1 font-mono text-[9px] font-semibold tracking-[0.06em] uppercase text-fg-mute hover:text-fg-1 cursor-pointer">Clear</button>
+                                    </span>
+                                    <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">Temporary simulation</span>
+                                </label>
+
+                                <div class="flex flex-col gap-1.5 py-4 px-5 border-b border-line-soft min-[680px]:border-r min-[1180px]:border-b-0">
+                                    <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Profit still needed</span>
+                                    <span class="font-mono text-[22px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-fg-1" x-text="fMoney(investment().needed)"></span>
+                                    <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">Above simulated wallet</span>
+                                </div>
+
+                                <div class="flex flex-col gap-1.5 py-4 px-5 border-b border-line-soft min-[680px]:border-b-0">
+                                    <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Profit-funded target</span>
+                                    <span class="font-mono text-[22px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-accent" x-text="fMoney(investment().target)"></span>
+                                    <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">2× net investment</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-1 min-[760px]:grid-cols-3 border-t border-line-soft">
+                                <template x-for="(row, i) in milestoneRows()" :key="row.key">
+                                    <div class="flex flex-col gap-2 py-4 px-5"
+                                         :class="i ? 'border-t min-[760px]:border-t-0 min-[760px]:border-l border-line-soft' : ''">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <span class="inline-flex items-center gap-2 font-mono text-[10px] font-semibold tracking-[0.08em] uppercase" :style="`color: ${row.css}`">
+                                                <span class="w-1.5 h-1.5 rounded-chip" :style="`background: ${row.css}`"></span>
+                                                <span x-text="row.label"></span>
+                                            </span>
+                                            <span class="font-mono text-[10px] tabular-nums text-fg-mute" x-text="row.rate == null ? '—' : fPct(row.rate * 100, 2) + '/day'"></span>
+                                        </div>
+                                        <span class="font-mono text-[18px] font-semibold leading-none tabular-nums tracking-[-0.01em]"
+                                              :class="row.state === 'unavailable' || row.state === 'unreachable' ? 'text-fg-mute' : ''"
+                                              :style="row.state === 'projected' || row.state === 'reached' ? `color: ${row.css}` : ''"
+                                              x-text="row.date"></span>
+                                        <span class="font-mono text-[9.5px] tracking-[0.04em] text-fg-mute" x-text="row.detail"></span>
+                                    </div>
+                                </template>
+                            </div>
+
+                            <div class="flex items-center gap-3 py-[13px] px-5 border-t border-line-soft bg-surface-2 max-[680px]:items-start">
+                                <span class="flex-shrink-0 text-accent"><x-feathericon-flag class="w-[15px] h-[15px]" stroke-width="1.75"/></span>
+                                <span class="text-[12px] leading-[1.5] text-fg-3">
+                                    At the milestone, withdraw <span class="font-mono font-semibold text-fg-1" x-text="fMoney(investment().basis)"></span>
+                                    and keep <span class="font-mono font-semibold text-accent" x-text="fMoney(investment().basis)"></span> running entirely on profit.
+                                </span>
+                            </div>
+
+                            <div x-show="!investment().isComplete" x-cloak class="flex items-start gap-2.5 py-3 px-5 border-t border-line-soft">
+                                <span class="flex-shrink-0 mt-0.5 text-warn"><x-feathericon-alert-triangle class="w-3.5 h-3.5" stroke-width="1.75"/></span>
+                                <span class="text-[11px] leading-[1.5] text-fg-mute">
+                                    <span class="font-mono text-fg-3" x-text="investment().missingPnl"></span>
+                                    closed <span x-text="investment().missingPnl === 1 ? 'position is' : 'positions are'"></span> still awaiting exchange PnL. The automatic investment estimate will refine when that data arrives.
+                                </span>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="!investment().available">
+                        <div class="flex items-center gap-3 py-6 px-5">
+                            <span class="flex-shrink-0 text-fg-mute"><x-feathericon-alert-triangle class="w-4 h-4" stroke-width="1.75"/></span>
+                            <span class="text-[12.5px] text-fg-3">No wallet history yet — the investment milestone will appear after the first account balance snapshot.</span>
+                        </div>
+                    </template>
                 </div>
 
                 {{-- ===================== CALENDAR CARD ===================== --}}

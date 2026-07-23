@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.30.0] — 2026-07-23
+
+### Profit-funded milestone
+
+- [ADDED] Projections shows when account profit can replace all personal
+  capital still funding the bot under three compound-growth scenarios.
+- [ADDED] The investment basis is assessed automatically from wallet history
+  and exchange-reported PnL, including a warning when closed-position PnL is
+  incomplete.
+- [ADDED] A temporary additional-investment simulation recalculates the wallet,
+  target, profit still needed, and projected dates without changing account
+  data.
+- [SAFETY] Ships `kraitebot/core` 1.81.0 so wallet ordering and investment-basis
+  boundaries are shared across callers.
+- [VERIFIED] Focused Projections coverage passes: 10 tests / 57 assertions;
+  production frontend and operator documentation builds pass.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.29.2] — 2026-07-23
 
 ### Toast positioning
