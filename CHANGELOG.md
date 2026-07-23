@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.31.1] — 2026-07-23
+
+### Projection navigation highlight
+
+- [FIXED] Monthly and Yearly keep their active rail highlight aligned with
+  the selected child link instead of drawing the marker near the rail header.
+- [FIXED] Active projection children remain visible in short desktop rails
+  after direct navigation, resizing, and rapid section toggles.
+- [VERIFIED] Focused sidebar browser coverage passes: 2 tests; related
+  Projections and shell coverage passes: 22 tests / 143 assertions.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.31.0] — 2026-07-23
 
 ### Five-year portfolio projections

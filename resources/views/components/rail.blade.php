@@ -51,7 +51,7 @@
         <img src="{{ asset('svg/snake-green.svg') }}" alt="Kraite" class="block w-[30px] h-[30px]"/>
     </div>
     <div data-rail-scroll class="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain">
-        <div class="relative min-h-full flex flex-col gap-0.5 justify-center px-2 py-2">
+        <div data-rail-track class="relative min-h-full flex flex-col gap-0.5 justify-center px-2 py-2">
             <span aria-hidden="true"
                   x-show="$store.rail.hl"
                   x-cloak

@@ -10,6 +10,10 @@ export default defineConfig({
     webServer: {
         command: 'scripts/prepare-e2e.sh && php artisan serve --env=testing --host=127.0.0.1 --port=8002 --no-reload',
         url: 'http://127.0.0.1:8002/up',
+        env: {
+            ...process.env,
+            ADMIN_DOMAIN: '127.0.0.1',
+        },
         reuseExistingServer: false,
         timeout: 120_000,
     },

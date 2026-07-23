@@ -21,12 +21,15 @@ Alpine.store('rail', {
     toggleSection(id) {
         const opening = this.openSection !== id;
         this.openSection = opening ? id : null;
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            const active = opening
+        const measure = () => {
+            const active = this.openSection === id
                 ? railNav()?.querySelector(`a[data-id='${this.activeId}']`) || null
                 : null;
             railMeasure(active);
-        }));
+        };
+
+        requestAnimationFrame(() => requestAnimationFrame(measure));
+        setTimeout(measure, 300);
     },
 });
 
@@ -98,8 +101,10 @@ const railReveal = (el) => {
         return;
     }
 
-    const top = el.offsetTop;
-    const bottom = top + el.offsetHeight;
+    const itemRect = el.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    const top = itemRect.top - viewportRect.top + viewport.scrollTop;
+    const bottom = top + itemRect.height;
     const visibleTop = viewport.scrollTop;
     const visibleBottom = visibleTop + viewport.clientHeight;
 
@@ -111,10 +116,23 @@ const railReveal = (el) => {
 };
 
 const railMeasure = (el) => {
+    const track = el?.closest('[data-rail-track]');
+    if (!el || !track) {
+        Alpine.store('rail').hl = null;
+
+        return;
+    }
+
     railReveal(el);
-    Alpine.store('rail').hl = el
-        ? { left: el.offsetLeft, top: el.offsetTop, width: el.offsetWidth, height: el.offsetHeight }
-        : null;
+    const itemRect = el.getBoundingClientRect();
+    const trackRect = track.getBoundingClientRect();
+
+    Alpine.store('rail').hl = {
+        left: itemRect.left - trackRect.left,
+        top: itemRect.top - trackRect.top,
+        width: itemRect.width,
+        height: itemRect.height,
+    };
 };
 
 const railSyncFromUrl = () => {
@@ -132,7 +150,19 @@ const railSyncFromUrl = () => {
         store.openSection = match.dataset.parent;
     }
 
-    requestAnimationFrame(() => railMeasure(match || null));
+    const matchedId = match?.dataset.id ?? null;
+    const measure = () => {
+        if (store.activeId !== matchedId) {
+            return;
+        }
+
+        railMeasure(match || null);
+    };
+    requestAnimationFrame(measure);
+
+    if (match?.dataset.parent) {
+        setTimeout(measure, 300);
+    }
 };
 
 window.railGo = (id, el) => {
