@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.32.1] — 2026-07-25
+
+### Fleet service diagnostics
+
+- [IMPROVED] Every non-running service is named below its server with the
+  reported state; missing and stale heartbeats receive explicit issue lines.
+- [FIXED] Service tooltips escape the Fleet card and remain above adjacent
+  dashboard panels.
+- [VERIFIED] Focused Fleet coverage passes: 13 tests / 82 assertions; frontend
+  and operator-documentation builds pass.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.32.0] — 2026-07-24
 
 ### Mobile position history and projections

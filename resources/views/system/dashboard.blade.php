@@ -130,6 +130,33 @@
             unitOk(state) {
                 return state === 'RUNNING';
             },
+            serverIssues(node) {
+                const issues = [];
+
+                if (node.status === 'missing') {
+                    issues.push({
+                        key: 'heartbeat-missing',
+                        message: 'Fleet heartbeat is missing',
+                        color: 'var(--danger)',
+                    });
+                } else if (node.status === 'stale') {
+                    issues.push({
+                        key: 'heartbeat-stale',
+                        message: 'Fleet heartbeat is stale',
+                        color: 'var(--warn)',
+                    });
+                }
+
+                this.unitList(node.units)
+                    .filter((unit) => ! this.unitOk(unit.state))
+                    .forEach((unit) => issues.push({
+                        key: `service-${unit.name}`,
+                        message: `Service ${unit.name} is ${unit.state}`,
+                        color: 'var(--danger)',
+                    }));
+
+                return issues;
+            },
 
             // ---------- deploy ----------
             deployPct() {
@@ -303,7 +330,7 @@
         {{-- ===================== FLEET + SIDE COLUMN ===================== --}}
         <div class="grid grid-cols-[1.6fr_1fr] gap-5 mb-5 max-[1024px]:grid-cols-1">
             {{-- worker fleet — servers roster ⋈ Redis heartbeat keys --}}
-            <div class="card card--flat overflow-hidden">
+            <div class="card card--flat !overflow-visible relative z-20">
                 <x-ui.card-head icon="server" title="Worker fleet" :accent="true">
                     <x-slot:right>
                         {{-- the header auto-sync drives this card too --}}
@@ -319,8 +346,9 @@
                 <div x-show="!ov.fleet || ov.fleet.length === 0" class="py-10 text-center font-mono text-[11px] text-fg-mute">No servers registered.</div>
 
                 <template x-for="node in ov.fleet" :key="node.hostname">
-                    <div class="grid grid-cols-[minmax(150px,1.4fr)_104px_1fr_1fr_1fr_64px_minmax(96px,1fr)] items-center gap-4 py-3 px-5 border-b border-line-soft last:border-b-0 max-[1024px]:grid-cols-[minmax(140px,1.5fr)_104px_1fr_1fr] max-[640px]:px-4 transition-colors duration-fast"
+                    <div class="border-b border-line-soft last:border-b-0 last:rounded-b-control transition-colors duration-fast"
                          :style="node.status === 'stale' ? 'background: color-mix(in srgb, var(--warn) 7%, transparent)' : (node.status === 'missing' ? 'background: color-mix(in srgb, var(--danger) 6%, transparent)' : '')">
+                        <div class="grid grid-cols-[minmax(150px,1.4fr)_104px_1fr_1fr_1fr_64px_minmax(96px,1fr)] items-center gap-4 py-3 px-5 max-[1024px]:grid-cols-[minmax(140px,1.5fr)_104px_1fr_1fr] max-[640px]:px-4">
                         {{-- node: type + hostname + ip --}}
                         <div class="flex items-center gap-2.5 min-w-0">
                             <span class="font-mono text-[9px] font-bold tracking-[0.06em] uppercase text-fg-mute w-[44px] flex-shrink-0" x-text="node.type ?? '—'"></span>
@@ -386,7 +414,7 @@
                             <template x-for="u in unitList(node.units)" :key="u.name">
                                 <span class="relative group inline-flex items-center justify-center w-[13px] h-[13px] cursor-default">
                                     <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0 transition-transform duration-fast group-hover:scale-150" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
-                                    <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
+                                    <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
                                         <div class="font-mono text-[10px] font-bold text-fg-1 flex items-center gap-1.5">
                                             <span class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
                                             <span x-text="u.name"></span>
@@ -394,6 +422,15 @@
                                         <div class="font-mono text-[9px] tracking-[0.06em] uppercase mt-0.5" :style="`color: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`" x-text="u.state"></div>
                                     </div>
                                 </span>
+                            </template>
+                        </div>
+                        </div>
+                        <div x-show="serverIssues(node).length > 0" x-cloak class="flex flex-col gap-1.5 px-5 pb-3 max-[640px]:px-4">
+                            <template x-for="issue in serverIssues(node)" :key="issue.key">
+                                <div class="flex items-start gap-2 font-mono text-[10px] font-semibold tracking-[0.02em]" :style="`color: ${issue.color}`">
+                                    <x-feathericon-alert-triangle class="w-3 h-3 mt-px flex-shrink-0" stroke-width="2"/>
+                                    <span x-text="issue.message"></span>
+                                </div>
                             </template>
                         </div>
                     </div>

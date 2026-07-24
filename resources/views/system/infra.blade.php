@@ -82,6 +82,33 @@
             unitOk(state) {
                 return state === 'RUNNING';
             },
+            serverIssues(node) {
+                const issues = [];
+
+                if (node.status === 'missing') {
+                    issues.push({
+                        key: 'heartbeat-missing',
+                        message: 'Fleet heartbeat is missing',
+                        color: 'var(--danger)',
+                    });
+                } else if (node.status === 'stale') {
+                    issues.push({
+                        key: 'heartbeat-stale',
+                        message: 'Fleet heartbeat is stale',
+                        color: 'var(--warn)',
+                    });
+                }
+
+                this.unitList(node.units)
+                    .filter((unit) => ! this.unitOk(unit.state))
+                    .forEach((unit) => issues.push({
+                        key: `service-${unit.name}`,
+                        message: `Service ${unit.name} is ${unit.state}`,
+                        color: 'var(--danger)',
+                    }));
+
+                return issues;
+            },
             barColor(pct) {
                 return pct >= 90 ? 'var(--danger)' : (pct >= 75 ? 'var(--warn)' : 'var(--pnl-up-fg)');
             },
@@ -172,7 +199,7 @@
         </div>
 
         {{-- ===================== FLEET SERVERS — ONE TILE PER BOX ===================== --}}
-        <div class="card card--flat overflow-hidden">
+        <div class="card card--flat !overflow-visible relative z-20">
             <x-ui.card-head icon="server" title="Fleet servers" :accent="true" hint="heartbeat · 15s">
                 <x-slot:right>
                     <span class="flex items-center gap-3">
@@ -194,7 +221,7 @@
 
             <div x-show="loaded" x-cloak class="grid grid-cols-3 gap-3 p-4 max-[1200px]:grid-cols-2 max-[760px]:grid-cols-1">
                 <template x-for="node in fleet" :key="node.hostname">
-                    <div class="bg-surface border rounded-control p-4 flex flex-col gap-3"
+                    <div class="bg-surface border rounded-control p-4 flex flex-col gap-3 relative"
                          :style="node.status === 'stale' ? 'border-color: color-mix(in srgb, var(--warn) 40%, transparent)' : (node.status === 'missing' ? 'border-color: color-mix(in srgb, var(--danger) 45%, transparent)' : 'border-color: var(--line)')">
                         {{-- head: hostname + type | status --}}
                         <div class="flex items-center justify-between gap-3">
@@ -244,7 +271,7 @@
                                 <template x-for="u in unitList(node.units)" :key="u.name">
                                     <span class="relative group inline-flex items-center justify-center w-[13px] h-[13px] cursor-default">
                                         <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0 transition-transform duration-fast group-hover:scale-150" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
-                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-20 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
+                                        <div class="absolute bottom-[calc(100%+6px)] left-1/2 -translate-x-1/2 z-50 hidden group-hover:block whitespace-nowrap bg-surface border border-line-strong rounded-control shadow-3 px-2.5 py-1.5 pointer-events-none">
                                             <div class="font-mono text-[10px] font-bold text-fg-1 flex items-center gap-1.5">
                                                 <span class="w-[6px] h-[6px] rounded-chip flex-shrink-0" :style="`background: ${unitOk(u.state) ? 'var(--pnl-up-fg)' : 'var(--danger)'}`"></span>
                                                 <span x-text="u.name"></span>
@@ -258,6 +285,14 @@
                                 up <span class="text-fg-2 font-semibold tabular-nums" x-text="uptimeHuman(node.uptime_seconds)"></span>
                                 · sync <span class="text-fg-2 font-semibold tabular-nums" x-text="node.status === 'missing' ? '—' : ageHuman(node.age_seconds)"></span>
                             </span>
+                        </div>
+                        <div x-show="serverIssues(node).length > 0" x-cloak class="flex flex-col gap-1.5 pt-2.5 border-t border-line-soft">
+                            <template x-for="issue in serverIssues(node)" :key="issue.key">
+                                <div class="flex items-start gap-2 font-mono text-[10px] font-semibold tracking-[0.02em]" :style="`color: ${issue.color}`">
+                                    <x-feathericon-alert-triangle class="w-3 h-3 mt-px flex-shrink-0" stroke-width="2"/>
+                                    <span x-text="issue.message"></span>
+                                </div>
+                            </template>
                         </div>
                     </div>
                 </template>

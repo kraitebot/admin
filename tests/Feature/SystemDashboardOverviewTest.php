@@ -239,3 +239,16 @@ it('renders the overview page for admins with the live state seeded', function (
     $response->assertSee('bscs\/override\/engage', false);
     $response->assertSee('bscs\/override\/clear', false);
 });
+
+it('renders explicit fleet issues and keeps service tooltips above adjacent panels', function (): void {
+    $admin = User::factory()->create(['is_admin' => true, 'email' => 'ovw-fleet-issues@kraite.test']);
+
+    $response = $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/dashboard')
+        ->assertSuccessful();
+
+    $response->assertSee('serverIssues(node)', false);
+    $response->assertSee('Service ${unit.name} is ${unit.state}', false);
+    $response->assertSee('card card--flat !overflow-visible relative z-20', false);
+    $response->assertSee('z-50 hidden group-hover:block', false);
+});

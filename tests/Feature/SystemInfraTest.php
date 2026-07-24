@@ -66,6 +66,19 @@ it('renders the infra workspace for admins with the live feeds wired', function 
     $response->assertSee('dashboard\/health', false);
 });
 
+it('renders each fleet service issue below its server with unclipped tooltips', function (): void {
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $response = $this->actingAs($admin)
+        ->get('https://admin.kraite.test/system/infra')
+        ->assertSuccessful();
+
+    $response->assertSee('serverIssues(node)', false);
+    $response->assertSee('Service ${unit.name} is ${unit.state}', false);
+    $response->assertSee('card card--flat !overflow-visible relative z-20', false);
+    $response->assertSee('z-50 hidden group-hover:block', false);
+});
+
 it('serves the control-plane health feed with sections degrading independently', function (): void {
     $admin = User::factory()->create(['is_admin' => true]);
 
