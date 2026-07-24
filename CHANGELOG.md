@@ -2,6 +2,20 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.32.2] — 2026-07-25
+
+### Position risk visibility
+
+- [ADDED] Open-position cards show the frozen maximum-pain amount between the
+  live price and unrealised P&L.
+- [FIXED] Open-position table values align centrally beneath their headers.
+- [SAFETY] Ambiguous legacy positions keep maximum pain unknown instead of
+  recalculating against a mutable order graph.
+- [VERIFIED] Focused position coverage passes: 5 tests / 24 assertions;
+  frontend assets compile successfully.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.32.1] — 2026-07-25
 
 ### Fleet service diagnostics

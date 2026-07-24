@@ -69,6 +69,7 @@ it('excludes a cancelled ladder order after its replacement is created', functio
         'opening_price' => '0.33172000',
         'quantity' => '115',
         'first_profit_price' => '0.33291000',
+        'max_pain' => '151.79540000',
         'leverage' => 20,
         'was_waped' => false,
         'opened_at' => now()->subDays(3),
@@ -91,7 +92,17 @@ it('excludes a cancelled ladder order after its replacement is created', functio
         ])
         ->and(array_column($serialized['limits'], 'status'))->not->toContain('CANCELLED')
         ->and($serialized['stop_loss_price'])->toBe('0.2')
+        ->and($serialized['max_pain'])->toBe('151.79540000')
         ->and($serialized['track']['sl_pct'])->toBe(100.0);
+});
+
+it('renders maximum pain between live price and unrealized pnl', function (): void {
+    $view = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+    expect($view)
+        ->toContain('grid grid-cols-3 items-center')
+        ->toContain('MAX PAIN <span class="font-semibold text-pnldown" x-text="usdLoss(p.max_pain)"></span>')
+        ->toContain('Worst gross loss if the full ladder reaches its stop.');
 });
 
 it('keeps TP and PX on their lifecycle stages after WAP and reserves the final stage for SL', function (): void {
@@ -187,6 +198,7 @@ it('uses SL as the live-price destination after every limit has filled', functio
 
     expect($serialized['filled_count'])->toBe(4)
         ->and($serialized['alpha_limit_pct'])->toBe('0.0')
+        ->and($serialized['max_pain'])->toBeNull()
         ->and($serialized['stop_loss_price'])->toBe('50')
         ->and($serialized['track'])->toBe([
             'tp_pct' => 80.0,

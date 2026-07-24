@@ -106,6 +106,11 @@
                 const n = Number(v);
                 return (n >= 0 ? '+$' : '−$') + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             },
+            usdLoss(v) {
+                return v === null || v === undefined
+                    ? '—'
+                    : '−$' + Math.abs(Number(v)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            },
             pct(v, dp = 2) { return v === null || v === undefined ? null : (Number(v) >= 0 ? '+' : '−') + Math.abs(Number(v)).toFixed(dp) + '%'; },
 
             // sparkline → svg paths (line + area), 84×28 viewBox
@@ -619,6 +624,7 @@
                                         $tpHelp = "**Take-profit** — the price the bot is trying to sell at for a small win.\n\nIf the market reaches this price, the trade closes in the green. It shifts as the bot buys more (the average changes, so the target moves with it).";
                                         $nextHelp = "The next adverse-price protection point.\n\n- **Next** — the next backup buy while ladder rungs remain.\n- **SL** — the stop-loss once every backup buy has filled.";
                                         $pxHelp = "**PX** is the live price of this market right now.\n\nIt keeps changing as the market moves. The bot watches it against your entry and targets to decide what to do next.";
+                                        $maxPainHelp = "The position's worst gross loss if every accepted backup order fills and the opening stop-loss is hit.\n\nFees, funding, and stop slippage are not included.";
                                         $pnlHelp = "How much this trade is up or down right now, in dollars.\n\n- **Green** — the trade is winning.\n- **Red** — the trade is losing.\n\nIt is a live number that moves with the market, and it only becomes final when the trade actually closes.";
                                     @endphp
                                     <div class="flex gap-1 items-center flex-shrink-0 pt-[3px]">
@@ -705,10 +711,13 @@
                                     </div>
                                 </div>
 
-                                {{-- footer: live mark + unrealized PnL (real-data extra) --}}
-                                <div class="flex items-center justify-between pt-2.5 mt-[13px] border-t border-line-soft">
-                                    <span class="font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px]">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span><x-ui.help-dot title="Live price" :body="$pxHelp" tip="The live price of this market right now." /></span>
-                                    <span class="inline-flex items-center gap-[5px]">
+                                {{-- footer: live mark + fixed max pain + unrealized PnL --}}
+                                <div class="grid grid-cols-3 items-center gap-2 pt-2.5 mt-[13px] border-t border-line-soft">
+                                    <span class="justify-self-start font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px] whitespace-nowrap">PX <span class="text-fg-2" x-text="p.current_price ?? '—'"></span><x-ui.help-dot title="Live price" :body="$pxHelp" tip="The live price of this market right now." /></span>
+                                    <span class="justify-self-center font-mono text-[10.5px] text-fg-mute tabular-nums inline-flex items-center gap-[5px] whitespace-nowrap">
+                                        MAX PAIN <span class="font-semibold text-pnldown" x-text="usdLoss(p.max_pain)"></span><x-ui.help-dot title="Maximum pain" :body="$maxPainHelp" tip="Worst gross loss if the full ladder reaches its stop." />
+                                    </span>
+                                    <span class="justify-self-end inline-flex items-center gap-[5px] whitespace-nowrap">
                                         <span class="font-mono text-[12px] font-semibold tabular-nums"
                                               :class="p.pnl === null || p.pnl === undefined ? 'text-fg-mute' : (Number(p.pnl) >= 0 ? 'text-pnlup' : 'text-pnldown')"
                                               x-text="p.pnl === null || p.pnl === undefined ? 'PNL —' : usdSigned(p.pnl)"></span>

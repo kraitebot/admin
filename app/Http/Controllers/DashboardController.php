@@ -891,6 +891,7 @@ class DashboardController extends Controller
 
             'size' => $size,
             'pnl' => $pnl,
+            'max_pain' => $position->getAttribute('max_pain'),
 
             'filled_count' => $filledCount,
             'total_limits' => $totalLimits,

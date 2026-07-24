@@ -60,7 +60,7 @@
     $closedPer = 6;
 
     // shared row cell class strings (color applied per cell to avoid conflicts)
-    $tdNum = 'py-[12px] px-3 border-b border-line-soft whitespace-nowrap tabular-nums font-mono text-[12.5px] text-right';
+    $tdNum = 'py-[12px] px-3 border-b border-line-soft whitespace-nowrap tabular-nums font-mono text-[12.5px] text-center';
     $tdNumClosed = 'py-[11px] px-3 border-b border-line-soft whitespace-nowrap tabular-nums font-mono text-[12.5px] text-right';
 @endphp
 
@@ -410,7 +410,7 @@
                                         </span>
                                     </div>
                                 </td>
-                                <td class="py-[12px] px-3 border-b border-line-soft text-left">@include('partials.side-tag', ['side' => $p['side'], 'lev' => $p['lev']])</td>
+                                <td class="py-[12px] px-3 border-b border-line-soft text-center">@include('partials.side-tag', ['side' => $p['side'], 'lev' => $p['lev']])</td>
                                 <td class="{{ $tdNum }} text-fg-1">{{ $p['open'] }}</td>
                                 <td class="{{ $tdNum }} text-fg-1">{{ $p['mark'] }}</td>
                                 <td class="{{ $tdNum }} text-warn">{{ $p['liq'] }}</td>
