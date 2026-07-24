@@ -5,6 +5,8 @@ declare(strict_types=1);
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\PasskeyController;
+use App\Http\Controllers\Api\V1\PositionsController;
+use App\Http\Controllers\Api\V1\ProjectionsController;
 use Illuminate\Support\Facades\Route;
 
 Route::domain(config('domains.api'))->group(function (): void {
@@ -28,6 +30,10 @@ Route::domain(config('domains.api'))->group(function (): void {
             Route::delete('/auth/token', [AuthController::class, 'destroy'])
                 ->middleware('throttle:10,1');
             Route::get('/dashboard', DashboardController::class)
+                ->middleware('throttle:30,1');
+            Route::get('/positions', PositionsController::class)
+                ->middleware('throttle:30,1');
+            Route::get('/projections', ProjectionsController::class)
                 ->middleware('throttle:30,1');
             Route::get('/passkeys', [PasskeyController::class, 'index'])
                 ->middleware('throttle:30,1');

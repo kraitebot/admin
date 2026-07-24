@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.32.0] — 2026-07-24
+
+### Mobile position history and projections
+
+- [ADDED] The owner-scoped mobile API now exposes closed-position history with
+  expandable trade data and cursor pagination.
+- [ADDED] The mobile API exposes calendar profit, five-year projections, and
+  pessimistic, neutral, and optimistic scenarios using the admin calculation
+  services.
+- [SAFETY] Authentication, dashboard-read ability, account ownership, and API
+  throttling protect both endpoints.
+- [VERIFIED] Focused mobile and projection coverage passes: 34 tests / 279
+  assertions.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.31.4] — 2026-07-24
 
 ### Binance-compatible daily amplitude
