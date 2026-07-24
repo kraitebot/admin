@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.31.4] — 2026-07-24
+
+### Binance-compatible daily amplitude
+
+- [FIXED] Max daily amplitude now matches Binance's range by normalizing the
+  UTC-day high-low spread against the previous daily close.
+- [IMPROVED] The card displays two decimals and explains that the first
+  available day has no prior close.
+- [SAFETY] Ships `kraitebot/core` 1.82.3 without changing simulations, grades,
+  risk scores, proposals, or approval rules.
+- [VERIFIED] Focused Backtesting coverage passes: 12 tests / 58 assertions;
+  production frontend and operator documentation builds pass.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.31.3] — 2026-07-24
 
 ### Backtest daily amplitude
