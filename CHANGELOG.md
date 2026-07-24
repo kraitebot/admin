@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.31.3] — 2026-07-24
+
+### Backtest daily amplitude
+
+- [IMPROVED] The backtest summary replaces Max MAE with the largest price
+  amplitude recorded inside one UTC calendar day.
+- [IMPROVED] The result identifies the day and explains the high-to-low
+  calculation without changing grading or approval rules.
+- [SAFETY] Ships `kraitebot/core` 1.82.2 for selected-window UTC-day
+  aggregation while preserving MAE inside the existing risk grade.
+- [VERIFIED] Focused Backtesting coverage passes: 10 tests / 55 assertions;
+  production frontend and operator documentation builds pass.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.31.2] — 2026-07-24
 
 ### Projection navigation icons

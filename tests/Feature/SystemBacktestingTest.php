@@ -234,6 +234,10 @@ it('renders the backtesting workspace for admins', function (): void {
     $response->assertSee('Latest SL · ', false);
     $response->assertSee('relativeAge(d.latest_stop_at)', false);
     $response->assertSee("if (!value) return '—';", false);
+    // Market volatility is exposed as the largest UTC-day high/low range.
+    $response->assertSee('Max daily amplitude %', false);
+    $response->assertSee('fmtFixed(totals.max_daily_amplitude_pct)', false);
+    $response->assertSee("totals.max_daily_amplitude_date + ' UTC'", false);
     // The toast is teleported outside the scroll shell and centered without
     // Tailwind transform utilities, whose defaults are absent with Preflight off.
     $response->assertSee('x-teleport="body"', false);
