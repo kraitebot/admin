@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.31.2] — 2026-07-24
+
+### Projection navigation icons
+
+- [IMPROVED] Monthly and Yearly projection links now include compact,
+  distinct icons in the desktop rail and mobile navigation drawer.
+- [REMOVED] The unused surface-switch and notification controls no longer
+  occupy the top bar.
+- [VERIFIED] Focused Projections and sidebar browser coverage passes; the
+  console shell, production frontend, and Blade templates compile successfully.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.31.1] — 2026-07-23
 
 ### Projection navigation highlight

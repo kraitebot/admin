@@ -28,7 +28,9 @@ it('lets admins reach the sysadmin console on the admin host', function (): void
 
     $this->actingAs($admin)
         ->get('https://admin.kraite.test/system/dashboard')
-        ->assertSuccessful();
+        ->assertSuccessful()
+        ->assertDontSee('Trader view')
+        ->assertDontSee('title="Notifications"', false);
 });
 
 it('uses one full-width footer for the rail status and footer content', function (): void {

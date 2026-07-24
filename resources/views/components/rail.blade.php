@@ -29,8 +29,8 @@
                 'label' => 'Projections',
                 'icon' => 'trending-up',
                 'children' => [
-                    ['id' => 'projections-monthly', 'label' => 'Monthly', 'route' => 'projections', 'params' => []],
-                    ['id' => 'projections-yearly', 'label' => 'Yearly', 'route' => 'projections.yearly', 'params' => []],
+                    ['id' => 'projections-monthly', 'label' => 'Monthly', 'route' => 'projections', 'params' => [], 'icon' => 'calendar'],
+                    ['id' => 'projections-yearly', 'label' => 'Yearly', 'route' => 'projections.yearly', 'params' => [], 'icon' => 'bar-chart-2'],
                 ],
             ],
             ['id' => 'accounts', 'label' => 'Accounts', 'route' => 'accounts.edit', 'params' => [], 'icon' => 'link'],
@@ -89,7 +89,11 @@
                                    wire:current.ignore
                                    @click="window.railGo('{{ $child['id'] }}', $event.currentTarget)"
                                    :class="$store.rail.activeId === '{{ $child['id'] }}' ? 'text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9'"
-                                   class="appearance-none border-0 cursor-pointer bg-transparent flex items-center justify-center h-8 px-1 rounded-control font-mono text-[9px] font-medium tracking-[0.07em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
+                                   class="appearance-none border-0 cursor-pointer bg-transparent flex items-center justify-center gap-1.5 h-8 px-1 rounded-control font-mono text-[9px] font-medium tracking-[0.07em] uppercase relative z-[1] transition-colors duration-[420ms] ease-[cubic-bezier(0.16,1,0.3,1)] no-underline">
+                                    <x-dynamic-component :component="'feathericon-' . $child['icon']"
+                                                         data-child-icon="{{ $child['icon'] }}"
+                                                         class="w-3 h-3 flex-shrink-0"
+                                                         stroke-width="1.75"/>
                                     <span class="whitespace-nowrap">{{ $child['label'] }}</span>
                                 </a>
                             @endforeach
@@ -193,7 +197,11 @@
                                    wire:current.ignore
                                    @click="window.railGo('{{ $child['id'] }}', null)"
                                    :class="$store.rail.activeId === '{{ $child['id'] }}' ? 'bg-accent text-fg-on-accent hover:text-fg-on-accent' : 'text-ink-7 hover:text-ink-9 hover:bg-ink-1'"
-                                   class="flex items-center h-10 px-4 rounded-control font-mono text-[11px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
+                                   class="flex items-center gap-2.5 h-10 px-4 rounded-control font-mono text-[11px] font-medium tracking-[0.06em] uppercase no-underline transition-colors duration-fast">
+                                    <x-dynamic-component :component="'feathericon-' . $child['icon']"
+                                                         data-child-icon="{{ $child['icon'] }}"
+                                                         class="w-3.5 h-3.5 flex-shrink-0"
+                                                         stroke-width="1.75"/>
                                     <span>{{ $child['label'] }}</span>
                                 </a>
                             @endforeach

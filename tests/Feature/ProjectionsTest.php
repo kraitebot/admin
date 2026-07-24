@@ -494,5 +494,7 @@ it('renders the yearly outlook and nested monthly and yearly navigation', functi
         ->assertSeeText('Yearly')
         ->assertSee('data-id="projections-monthly"', false)
         ->assertSee('data-id="projections-yearly"', false)
+        ->assertSee('data-child-icon="calendar"', false)
+        ->assertSee('data-child-icon="bar-chart-2"', false)
         ->assertSee(route('projections.yearly.data'), false);
 });

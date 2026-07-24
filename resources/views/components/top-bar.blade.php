@@ -38,20 +38,6 @@
     </div>
     <div class="flex-1"></div>
 
-    {{-- Surface toggle — sysadmins only. Switches between the sysadmin console
-         (`system.*`) and the trader surface. Plain <a> (NO wire:navigate): the
-         rail / top-bar / footer are x-persist'd across SPA nav, so crossing
-         surfaces needs a full page load to re-render the correct rail + accent. --}}
-    @if($user?->is_admin)
-        <a href="{{ $console ? route('dashboard') : route('system.dashboard') }}"
-           class="appearance-none no-underline inline-flex items-center gap-[7px] h-[30px] px-3 rounded-control border border-line-strong text-[11px] font-mono font-semibold tracking-[0.05em] uppercase text-ink-7 hover:text-ink-9 hover:bg-ink-1 transition-colors duration-fast ease-out max-[640px]:px-2"
-           title="{{ $console ? 'Switch to the trader surface' : 'Switch to the sysadmin console' }}">
-            <x-dynamic-component :component="'feathericon-' . ($console ? 'user' : 'shield')" class="w-[14px] h-[14px]" stroke-width="1.75"/>
-            <span class="max-[820px]:hidden">{{ $console ? 'Trader view' : 'Admin console' }}</span>
-        </a>
-        <div class="w-px h-6 bg-ink-3 max-[640px]:hidden"></div>
-    @endif
-
     <div class="font-mono text-[12px] text-ink-7 tabular-nums flex items-center gap-2 max-[820px]:hidden">
         <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>
         <span x-text="now + ' UTC'"></span>
@@ -63,11 +49,6 @@
             :title="contentDark ? 'Switch content to light' : 'Switch content to dark'">
         <template x-if="contentDark"><x-feathericon-sun class="w-[18px] h-[18px]" stroke-width="1.75"/></template>
         <template x-if="!contentDark"><x-feathericon-moon class="w-[18px] h-[18px]" stroke-width="1.75"/></template>
-    </button>
-
-    <button type="button" class="{{ $iconBtn }}" title="Notifications">
-        <x-feathericon-bell class="w-[18px] h-[18px]" stroke-width="1.75"/>
-        <span class="absolute top-[5px] right-[5px] w-[7px] h-[7px] rounded-chip bg-danger border-[1.5px] border-[#07090b]"></span>
     </button>
 
     <div class="w-px h-6 bg-ink-3"></div>
