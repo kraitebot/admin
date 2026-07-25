@@ -102,7 +102,63 @@ it('renders maximum pain between live price and unrealized pnl', function (): vo
     expect($view)
         ->toContain('grid grid-cols-3 items-center')
         ->toContain('MAX PAIN <span class="font-semibold text-pnldown" x-text="usdLoss(p.max_pain)"></span>')
+        ->toContain('All stops <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_max_pain_total)"></span>')
+        ->toContain('Number(d.kpis.open_max_pain_pct).toFixed(2) + \'%\'')
+        ->toContain('Active positions now <span class="font-semibold tabular-nums" x-text="usdSigned(d?.kpis?.open_positions_pnl)"></span>')
         ->toContain('Worst gross loss if the full ladder reaches its stop.');
+});
+
+it('sums active position disaster loss and live pnl without recalculating position values', function (): void {
+    $method = new ReflectionMethod(DashboardController::class, 'openPositionKpis');
+    $metrics = $method->invoke(new DashboardController, [
+        ['max_pain' => '100.10', 'pnl' => '-3.10'],
+        ['max_pain' => '50.20', 'pnl' => '-2.20'],
+    ], '1000.00');
+
+    expect($metrics)->toBe([
+        'open_max_pain_total' => '150.30',
+        'open_max_pain_pct' => 15.03,
+        'open_positions_pnl' => '-5.30',
+    ]);
+});
+
+it('keeps the new disaster aggregates scoped to the web dashboard payload', function (): void {
+    $controller = file_get_contents(app_path('Http/Controllers/DashboardController.php'));
+
+    expect($controller)
+        ->toContain("'kpis' => \$this->webKpis(\$account, \$positions),")
+        ->toContain("'kpis' => \$this->kpis(\$account, \$positions),");
+});
+
+it('does not understate disaster loss when an active position has no frozen max pain', function (): void {
+    $method = new ReflectionMethod(DashboardController::class, 'openPositionKpis');
+    $metrics = $method->invoke(new DashboardController, [
+        ['max_pain' => '100.10', 'pnl' => '-3.10'],
+        ['max_pain' => null, 'pnl' => '-2.20'],
+    ], '1000.00');
+
+    expect($metrics)->toBe([
+        'open_max_pain_total' => null,
+        'open_max_pain_pct' => null,
+        'open_positions_pnl' => '-5.30',
+    ]);
+});
+
+it('reports zero exposure with no active positions and no percentage without a portfolio balance', function (): void {
+    $method = new ReflectionMethod(DashboardController::class, 'openPositionKpis');
+    $controller = new DashboardController;
+
+    expect($method->invoke($controller, [], '1000.00'))->toBe([
+        'open_max_pain_total' => '0.00',
+        'open_max_pain_pct' => 0.0,
+        'open_positions_pnl' => '0.00',
+    ])->and($method->invoke($controller, [
+        ['max_pain' => '25.00', 'pnl' => '-1.00'],
+    ], '0.00'))->toBe([
+        'open_max_pain_total' => '25.00',
+        'open_max_pain_pct' => null,
+        'open_positions_pnl' => '-1.00',
+    ]);
 });
 
 it('keeps TP and PX on their lifecycle stages after WAP and reserves the final stage for SL', function (): void {

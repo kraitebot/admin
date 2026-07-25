@@ -2,6 +2,23 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.32.3] — 2026-07-25
+
+### Portfolio disaster exposure
+
+- [ADDED] The Portfolio Value tile shows the combined frozen maximum pain if
+  every open position reaches its stop, including its percentage of the
+  current portfolio.
+- [ADDED] The Today P&L tile separately shows the current signed unrealised
+  P&L across all open positions.
+- [SAFETY] An incomplete maximum-pain set stays unknown instead of presenting
+  a partial subtotal, and the mobile dashboard payload remains unchanged.
+- [VERIFIED] Focused dashboard coverage passes: 8 tests / 29 assertions;
+  frontend assets, Blade templates, and operator documentation compile
+  successfully.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.32.2] — 2026-07-25
 
 ### Position risk visibility

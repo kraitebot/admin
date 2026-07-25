@@ -146,7 +146,7 @@ class DashboardController extends Controller
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
             ],
             'metrics' => $this->accountMetrics($account),
-            'kpis' => $this->kpis($account, $positions),
+            'kpis' => $this->webKpis($account, $positions),
             'btc' => $this->btcStrip(),
             'bscs' => $this->bscsBadge($account),
             'positions' => $positions,
@@ -539,6 +539,70 @@ class DashboardController extends Controller
             'open_count' => count($positions),
             'long_count' => $longCount,
             'short_count' => count($positions) - $longCount,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $positions
+     * @return array<string, mixed>
+     */
+    private function webKpis(Account $account, array $positions): array
+    {
+        $kpis = $this->kpis($account, $positions);
+
+        return [
+            ...$kpis,
+            ...$this->openPositionKpis($positions, $kpis['balance']),
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $positions
+     * @return array{
+     *     open_max_pain_total: ?string,
+     *     open_max_pain_pct: ?float,
+     *     open_positions_pnl: ?string
+     * }
+     */
+    private function openPositionKpis(array $positions, ?string $portfolioBalance): array
+    {
+        $maxPainTotal = '0';
+        $positionsPnl = '0';
+        $hasCompleteMaxPain = true;
+        $hasCompletePnl = true;
+
+        foreach ($positions as $position) {
+            $maxPain = $position['max_pain'] ?? null;
+            if (is_numeric($maxPain)) {
+                $maxPainTotal = bcadd($maxPainTotal, (string) $maxPain, scale: 8);
+            } else {
+                $hasCompleteMaxPain = false;
+            }
+
+            $pnl = $position['pnl'] ?? null;
+            if (is_numeric($pnl)) {
+                $positionsPnl = bcadd($positionsPnl, (string) $pnl, scale: 8);
+            } else {
+                $hasCompletePnl = false;
+            }
+        }
+
+        $maxPainPct = null;
+        if ($hasCompleteMaxPain && $portfolioBalance !== null && bccomp($portfolioBalance, '0', scale: 8) > 0) {
+            $maxPainPct = (float) bcround(
+                bcmul(bcdiv($maxPainTotal, $portfolioBalance, scale: 8), '100', scale: 4),
+                precision: 2,
+            );
+        }
+
+        return [
+            'open_max_pain_total' => $hasCompleteMaxPain
+                ? bcround($maxPainTotal, precision: 2)
+                : null,
+            'open_max_pain_pct' => $maxPainPct,
+            'open_positions_pnl' => $hasCompletePnl
+                ? bcround($positionsPnl, precision: 2)
+                : null,
         ];
     }
 

@@ -435,6 +435,10 @@
                         </div>
                     </template>
                 </div>
+                <div class="font-mono text-[9px] font-medium tracking-[0.07em] uppercase text-pnldown whitespace-nowrap">
+                    All stops <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_max_pain_total)"></span>
+                    · <span class="font-semibold tabular-nums" x-text="d?.kpis?.open_max_pain_pct === null || d?.kpis?.open_max_pain_pct === undefined ? '—' : Number(d.kpis.open_max_pain_pct).toFixed(2) + '%'"></span> of portfolio
+                </div>
             </div>
 
             {{-- P&L today (realized, trade-PnL sourced) --}}
@@ -453,7 +457,9 @@
                         </span>
                     </template>
                 </div>
-                <div class="font-mono text-[9px] tracking-[0.07em] uppercase text-fg-mute">Realized · closed positions</div>
+                <div class="font-mono text-[9px] font-medium tracking-[0.07em] uppercase text-warn whitespace-nowrap">
+                    Active positions now <span class="font-semibold tabular-nums" x-text="usdSigned(d?.kpis?.open_positions_pnl)"></span>
+                </div>
             </div>
 
             {{-- P&L 30 day --}}
