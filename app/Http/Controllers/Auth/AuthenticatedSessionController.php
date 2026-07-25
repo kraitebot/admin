@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Routing\Route as RoutingRoute;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
 
 class AuthenticatedSessionController extends Controller
@@ -72,13 +74,49 @@ class AuthenticatedSessionController extends Controller
     {
         $request->authenticate();
 
+        $isAdmin = (bool) $request->user()?->is_admin;
+
+        // The page that triggered the login belonged to whoever was here
+        // before. A sysadmin session that expired on a `/system/*` page
+        // leaves that page waiting, and sending the next person there just
+        // walls them with a 403 — so a non-admin drops it and lands on their
+        // own dashboard instead.
+        if (! $isAdmin && $this->intendedRequiresAdmin($request)) {
+            $request->session()->forget('url.intended');
+        }
+
         $request->session()->regenerate();
 
-        $target = $request->user()?->is_admin
+        $target = $isAdmin
             ? route('system.dashboard', absolute: false)
             : route('dashboard', absolute: false);
 
         return redirect()->intended($target);
+    }
+
+    /**
+     * Whether the page waiting behind this login is one only a sysadmin may
+     * open. Resolved from the route's own middleware so a future admin-only
+     * route outside `/system` is covered too; the prefix is the fallback for
+     * an intended URL the router cannot match.
+     */
+    private function intendedRequiresAdmin(Request $request): bool
+    {
+        $intended = $request->session()->get('url.intended');
+
+        if (! is_string($intended) || $intended === '') {
+            return false;
+        }
+
+        // Matched without binding the route: this is a read-only question
+        // asked mid-request, and binding would hand the shared route objects
+        // the parameters of a fabricated request.
+        $probe = Request::create($intended);
+        $match = collect(Route::getRoutes())->first(fn (RoutingRoute $route): bool => $route->matches($probe));
+
+        return $match !== null
+            ? in_array('admin', $match->gatherMiddleware(), true)
+            : str_starts_with((string) parse_url($intended, PHP_URL_PATH), '/system');
     }
 
     /**

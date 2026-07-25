@@ -102,10 +102,11 @@ it('renders maximum pain between live price and unrealized pnl', function (): vo
     expect($view)
         ->toContain('grid grid-cols-3 items-center')
         ->toContain('MAX PAIN <span class="font-semibold text-pnldown" x-text="usdLoss(p.max_pain)"></span>')
-        ->toContain('Shorts <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_short_max_pain_total)"></span>')
-        ->toContain('percentage(d?.kpis?.open_short_max_pain_pct)')
-        ->toContain('Longs <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_long_max_pain_total)"></span>')
-        ->toContain('percentage(d?.kpis?.open_long_max_pain_pct)')
+        // Exposure by direction is a single line of percentages — the dollar
+        // figures stay on the position cards instead of doubling the tile.
+        ->toContain('<span>Shorts - <span class="font-semibold tabular-nums" x-text="percentage(d?.kpis?.open_short_max_pain_pct)"></span></span>')
+        ->toContain('<span>Longs - <span class="font-semibold tabular-nums" x-text="percentage(d?.kpis?.open_long_max_pain_pct)"></span></span>')
+        ->not->toContain('of portfolio')
         ->toContain('Active positions now <span class="font-semibold tabular-nums" x-text="usdSigned(d?.kpis?.open_positions_pnl)"></span>')
         ->toContain('Worst gross loss if the full ladder reaches its stop.');
 });

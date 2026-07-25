@@ -498,3 +498,14 @@ it('renders the yearly outlook and nested monthly and yearly navigation', functi
         ->assertSee('data-child-icon="bar-chart-2"', false)
         ->assertSee(route('projections.yearly.data'), false);
 });
+
+it('states the account plainly when there is nothing to switch between', function (): void {
+    $view = file_get_contents(resource_path('views/projections.blade.php'));
+
+    expect($view)
+        // Single account: same identity, no dropdown affordance.
+        ->toContain('<template x-if="accts.length === 1">')
+        ->toContain('cursor-default select-none')
+        // The picker itself only renders when a choice exists.
+        ->toContain('<template x-if="accts.length > 1">');
+});

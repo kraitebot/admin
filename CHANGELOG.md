@@ -2,6 +2,26 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.36.0] — 2026-07-25
+
+### Landing, exposure line, and single-account clarity
+
+- [BUG FIX] Signing in never dumps anyone on the "403 ADMIN ACCESS REQUIRED"
+  wall any more. When a sysadmin session expires on a sysadmin page, that page
+  waits as the login's destination and the next person inherits it — a trader
+  now drops it and lands on their own dashboard. A sysadmin still returns
+  exactly where they were, and a waiting page the trader may open is still
+  honoured. The decision reads the page's own access rules rather than a URL
+  prefix, so an admin-only page added elsewhere is covered by default.
+- [IMPROVED] Portfolio value states its exposure on one line — shorts and longs
+  as a share of the portfolio. The dollar figures were dropped from the tile;
+  they already sit on every position card.
+- [IMPROVED] Projections shows the account plainly when there is only one:
+  same exchange, name and equity, with nothing to click. The picker appears
+  once a second account exists.
+- [VERIFIED] Full suite green: 265 tests / 1,352 assertions, plus the
+  production frontend build.
+
 ## [0.35.1] — 2026-07-25
 
 ### Sign-up hand-off covered, engine code realigned

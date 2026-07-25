@@ -421,7 +421,21 @@
         <div class="flex items-center justify-between gap-4 mb-5 flex-wrap">
             <div class="flex items-center gap-3 flex-wrap">
 
+                {{-- Account identity. One account has nothing to switch to, so
+                     it reads as a plain label; the picker appears only when
+                     there is a choice to make. --}}
+                <template x-if="accts.length === 1">
+                    <div class="inline-flex items-center gap-2.5 h-[40px] max-w-[320px] border border-line rounded-control bg-surface pl-2 pr-3 cursor-default select-none">
+                        <span class="w-[24px] h-[24px] rounded-full bg-surface-3 text-fg-2 font-mono font-bold text-[10px] flex items-center justify-center flex-shrink-0" x-text="acct().mono"></span>
+                        <span class="flex flex-col items-start leading-[1.2] min-w-0">
+                            <span class="text-[12.5px] font-semibold text-fg-1 whitespace-nowrap overflow-hidden text-ellipsis w-full text-left"><span x-text="acct().ex"></span> <span class="text-fg-mute font-normal" x-text="'· ' + acct().tag"></span></span>
+                            <span x-show="acct().equityStr !== '—'" class="font-mono text-[10px] text-fg-mute tabular-nums tracking-[0.02em] whitespace-nowrap" x-text="acct().equityStr"></span>
+                        </span>
+                    </div>
+                </template>
+
                 {{-- Account picker --}}
+                <template x-if="accts.length > 1">
                 <div class="relative" @click.outside="acctOpen = false">
                     <button type="button" @click="acctOpen = !acctOpen"
                             :class="acctOpen ? 'border-accent' : 'border-line hover:border-line-strong'"
@@ -451,6 +465,7 @@
                         </template>
                     </div>
                 </div>
+                </template>
 
                 <div class="w-px h-[26px] bg-line max-[640px]:hidden"></div>
 
