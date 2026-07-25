@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.34.1] — 2026-07-25
+
+### Reproducible production dependencies
+
+- [FIXED] The release tag now determines exactly which engine code production
+  runs. A production lock is committed alongside the production manifest, and
+  deploys install from it instead of resolving versions fresh each time.
+- [FIXED] A from-scratch rebuild of the server can install its dependencies
+  again. The previous lock resolved local development packages and could never
+  install against the production manifest.
+- [SAFETY] The lock is pinned to the versions production was already running,
+  so this release changes no engine behaviour. Resolving without pinning would
+  have moved the shared trading core and the step dispatcher to newer releases
+  as an invisible side effect.
+- [SAFETY] Tagging now refuses to proceed when the production lock is missing
+  or pins any development version.
+- [VERIFIED] A clean install from the committed lock reproduces the exact
+  package versions running in production, with no development versions present.
+
 ## [0.34.0] — 2026-07-25
 
 ### Mobile account configuration
