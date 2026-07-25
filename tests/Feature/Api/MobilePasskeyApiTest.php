@@ -204,7 +204,7 @@ it('issues a read-only mobile token after a verified passkey assertion', functio
 
     $token = DB::table('personal_access_tokens')->where('tokenable_id', $user->id)->sole();
     expect($token->name)->toBe('Face ID iPhone')
-        ->and(json_decode($token->abilities, true, flags: JSON_THROW_ON_ERROR))->toBe(['dashboard:read']);
+        ->and(json_decode($token->abilities, true, flags: JSON_THROW_ON_ERROR))->toBe(['dashboard:read', 'accounts:write']);
 
     $this->postJson(passkeyApiUrl('/v1/auth/passkey/token'), [
         'challenge_id' => $challengeId,

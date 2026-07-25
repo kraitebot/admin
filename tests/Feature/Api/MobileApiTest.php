@@ -100,7 +100,7 @@ it('issues a scoped expiring token for valid credentials', function (): void {
     $this->assertDatabaseHas('personal_access_tokens', [
         'tokenable_id' => $user->id,
         'name' => 'Bruno iPhone',
-        'abilities' => json_encode(['dashboard:read']),
+        'abilities' => json_encode(['dashboard:read', 'accounts:write']),
         'expires_at' => $now->addDays(30)->format('Y-m-d H:i:s'),
     ]);
 });

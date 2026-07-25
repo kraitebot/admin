@@ -2,6 +2,27 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.34.0] — 2026-07-25
+
+### Mobile account configuration
+
+- [NEW FEATURE] The mobile API serves the trader's own accounts with
+  connectivity health, subscription state, open-position count, current trading
+  configuration, and the curated option lists the app may offer.
+- [NEW FEATURE] Traders can save an account's name, quote currencies, profit
+  target, stop-loss, and per-direction slots, leverage, and margin from the
+  phone, and stop new trading immediately without saving other edits.
+- [SAFETY] Account writes sit behind a separate `accounts:write` ability, so a
+  device token can read everything while changing nothing. Tokens issued before
+  account editing existed keep reading and are refused on writes.
+- [SAFETY] The sysadmin cross-user override granted in the browser is disabled
+  on every mobile route; an administrator on the phone sees and edits only
+  accounts they own. The API still cannot place, change, or close an order.
+- [VERIFIED] Focused account and mobile coverage passes: 49 tests /
+  297 assertions.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.33.0] — 2026-07-25
 
 ### Database-backed runtime settings

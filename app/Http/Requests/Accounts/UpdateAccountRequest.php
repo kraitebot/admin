@@ -17,10 +17,27 @@ use Kraite\Core\Models\Account;
  * The numeric `in:` lists are deliberate — the operator picks from a
  * curated set of values rather than free-typing arbitrary numbers, which
  * keeps risk-relevant settings (leverage, margin %, slot count) inside
- * a tested envelope.
+ * a tested envelope. They live in public constants so the mobile app is
+ * offered exactly the choices this request accepts — one source of truth,
+ * no drift between the picker and the rule.
  */
 final class UpdateAccountRequest extends FormRequest
 {
+    /** @var array<int, string> */
+    public const PROFIT_PERCENTAGES = ['0.360', '0.380', '0.400'];
+
+    /** @var array<int, string> */
+    public const STOP_MARKET_PERCENTAGES = ['2.50', '5.00', '7.50'];
+
+    /** @var array<int, int> */
+    public const POSITION_COUNTS = [1, 4, 5, 6];
+
+    /** @var array<int, int> */
+    public const POSITION_LEVERAGES = [10, 15, 20];
+
+    /** @var array<int, string> */
+    public const MARGIN_PERCENTAGES = ['4.00', '5.00', '6.00'];
+
     public function authorize(): bool
     {
         $query = Account::where('id', $this->input('account_id'));
@@ -52,17 +69,17 @@ final class UpdateAccountRequest extends FormRequest
 
             'can_trade' => ['boolean'],
 
-            'profit_percentage' => ['required', 'numeric', Rule::in(['0.360', '0.380', '0.400'])],
-            'stop_market_initial_percentage' => ['required', 'numeric', Rule::in(['2.50', '5.00', '7.50'])],
+            'profit_percentage' => ['required', 'numeric', Rule::in(self::PROFIT_PERCENTAGES)],
+            'stop_market_initial_percentage' => ['required', 'numeric', Rule::in(self::STOP_MARKET_PERCENTAGES)],
 
-            'total_positions_long' => ['required', 'integer', Rule::in([1, 4, 5, 6])],
-            'total_positions_short' => ['required', 'integer', Rule::in([1, 4, 5, 6])],
+            'total_positions_long' => ['required', 'integer', Rule::in(self::POSITION_COUNTS)],
+            'total_positions_short' => ['required', 'integer', Rule::in(self::POSITION_COUNTS)],
 
-            'position_leverage_long' => ['required', 'integer', Rule::in([10, 15, 20])],
-            'position_leverage_short' => ['required', 'integer', Rule::in([10, 15, 20])],
+            'position_leverage_long' => ['required', 'integer', Rule::in(self::POSITION_LEVERAGES)],
+            'position_leverage_short' => ['required', 'integer', Rule::in(self::POSITION_LEVERAGES)],
 
-            'margin_percentage_long' => ['required', 'numeric', Rule::in(['4.00', '5.00', '6.00'])],
-            'margin_percentage_short' => ['required', 'numeric', Rule::in(['4.00', '5.00', '6.00'])],
+            'margin_percentage_long' => ['required', 'numeric', Rule::in(self::MARGIN_PERCENTAGES)],
+            'margin_percentage_short' => ['required', 'numeric', Rule::in(self::MARGIN_PERCENTAGES)],
         ];
     }
 

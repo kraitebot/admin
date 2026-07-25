@@ -14,7 +14,7 @@ class MobileTokenIssuer
         $expiresAt = now()->addDays(30);
         $token = $user->createToken(
             trim($deviceName) ?: 'Kraite iPhone',
-            ['dashboard:read'],
+            ['dashboard:read', 'accounts:write'],
             $expiresAt,
         );
 

@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use App\Models\User;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Kraite\Core\Jobs\Atomic\Account\TestServerConnectivityStep;
 use Kraite\Core\Jobs\Lifecycles\Account\TestExchangeConnectivityStep;
 use Kraite\Core\Models\Account;
+use Laravel\Sanctum\Sanctum;
 use StepDispatcher\Models\Step;
 use StepDispatcher\States\Completed;
 
@@ -151,6 +153,170 @@ function validAccountConfigurationPayload(Account $account, array $overrides = [
         'margin_percentage_short' => '4.00',
     ], $overrides);
 }
+
+it('returns only trader-owned account configuration to the mobile app', function (): void {
+    $subscriptionId = DB::table('subscriptions')->insertGetId([
+        'name' => 'Mobile accounts plan',
+        'canonical' => 'mobile-accounts-plan',
+        'monthly_rate_usdt' => 0,
+        'trial_days' => 0,
+        'is_active' => true,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $owner = User::factory()->create(['subscription_id' => $subscriptionId]);
+    $otherTrader = User::factory()->create();
+    $account = createAccountForConnectivityTest($owner, true);
+    $account->forceFill([
+        'name' => 'Main mobile account',
+        'profit_percentage' => '0.380',
+        'stop_market_initial_percentage' => '5.00',
+        'total_positions_long' => 5,
+        'total_positions_short' => 4,
+        'position_leverage_long' => 15,
+        'position_leverage_short' => 10,
+        'margin_percentage_long' => '5.00',
+        'margin_percentage_short' => '4.00',
+    ])->save();
+
+    createAccountForConnectivityTest($otherTrader, true);
+    $draft = createAccountForConnectivityTest($owner, true);
+    $draft->forceFill(['name' => 'Connection test for account '.$account->id])->save();
+
+    DB::table('servers')->insert([
+        'hostname' => 'mobile-worker',
+        'ip_address' => '203.0.113.30',
+        'is_apiable' => true,
+        'needs_whitelisting' => true,
+        'type' => 'worker',
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/accounts')
+        ->assertSuccessful()
+        ->assertJsonCount(1, 'data.accounts')
+        ->assertJsonPath('data.accounts.0.id', $account->id)
+        ->assertJsonPath('data.accounts.0.name', 'Main mobile account')
+        ->assertJsonPath('data.accounts.0.profit_percentage', '0.380')
+        ->assertJsonPath('data.accounts.0.stop_market_initial_percentage', '5.00')
+        ->assertJsonPath('data.accounts.0.connectivity_health.kind', 'healthy')
+        ->assertJsonPath('data.accounts.0.configuration_locked', false)
+        ->assertJsonPath('data.accounts.0.quotes_locked', false)
+        ->assertJsonPath('data.accounts.0.can_enable_trading', true)
+        ->assertJsonPath('data.options.position_leverage', [10, 15, 20]);
+});
+
+it('requires explicit mobile write access and preserves trader ownership', function (): void {
+    $owner = User::factory()->create();
+    $otherTrader = User::factory()->create();
+    $account = createAccountForConnectivityTest($owner, true);
+    $foreignAccount = createAccountForConnectivityTest($otherTrader, true);
+    $payload = validAccountConfigurationPayload($account, [
+        'name' => 'Updated from iPhone',
+        'position_leverage_long' => 15,
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+    $this->patchJson('https://api.kraite.com/v1/accounts', $payload)
+        ->assertForbidden();
+
+    Sanctum::actingAs($owner, ['dashboard:read', 'accounts:write']);
+    $this->patchJson('https://api.kraite.com/v1/accounts', $payload)
+        ->assertSuccessful()
+        ->assertJsonPath('account.id', $account->id);
+
+    expect($account->refresh())
+        ->name->toBe('Updated from iPhone')
+        ->position_leverage_long->toBe(15);
+
+    $this->patchJson(
+        'https://api.kraite.com/v1/accounts',
+        validAccountConfigurationPayload($foreignAccount),
+    )->assertForbidden();
+});
+
+it('keeps mobile account access owner-scoped for administrators', function (): void {
+    $administrator = User::factory()->create(['is_admin' => true]);
+    $otherTrader = User::factory()->create();
+    $ownedAccount = createAccountForConnectivityTest($administrator, true);
+    $foreignAccount = createAccountForConnectivityTest($otherTrader, true);
+
+    Sanctum::actingAs($administrator, ['dashboard:read', 'accounts:write']);
+
+    $this->getJson('https://api.kraite.com/v1/accounts')
+        ->assertSuccessful()
+        ->assertJsonCount(1, 'data.accounts')
+        ->assertJsonPath('data.accounts.0.id', $ownedAccount->id);
+
+    $this->patchJson(
+        'https://api.kraite.com/v1/accounts',
+        validAccountConfigurationPayload($foreignAccount),
+    )->assertNotFound();
+});
+
+it('serves owned quote assets to the mobile app behind the write ability', function (): void {
+    $owner = User::factory()->create();
+    $otherTrader = User::factory()->create();
+    $account = createAccountForConnectivityTest($owner, true);
+    $foreignAccount = createAccountForConnectivityTest($otherTrader, true);
+
+    Cache::put("account.{$account->id}.available-quotes", ['USDT', 'BFUSD'], 60);
+    Cache::put("account.{$foreignAccount->id}.available-quotes", ['USDC'], 60);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+    $this->getJson("https://api.kraite.com/v1/accounts/quotes?account_id={$account->id}")
+        ->assertForbidden();
+
+    Sanctum::actingAs($owner, ['dashboard:read', 'accounts:write']);
+    $this->getJson("https://api.kraite.com/v1/accounts/quotes?account_id={$account->id}")
+        ->assertSuccessful()
+        ->assertExactJson([
+            'account_id' => $account->id,
+            'assets' => ['USDT', 'BFUSD'],
+        ]);
+
+    $this->getJson("https://api.kraite.com/v1/accounts/quotes?account_id={$foreignAccount->id}")
+        ->assertNotFound();
+});
+
+it('stops new mobile trading without touching other saved configuration', function (): void {
+    $owner = User::factory()->create();
+    $otherTrader = User::factory()->create();
+    $account = createAccountForConnectivityTest($owner, true);
+    $foreignAccount = createAccountForConnectivityTest($otherTrader, true);
+    $account->forceFill([
+        'can_trade' => true,
+        'name' => 'Stored mobile name',
+        'profit_percentage' => '0.4000',
+        'position_leverage_long' => 20,
+    ])->save();
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+    $this->patchJson('https://api.kraite.com/v1/accounts/trading/disable', [
+        'account_id' => $account->id,
+    ])->assertForbidden();
+
+    expect($account->refresh()->can_trade)->toBeTrue();
+
+    Sanctum::actingAs($owner, ['dashboard:read', 'accounts:write']);
+    $this->patchJson('https://api.kraite.com/v1/accounts/trading/disable', [
+        'account_id' => $account->id,
+    ])
+        ->assertSuccessful()
+        ->assertJsonPath('account.id', $account->id)
+        ->assertJsonPath('account.can_trade', false);
+
+    expect($account->refresh())
+        ->can_trade->toBeFalse()
+        ->name->toBe('Stored mobile name')
+        ->profit_percentage->toBe(0.4)
+        ->position_leverage_long->toBe(20);
+
+    $this->patchJson('https://api.kraite.com/v1/accounts/trading/disable', [
+        'account_id' => $foreignAccount->id,
+    ])->assertNotFound();
+});
 
 it('turns trading off immediately without saving other edited configuration', function (): void {
     $user = User::factory()->create([

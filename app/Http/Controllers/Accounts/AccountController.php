@@ -57,22 +57,7 @@ class AccountController extends Controller
     public function edit(AccountServerConnectivityService $connectivity): View
     {
         $isAdmin = (bool) Auth::user()->is_admin;
-
-        $query = Account::with(['apiSystem', 'user.subscription'])
-            ->withCount([
-                'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
-            ])
-            ->where('name', 'not like', self::ACCOUNT_CONNECTIVITY_DRAFT_PREFIX.'%')
-            ->where('name', '!=', self::REGISTRATION_CONNECTIVITY_DRAFT_NAME);
-
-        if (! $isAdmin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $accountModels = $query
-            ->orderBy('user_id')
-            ->orderBy('name')
-            ->get();
+        $accountModels = $this->editableAccountModels();
 
         $connectivityServerModels = $connectivity->apiConnectivityServers();
         $activeConnectivityBans = $this->activeConnectivityBans($accountModels);
@@ -100,6 +85,34 @@ class AccountController extends Controller
         ]);
     }
 
+    public function mobileData(AccountServerConnectivityService $connectivity): JsonResponse
+    {
+        $accountModels = $this->editableAccountModels(ownerOnly: true);
+        $connectivityServerModels = $connectivity->apiConnectivityServers();
+        $activeConnectivityBans = $this->activeConnectivityBans($accountModels);
+
+        $accounts = $accountModels
+            ->map(function (Account $account) use ($activeConnectivityBans, $connectivityServerModels): array {
+                $connectivityHealth = $this->connectivityHealth($account, $activeConnectivityBans, $connectivityServerModels);
+
+                return $this->mobileAccountPayload($this->serialize($account, $connectivityHealth));
+            })
+            ->values();
+
+        return response()->json([
+            'data' => [
+                'accounts' => $accounts,
+                'options' => [
+                    'profit_percentage' => UpdateAccountRequest::PROFIT_PERCENTAGES,
+                    'stop_market_initial_percentage' => UpdateAccountRequest::STOP_MARKET_PERCENTAGES,
+                    'total_positions' => UpdateAccountRequest::POSITION_COUNTS,
+                    'position_leverage' => UpdateAccountRequest::POSITION_LEVERAGES,
+                    'margin_percentage' => UpdateAccountRequest::MARGIN_PERCENTAGES,
+                ],
+            ],
+        ]);
+    }
+
     /**
      * Live list of quote assets the operator actually holds on the chosen
      * account's exchange. Drives the Portfolio / Trading quote dropdowns
@@ -115,7 +128,7 @@ class AccountController extends Controller
         $request->validate(['account_id' => ['required', 'integer']]);
 
         $query = Account::where('id', $request->input('account_id'));
-        if (! Auth::user()->is_admin) {
+        if ($this->mustScopeToCurrentUser()) {
             $query->where('user_id', Auth::id());
         }
         $account = $query->firstOrFail();
@@ -172,7 +185,7 @@ class AccountController extends Controller
                 'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
             ])
             ->where('id', $request->input('account_id'));
-        if (! Auth::user()->is_admin) {
+        if ($this->mustScopeToCurrentUser()) {
             $query->where('user_id', Auth::id());
         }
         $account = $query->firstOrFail();
@@ -422,6 +435,75 @@ class AccountController extends Controller
     }
 
     /**
+     * Mobile shape for one account. Normalises the shared serializer's raw
+     * column values into the exact types and precisions the app binds to,
+     * and pre-computes the lock / eligibility flags so the app never has to
+     * re-derive trading rules on its own.
+     *
+     * @param  array<string, mixed>  $serialized
+     * @return array<string, mixed>
+     */
+    private function mobileAccountPayload(array $serialized): array
+    {
+        $serialized['portfolio_quote'] = $serialized['portfolio_quote'] ?: 'USDT';
+        $serialized['trading_quote'] = $serialized['trading_quote'] ?: 'USDT';
+        $serialized['profit_percentage'] = number_format((float) $serialized['profit_percentage'], 3, '.', '');
+        $serialized['stop_market_initial_percentage'] = number_format((float) $serialized['stop_market_initial_percentage'], 2, '.', '');
+        $serialized['margin_percentage_long'] = number_format((float) $serialized['margin_percentage_long'], 2, '.', '');
+        $serialized['margin_percentage_short'] = number_format((float) $serialized['margin_percentage_short'], 2, '.', '');
+        $serialized['total_positions_long'] = (int) $serialized['total_positions_long'];
+        $serialized['total_positions_short'] = (int) $serialized['total_positions_short'];
+        $serialized['position_leverage_long'] = (int) $serialized['position_leverage_long'];
+        $serialized['position_leverage_short'] = (int) $serialized['position_leverage_short'];
+        $serialized['is_trading'] = (bool) $serialized['can_trade'];
+        $serialized['configuration_locked'] = ! $serialized['has_credentials'];
+        $serialized['quotes_locked'] = $serialized['open_positions_count'] > 0 || $serialized['can_trade'];
+        $serialized['can_enable_trading'] = $serialized['has_credentials']
+            && $serialized['is_active']
+            && $serialized['subscription_active']
+            && $serialized['disabled_reason'] === null
+            && $serialized['connectivity_health']['kind'] === 'healthy';
+
+        return $serialized;
+    }
+
+    /**
+     * Accounts the caller may edit, minus the throwaway connectivity drafts.
+     * Pass $ownerOnly to force owner scoping even for administrators.
+     *
+     * @return Collection<int, Account>
+     */
+    private function editableAccountModels(bool $ownerOnly = false): Collection
+    {
+        $query = Account::with(['apiSystem', 'user.subscription'])
+            ->withCount([
+                'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
+            ])
+            ->where('name', 'not like', self::ACCOUNT_CONNECTIVITY_DRAFT_PREFIX.'%')
+            ->where('name', '!=', self::REGISTRATION_CONNECTIVITY_DRAFT_NAME);
+
+        if ($ownerOnly || $this->mustScopeToCurrentUser()) {
+            $query->where('user_id', Auth::id());
+        }
+
+        return $query
+            ->orderBy('user_id')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * Single ownership gate for every account lookup in this controller.
+     * Non-admins only ever reach their own accounts; admins keep the
+     * cross-user reach the web console needs, but never over the mobile
+     * API — those tokens stay owner-scoped no matter who holds them.
+     */
+    private function mustScopeToCurrentUser(): bool
+    {
+        return ! Auth::user()->is_admin || request()->routeIs('api.accounts.*');
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     private function rejectLockedQuoteChanges(Account $account, array $data): void
@@ -600,7 +682,7 @@ class AccountController extends Controller
     {
         $query = Account::with(['apiSystem', 'user'])->where('id', $accountId);
 
-        if (! Auth::user()->is_admin) {
+        if ($this->mustScopeToCurrentUser()) {
             $query->where('user_id', Auth::id());
         }
 
