@@ -10,6 +10,7 @@ use App\Http\Controllers\System\EngineController;
 use App\Http\Controllers\System\InfraController;
 use App\Http\Controllers\System\LifecycleController;
 use App\Http\Controllers\System\PositionsController as SystemPositionsController;
+use App\Http\Controllers\System\SettingsController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
@@ -58,7 +59,8 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::get('/infra', [InfraController::class, 'index'])->name('system.infra');
     Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
     Route::view('/revenue', 'system.revenue')->name('system.revenue');
-    Route::view('/settings', 'system.settings')->name('system.settings');
+    Route::get('/settings', [SettingsController::class, 'index'])->name('system.settings');
+    Route::patch('/settings', [SettingsController::class, 'update'])->name('system.settings.update');
 
     // BSCS operator controls — manual override is sysadmin-only per spec.
     Route::post('/bscs/override/engage', [BscsController::class, 'engageOverride'])->name('system.bscs.override.engage');

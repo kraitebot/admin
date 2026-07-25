@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.33.0] — 2026-07-25
+
+### Database-backed runtime settings
+
+- [ADDED] The sysadmin Settings page can persist trading gates, notification
+  delivery, correlation and elasticity controls, BSCS freshness, and
+  position-trail retention on the shared singleton.
+- [ADDED] Nullable controls can return to their configured defaults; the page
+  shows the effective opening posture, read-only BSCS state, and five latest
+  changes.
+- [SAFETY] Every effective change is row-locked, validated, and audited with a
+  sanitized administrator before/after snapshot; crafted boolean aliases are
+  rejected and no-op saves create no database write or audit event.
+- [VERIFIED] Focused Settings coverage passes: 7 tests / 63 assertions;
+  frontend assets, Blade templates, routes, and operator documentation compile
+  successfully.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.32.4] — 2026-07-25
 
 ### Directional disaster exposure

@@ -39,15 +39,15 @@ abstract class TestCase extends BaseTestCase
      * reset tests pass against SQLite without running core's MySQL-coupled
      * schema migration.
      *
-     * Only `notifications` (+ the canonicals lookup row admin needs) is
-     * stubbed here — everything else admin tests need lives in admin's own
-     * migrations.
+     * Stub only the core-owned tables and columns touched by admin tests;
+     * everything else lives in admin's own migrations.
      */
     protected function afterRefreshingDatabase(): void
     {
         $this->stubCoreNotificationsSchema();
         $this->stubCoreUsersTableExtensions();
         $this->stubCoreKraiteSingleton();
+        $this->stubCoreModelLogsSchema();
     }
 
     /**
@@ -72,6 +72,10 @@ abstract class TestCase extends BaseTestCase
             $table->boolean('allow_opening_positions')->default(false);
             $table->boolean('can_trade')->nullable();
             $table->boolean('notifications_enabled')->nullable();
+            $table->string('td_correlation_type', 20)->nullable();
+            $table->boolean('corr_enabled')->nullable();
+            $table->boolean('elast_enabled')->nullable();
+            $table->unsignedInteger('trail_retention_hours')->nullable();
             $table->boolean('is_cooling_down')->default(true);
             $table->unsignedTinyInteger('bscs_score')->nullable();
             $table->string('bscs_band', 16)->nullable();
@@ -93,6 +97,33 @@ abstract class TestCase extends BaseTestCase
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+    }
+
+    /**
+     * Mirror core's technical audit table for runtime-setting change logs.
+     */
+    private function stubCoreModelLogsSchema(): void
+    {
+        if (Schema::hasTable('model_logs')) {
+            return;
+        }
+
+        Schema::create('model_logs', function (Blueprint $table): void {
+            $table->id();
+            $table->string('loggable_type');
+            $table->unsignedBigInteger('loggable_id');
+            $table->string('relatable_type')->nullable();
+            $table->unsignedBigInteger('relatable_id')->nullable();
+            $table->string('event_type');
+            $table->string('attribute_name')->nullable();
+            $table->text('message')->nullable();
+            $table->longText('previous_value')->nullable();
+            $table->longText('new_value')->nullable();
+            $table->json('metadata')->nullable();
+            $table->timestamps();
+
+            $table->index(['loggable_type', 'loggable_id']);
+        });
     }
 
     /**
