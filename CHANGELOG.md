@@ -2,6 +2,32 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.35.0] — 2026-07-25
+
+### Ladder clarity, last close, and expired sign-ins
+
+- [IMPROVED] A ladder rung that has already filled no longer sits on the
+  position's corridor drawing. Only the rungs the price is still travelling
+  toward stay on the line; how many have filled is still reported alongside it.
+- [IMPROVED] The pending-rung distance is called **alpha limit** everywhere,
+  matching alpha path. The improvised "next rung" wording is gone.
+- [NEW FEATURE] The trader dashboard's open-positions list is headed by how
+  many positions are active and how long ago the account last closed one, and
+  the elapsed time ages live between refreshes.
+- [BUG FIX] A sign-in page left open no longer dead-ends on the raw
+  "419 PAGE EXPIRED" wall. A stale page quietly refreshes itself when the tab
+  is looked at again — never while something has been typed into it — and a
+  stale submission bounces back to the sign-in page with the email still
+  filled in and a plain explanation. Callers expecting JSON get the same
+  explanation as a message.
+- [SAFETY] That bounce only ever returns the visitor to one of our own pages,
+  so a cross-site submission cannot use it to send them somewhere else.
+- [DEPENDENCIES] Admin now installs the same engine code the rest of the fleet
+  already runs (shared trading core v1.84.2, step dispatcher v1.20.1). It was
+  the only application still pinned to the older pair.
+- [VERIFIED] Full suite green on the refreshed engine: 256 tests /
+  1324 assertions, plus the production frontend build.
+
 ## [0.34.1] — 2026-07-25
 
 ### Reproducible production dependencies

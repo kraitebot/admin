@@ -221,13 +221,14 @@
                                                 </div>
                                             </template>
 
-                                            {{-- rung ticks --}}
-                                            <template x-for="rung in pos.ladder.rungs" :key="rung.n">
+                                            {{-- rung ticks — a filled rung is no longer a target the
+                                                 price is walking toward, so it leaves the corridor;
+                                                 only the still-pending rungs stay drawn --}}
+                                            <template x-for="rung in pos.ladder.rungs.filter(r => ! r.filled)" :key="rung.n">
                                                 <div class="absolute" :style="`left: ${rung.pct}%`">
-                                                    <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tabular-nums" :class="rung.filled ? 'text-fg-1' : 'text-fg-3'" x-text="`L${rung.n}`"></span>
-                                                    <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip"
-                                                          :style="rung.filled ? 'background: var(--accent)' : 'background: var(--fg-mute); opacity: .6'"></span>
-                                                    <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] tabular-nums whitespace-nowrap" :class="rung.filled ? 'text-fg-1 font-semibold' : 'text-fg-3'"
+                                                    <span class="absolute -translate-x-1/2 top-[2px] font-mono text-[10px] font-bold tabular-nums text-fg-3" x-text="`L${rung.n}`"></span>
+                                                    <span class="absolute -translate-x-1/2 top-[24px] w-[2.5px] h-[24px] rounded-chip" style="background: var(--fg-mute); opacity: .6"></span>
+                                                    <span class="absolute -translate-x-1/2 top-[56px] font-mono text-[11px] tabular-nums whitespace-nowrap text-fg-3"
                                                           x-text="fmtPrice(rung.price)"></span>
                                                 </div>
                                             </template>
@@ -248,7 +249,7 @@
                                         <span>Mark <span class="text-fg-1 font-bold tabular-nums" x-text="pos.ladder?.mark_price ? fmtPrice(pos.ladder.mark_price) : '—'"></span></span>
                                         <span>Rungs <span class="text-fg-1 font-bold tabular-nums" x-text="`${pos.rungs_filled}/${pos.rungs_total}`"></span></span>
                                         <span>Alpha path <span class="font-bold tabular-nums" :style="`color: ${bandColor(pos.band)}`" x-text="pos.alpha_pct.toFixed(1) + '%'"></span></span>
-                                        <span>Next rung <span class="text-fg-1 font-bold tabular-nums" x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span></span>
+                                        <span>Alpha limit <span class="text-fg-1 font-bold tabular-nums" x-text="pos.alpha_limit_pct === null ? '—' : pos.alpha_limit_pct.toFixed(1) + '%'"></span></span>
                                     </div>
                                 </div>
                             </template>

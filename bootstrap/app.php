@@ -6,7 +6,9 @@ use Dotenv\Dotenv;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
 use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 // Load the shared kraite env file BEFORE Laravel boots config. If
 // this runs inside a service provider's register() instead, the
@@ -51,5 +53,35 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // A form left open past the session lifetime posts a dead CSRF token.
+        // Instead of the bare 419 wall, bounce back to the page it came from
+        // with the harmless input restored, so the visitor just re-submits.
+        // The framework has already mapped TokenMismatchException to a 419
+        // HttpException by the time render callbacks run, so match on that.
+        $exceptions->render(function (HttpExceptionInterface $e, Request $request) {
+            if ($e->getStatusCode() !== 419) {
+                return null;
+            }
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'message' => 'Your session expired. Reload the page and try again.',
+                ], 419);
+            }
+
+            // The bounce target comes from the Referer header, which a
+            // cross-site form post controls — only ever return the visitor
+            // to one of our own pages, never to whatever sent them here.
+            $fallback = route('login');
+            $previous = url()->previous($fallback);
+
+            if (parse_url($previous, PHP_URL_HOST) !== $request->getHost()) {
+                $previous = $fallback;
+            }
+
+            return redirect()
+                ->to($previous)
+                ->withInput($request->except('password', 'password_confirmation', '_token'))
+                ->with('status', 'Your session expired for security. Please try again.');
+        });
     })->create();

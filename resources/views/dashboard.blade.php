@@ -224,14 +224,27 @@
                 this.$refs.track.style.transform = '';
                 this.animateDot(next);
             },
+            // How long ago the account's most recent position was closed,
+            // in plain words. Recomputed off nowTick so it ages live.
+            lastClosedAgo() {
+                const closedAt = this.d?.last_position_closed_at;
+                if (! closedAt) return null;
+                const seconds = Math.max(0, Math.round((this.nowTick - new Date(closedAt).getTime()) / 1000));
+                if (seconds < 60) return 'moments ago';
+                const plural = (value, unit) => `${value} ${unit}${value === 1 ? '' : 's'} ago`;
+                const minutes = Math.floor(seconds / 60);
+                if (minutes < 60) return plural(minutes, 'minute');
+                const hours = Math.floor(minutes / 60);
+                if (hours < 24) return plural(hours, 'hour');
+                return plural(Math.floor(hours / 24), 'day');
+            },
             rangeLabel() {
                 const total = this.filtered().length;
-                if ((this.d?.positions || []).length === 0) return 'No positions open right now · engine standing by';
-                if (total === 0) return `no ${this.filter.toLowerCase()} positions on this account`;
-                const per = this.perPage();
-                if (total <= per) return `${total} managed across the lifecycle · no manual orders`;
-                const from = this.safePage() * per + 1;
-                return `${total} positions · showing ${from}–${Math.min(from + per - 1, total)} · max ${per} per page`;
+                const closed = this.lastClosedAgo();
+                const closedSuffix = closed ? ` · Last closed ${closed}` : '';
+                if ((this.d?.positions || []).length === 0) return `No positions open right now · engine standing by${closedSuffix}`;
+                if (total === 0) return `no ${this.filter.toLowerCase()} positions on this account${closedSuffix}`;
+                return `${total} active position${total === 1 ? '' : 's'}${closedSuffix}`;
             },
             engineEmpty() { return (this.d?.positions || []).length === 0; },
             dotColor(dir) { return dir === 'up' ? 'var(--pnl-up-fg)' : dir === 'down' ? 'var(--pnl-down-fg)' : 'var(--border-strong)'; },

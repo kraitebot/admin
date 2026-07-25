@@ -149,6 +149,7 @@ class DashboardController extends Controller
             'kpis' => $this->webKpis($account, $positions),
             'btc' => $this->btcStrip(),
             'bscs' => $this->bscsBadge($account),
+            'last_position_closed_at' => $this->lastPositionClosedAt($account),
             'positions' => $positions,
             'activity' => $this->activityFeed($account),
             'connectivity_servers' => $this->connectivityServers(),

@@ -1,6 +1,21 @@
 # WhereAreWe
 
-_Last updated: 2026-07-23_
+_Last updated: 2026-07-25_
+
+## Session 2026-07-25 — ladder vocabulary, last close, expired sign-ins
+
+- Fleet positions: a rung that has filled leaves the ladder drawing, and the
+  pending-rung distance is now called **alpha limit** instead of "next rung".
+- Trader dashboard: the open-positions heading states how many positions are
+  active and how long ago the account last closed one.
+- Sign-in pages no longer dead-end on the "419 PAGE EXPIRED" wall. A stale page
+  refreshes itself when the tab is looked at again (never while something is
+  typed), and a stale submission bounces back with the email kept and a plain
+  explanation.
+- Admin's production lock moved to the fleet's current engine code
+  (`kraitebot/core` v1.84.2, `brunocfalcao/step-dispatcher` v1.20.1) — it was
+  the only application still pinned to the older pair.
+- Full suite green: 255 tests / 1322 assertions.
 
 ## Session 2026-07-23 — selected-token direction (v0.28.2)
 

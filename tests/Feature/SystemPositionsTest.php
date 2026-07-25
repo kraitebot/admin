@@ -288,3 +288,17 @@ it('renders the positions page for admins with the live state seeded', function 
     $response->assertSee('positionsPage(', false);
     $response->assertSee('Auto-sync', false);
 });
+
+it('drops a filled rung from the ladder and names the pending-rung distance alpha limit', function (): void {
+    $view = file_get_contents(resource_path('views/system/positions.blade.php'));
+
+    expect($view)
+        // A filled rung is no longer a target, so it leaves the corridor.
+        ->toContain('x-for="rung in pos.ladder.rungs.filter(r => ! r.filled)"')
+        ->not->toContain("rung.filled ? 'text-fg-1' : 'text-fg-3'")
+        ->not->toContain("rung.filled ? 'background: var(--accent)'")
+        // Bruno's vocabulary: alpha path and alpha limit, never "next rung".
+        ->toContain('<span>Alpha limit <span class="text-fg-1 font-bold tabular-nums"')
+        ->toContain('<span>Alpha path <span class="font-bold tabular-nums"')
+        ->not->toContain('Next rung');
+});
