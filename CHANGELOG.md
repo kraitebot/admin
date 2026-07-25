@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.35.1] — 2026-07-25
+
+### Sign-up hand-off covered, engine code realigned
+
+- [IMPROVED] The last hop of sign-up is now covered: the one-time link that
+  drops a brand-new trader straight into their dashboard is pinned as working
+  once, dying after use, and refusing both unknown links and accounts that were
+  never activated.
+- [DEPENDENCIES] Ships the shared trading core 1.85.0, which carries the
+  columns recording a trader's acceptance of the Terms and Conditions. Admin
+  itself reads and writes nothing new; this keeps it on the same engine code as
+  the rest of the fleet.
+- [VERIFIED] Full suite green on the refreshed core: 260 tests /
+  1,341 assertions.
+
 ## [0.35.0] — 2026-07-25
 
 ### Ladder clarity, last close, and expired sign-ins
