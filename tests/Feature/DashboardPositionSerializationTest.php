@@ -102,22 +102,26 @@ it('renders maximum pain between live price and unrealized pnl', function (): vo
     expect($view)
         ->toContain('grid grid-cols-3 items-center')
         ->toContain('MAX PAIN <span class="font-semibold text-pnldown" x-text="usdLoss(p.max_pain)"></span>')
-        ->toContain('All stops <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_max_pain_total)"></span>')
-        ->toContain('Number(d.kpis.open_max_pain_pct).toFixed(2) + \'%\'')
+        ->toContain('Shorts <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_short_max_pain_total)"></span>')
+        ->toContain('percentage(d?.kpis?.open_short_max_pain_pct)')
+        ->toContain('Longs <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_long_max_pain_total)"></span>')
+        ->toContain('percentage(d?.kpis?.open_long_max_pain_pct)')
         ->toContain('Active positions now <span class="font-semibold tabular-nums" x-text="usdSigned(d?.kpis?.open_positions_pnl)"></span>')
         ->toContain('Worst gross loss if the full ladder reaches its stop.');
 });
 
-it('sums active position disaster loss and live pnl without recalculating position values', function (): void {
+it('groups active position disaster loss by direction and sums live pnl', function (): void {
     $method = new ReflectionMethod(DashboardController::class, 'openPositionKpis');
     $metrics = $method->invoke(new DashboardController, [
-        ['max_pain' => '100.10', 'pnl' => '-3.10'],
-        ['max_pain' => '50.20', 'pnl' => '-2.20'],
+        ['direction' => 'LONG', 'max_pain' => '100.10', 'pnl' => '-3.10'],
+        ['direction' => 'SHORT', 'max_pain' => '50.20', 'pnl' => '-2.20'],
     ], '1000.00');
 
     expect($metrics)->toBe([
-        'open_max_pain_total' => '150.30',
-        'open_max_pain_pct' => 15.03,
+        'open_long_max_pain_total' => '100.10',
+        'open_long_max_pain_pct' => 10.01,
+        'open_short_max_pain_total' => '50.20',
+        'open_short_max_pain_pct' => 5.02,
         'open_positions_pnl' => '-5.30',
     ]);
 });
@@ -130,17 +134,29 @@ it('keeps the new disaster aggregates scoped to the web dashboard payload', func
         ->toContain("'kpis' => \$this->kpis(\$account, \$positions),");
 });
 
-it('does not understate disaster loss when an active position has no frozen max pain', function (): void {
+it('keeps one direction useful without understating another direction with missing max pain', function (): void {
     $method = new ReflectionMethod(DashboardController::class, 'openPositionKpis');
-    $metrics = $method->invoke(new DashboardController, [
-        ['max_pain' => '100.10', 'pnl' => '-3.10'],
-        ['max_pain' => null, 'pnl' => '-2.20'],
+    $controller = new DashboardController;
+    $metrics = $method->invoke($controller, [
+        ['direction' => 'SHORT', 'max_pain' => '100.10', 'pnl' => '-3.10'],
+        ['direction' => 'LONG', 'max_pain' => null, 'pnl' => '-2.20'],
+    ], '1000.00');
+    $unknownDirection = $method->invoke($controller, [
+        ['direction' => null, 'max_pain' => '100.10', 'pnl' => '-3.10'],
     ], '1000.00');
 
     expect($metrics)->toBe([
-        'open_max_pain_total' => null,
-        'open_max_pain_pct' => null,
+        'open_long_max_pain_total' => null,
+        'open_long_max_pain_pct' => null,
+        'open_short_max_pain_total' => '100.10',
+        'open_short_max_pain_pct' => 10.01,
         'open_positions_pnl' => '-5.30',
+    ])->and($unknownDirection)->toBe([
+        'open_long_max_pain_total' => null,
+        'open_long_max_pain_pct' => null,
+        'open_short_max_pain_total' => null,
+        'open_short_max_pain_pct' => null,
+        'open_positions_pnl' => '-3.10',
     ]);
 });
 
@@ -149,14 +165,18 @@ it('reports zero exposure with no active positions and no percentage without a p
     $controller = new DashboardController;
 
     expect($method->invoke($controller, [], '1000.00'))->toBe([
-        'open_max_pain_total' => '0.00',
-        'open_max_pain_pct' => 0.0,
+        'open_long_max_pain_total' => '0.00',
+        'open_long_max_pain_pct' => 0.0,
+        'open_short_max_pain_total' => '0.00',
+        'open_short_max_pain_pct' => 0.0,
         'open_positions_pnl' => '0.00',
     ])->and($method->invoke($controller, [
-        ['max_pain' => '25.00', 'pnl' => '-1.00'],
+        ['direction' => 'LONG', 'max_pain' => '25.00', 'pnl' => '-1.00'],
     ], '0.00'))->toBe([
-        'open_max_pain_total' => '25.00',
-        'open_max_pain_pct' => null,
+        'open_long_max_pain_total' => '25.00',
+        'open_long_max_pain_pct' => null,
+        'open_short_max_pain_total' => '0.00',
+        'open_short_max_pain_pct' => null,
         'open_positions_pnl' => '-1.00',
     ]);
 });

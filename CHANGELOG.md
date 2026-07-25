@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.32.4] — 2026-07-25
+
+### Directional disaster exposure
+
+- [IMPROVED] The Portfolio Value tile separates maximum-pain exposure into
+  SHORT and LONG lines, each with its own loss amount and percentage of the
+  current portfolio.
+- [SAFETY] Missing maximum-pain data only hides the affected direction, while
+  an ungroupable position keeps both directional figures unknown.
+- [VERIFIED] Focused dashboard coverage passes: 8 tests / 32 assertions;
+  frontend assets, Blade templates, and operator documentation compile
+  successfully.
+- [SKIPPED] The complete suite was intentionally omitted by the light-release
+  policy after targeted coverage passed.
+
 ## [0.32.3] — 2026-07-25
 
 ### Portfolio disaster exposure

@@ -559,24 +559,37 @@ class DashboardController extends Controller
     /**
      * @param  array<int, array<string, mixed>>  $positions
      * @return array{
-     *     open_max_pain_total: ?string,
-     *     open_max_pain_pct: ?float,
+     *     open_long_max_pain_total: ?string,
+     *     open_long_max_pain_pct: ?float,
+     *     open_short_max_pain_total: ?string,
+     *     open_short_max_pain_pct: ?float,
      *     open_positions_pnl: ?string
      * }
      */
     private function openPositionKpis(array $positions, ?string $portfolioBalance): array
     {
-        $maxPainTotal = '0';
+        $maxPainTotals = [
+            'LONG' => '0',
+            'SHORT' => '0',
+        ];
+        $hasCompleteMaxPain = [
+            'LONG' => true,
+            'SHORT' => true,
+        ];
         $positionsPnl = '0';
-        $hasCompleteMaxPain = true;
         $hasCompletePnl = true;
 
         foreach ($positions as $position) {
+            $direction = $position['direction'] ?? null;
             $maxPain = $position['max_pain'] ?? null;
-            if (is_numeric($maxPain)) {
-                $maxPainTotal = bcadd($maxPainTotal, (string) $maxPain, scale: 8);
+
+            if (! is_string($direction) || ! isset($maxPainTotals[$direction])) {
+                $hasCompleteMaxPain['LONG'] = false;
+                $hasCompleteMaxPain['SHORT'] = false;
+            } elseif (is_numeric($maxPain)) {
+                $maxPainTotals[$direction] = bcadd($maxPainTotals[$direction], (string) $maxPain, scale: 8);
             } else {
-                $hasCompleteMaxPain = false;
+                $hasCompleteMaxPain[$direction] = false;
             }
 
             $pnl = $position['pnl'] ?? null;
@@ -587,22 +600,51 @@ class DashboardController extends Controller
             }
         }
 
-        $maxPainPct = null;
-        if ($hasCompleteMaxPain && $portfolioBalance !== null && bccomp($portfolioBalance, '0', scale: 8) > 0) {
-            $maxPainPct = (float) bcround(
-                bcmul(bcdiv($maxPainTotal, $portfolioBalance, scale: 8), '100', scale: 4),
+        $longMaxPain = $this->maxPainSummary(
+            $maxPainTotals['LONG'],
+            $hasCompleteMaxPain['LONG'],
+            $portfolioBalance,
+        );
+        $shortMaxPain = $this->maxPainSummary(
+            $maxPainTotals['SHORT'],
+            $hasCompleteMaxPain['SHORT'],
+            $portfolioBalance,
+        );
+
+        return [
+            'open_long_max_pain_total' => $longMaxPain['total'],
+            'open_long_max_pain_pct' => $longMaxPain['percentage'],
+            'open_short_max_pain_total' => $shortMaxPain['total'],
+            'open_short_max_pain_pct' => $shortMaxPain['percentage'],
+            'open_positions_pnl' => $hasCompletePnl
+                ? bcround($positionsPnl, precision: 2)
+                : null,
+        ];
+    }
+
+    /**
+     * @return array{total: ?string, percentage: ?float}
+     */
+    private function maxPainSummary(string $total, bool $isComplete, ?string $portfolioBalance): array
+    {
+        if (! $isComplete) {
+            return [
+                'total' => null,
+                'percentage' => null,
+            ];
+        }
+
+        $percentage = null;
+        if ($portfolioBalance !== null && bccomp($portfolioBalance, '0', scale: 8) > 0) {
+            $percentage = (float) bcround(
+                bcmul(bcdiv($total, $portfolioBalance, scale: 8), '100', scale: 4),
                 precision: 2,
             );
         }
 
         return [
-            'open_max_pain_total' => $hasCompleteMaxPain
-                ? bcround($maxPainTotal, precision: 2)
-                : null,
-            'open_max_pain_pct' => $maxPainPct,
-            'open_positions_pnl' => $hasCompletePnl
-                ? bcround($positionsPnl, precision: 2)
-                : null,
+            'total' => bcround($total, precision: 2),
+            'percentage' => $percentage,
         ];
     }
 

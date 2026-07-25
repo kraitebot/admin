@@ -112,6 +112,7 @@
                     : '−$' + Math.abs(Number(v)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
             },
             pct(v, dp = 2) { return v === null || v === undefined ? null : (Number(v) >= 0 ? '+' : '−') + Math.abs(Number(v)).toFixed(dp) + '%'; },
+            percentage(v, dp = 2) { return v === null || v === undefined ? '—' : Number(v).toFixed(dp) + '%'; },
 
             // sparkline → svg paths (line + area), 84×28 viewBox
             spark(series) {
@@ -435,9 +436,15 @@
                         </div>
                     </template>
                 </div>
-                <div class="font-mono text-[9px] font-medium tracking-[0.07em] uppercase text-pnldown whitespace-nowrap">
-                    All stops <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_max_pain_total)"></span>
-                    · <span class="font-semibold tabular-nums" x-text="d?.kpis?.open_max_pain_pct === null || d?.kpis?.open_max_pain_pct === undefined ? '—' : Number(d.kpis.open_max_pain_pct).toFixed(2) + '%'"></span> of portfolio
+                <div class="flex flex-col gap-0.5 font-mono text-[9px] font-medium tracking-[0.07em] uppercase text-pnldown">
+                    <div class="whitespace-nowrap">
+                        Shorts <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_short_max_pain_total)"></span>
+                        · <span class="font-semibold tabular-nums" x-text="percentage(d?.kpis?.open_short_max_pain_pct)"></span> of portfolio
+                    </div>
+                    <div class="whitespace-nowrap">
+                        Longs <span class="font-semibold tabular-nums" x-text="usdLoss(d?.kpis?.open_long_max_pain_total)"></span>
+                        · <span class="font-semibold tabular-nums" x-text="percentage(d?.kpis?.open_long_max_pain_pct)"></span> of portfolio
+                    </div>
                 </div>
             </div>
 
