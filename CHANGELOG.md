@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.36.1] — 2026-07-26
+
+### Dots that name their spans, one account stated plainly
+
+- [IMPROVED] The price-direction help now names the spans behind the dots and
+  the order they are read in, instead of saying "a few different time spans".
+  The list comes from the engine's own configuration, so changing the spans
+  changes the explanation. It also says a span with no fresh data is left out,
+  which is why the dot count sometimes differs.
+- [IMPROVED] The dashboard states the account plainly when there is only one —
+  same status dot, name and exchange, nothing to click. This matches the change
+  made to Projections, so both pages now behave the same way.
+- [VERIFIED] Full suite green: 268 tests / 1,362 assertions, plus the
+  production frontend build.
+
 ## [0.36.0] — 2026-07-25
 
 ### Landing, exposure line, and single-account clarity

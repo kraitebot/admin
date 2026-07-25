@@ -286,3 +286,40 @@ it('uses SL as the live-price destination after every limit has filled', functio
             'rungs' => [],
         ]);
 });
+
+it('states the account plainly on the dashboard when there is nothing to switch between', function (): void {
+    $view = file_get_contents(resource_path('views/dashboard.blade.php'));
+
+    expect($view)
+        // Same rule as Projections: one account reads as a label, not a menu.
+        ->toContain('x-show="accounts.length === 1"')
+        ->toContain('cursor-default select-none')
+        ->toContain('x-show="accounts.length > 1"');
+});
+
+it('names the timeframe behind every direction dot in its help text', function (): void {
+    $view = file_get_contents(resource_path('views/dashboard.blade.php'));
+    $controller = file_get_contents(app_path('Http/Controllers/DashboardController.php'));
+
+    expect($controller)
+        // The help text names the engine's own spans instead of hardcoding them.
+        ->toContain("'dotTimeframes' => \$this->dotTimeframes(),");
+
+    expect($view)
+        ->toContain('$dotSpans = collect($dotTimeframes ?? [])')
+        ->toContain('One dot per time span, longest first')
+        // An engine with no configured spans still gets a readable sentence.
+        ->toContain("\$dotSpansSentence = \$dotSpans === ''")
+        ->toContain('One dot per time span, longest first, reading left to right.')
+        ->toContain('Hover a dot to see which span it is');
+});
+
+it('orders the direction dots longest span first', function (): void {
+    $method = new ReflectionMethod(DashboardController::class, 'dotTimeframes');
+    $timeframes = $method->invoke(new DashboardController);
+
+    $seconds = (new ReflectionClass(DashboardController::class))->getConstant('TIMEFRAME_SECONDS');
+    $lengths = array_map(fn (string $tf): int => $seconds[$tf], $timeframes);
+
+    expect($lengths)->toBe(collect($lengths)->sortDesc()->values()->all());
+});

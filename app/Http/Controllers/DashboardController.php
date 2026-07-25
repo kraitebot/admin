@@ -79,6 +79,10 @@ class DashboardController extends Controller
             'isAdmin' => $isAdmin,
             'initialAccountId' => $initialAccount?->id,
             'initialPayload' => $initialAccount ? $this->payload($initialAccount) : null,
+            // The engine's configured spans, longest first — the same order
+            // the direction dots render in, so the help text can name them
+            // instead of describing them vaguely.
+            'dotTimeframes' => $this->dotTimeframes(),
         ]);
     }
 

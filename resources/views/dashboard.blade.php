@@ -541,9 +541,17 @@
                     <div x-show="!engineEmpty()">
                         @include('partials.segmented', ['options' => ['ALL', 'LONG', 'SHORT']])
                     </div>
-                    {{-- Account picker (real accounts) — pointless with a
-                         single account, so it only renders when there's a
-                         choice to make --}}
+                    {{-- Account identity. One account has nothing to switch to,
+                         so it reads as a plain label — same shape as the
+                         Projections control. --}}
+                    <div x-show="accounts.length === 1" x-cloak
+                         class="inline-flex items-center gap-[9px] h-[34px] border border-line rounded-control bg-surface px-3 cursor-default select-none text-[12.5px] text-fg-2 max-w-[280px] max-[640px]:max-w-none max-[640px]:flex-1">
+                        <span class="w-[7px] h-[7px] rounded-chip flex-shrink-0" :class="account()?.is_trading ? 'bg-green-500' : 'bg-warn'"></span>
+                        <span class="whitespace-nowrap overflow-hidden text-ellipsis" x-text="account() ? `${account().name} · ${account().exchange}` : ''"></span>
+                    </div>
+
+                    {{-- Account picker (real accounts) — only renders when
+                         there's a choice to make --}}
                     <div class="relative" x-show="accounts.length > 1" @click.outside="acctOpen = false">
                         <button type="button" @click="acctOpen = !acctOpen"
                                 :class="acctOpen ? 'border-accent' : 'border-line hover:border-line-strong'"
@@ -639,7 +647,13 @@
                                         </div>
                                     </div>
                                     @php
-                                        $dotsHelp = "These little dots show which way the price is moving, checked over a few different time spans (short and long).\n\n- **Green** — price is going up.\n- **Red** — price is going down.\n\nAll green means the price is rising almost everywhere. All red means it is falling. A mix means there is no clear direction yet.";
+                                        $dotSpans = collect($dotTimeframes ?? [])->map(fn (string $tf): string => "**{$tf}**")->implode(' · ');
+                                        // No configured spans is a broken engine, not a broken
+                                        // help text — describe the dots rather than naming nothing.
+                                        $dotSpansSentence = $dotSpans === ''
+                                            ? 'One dot per time span, longest first, reading left to right.'
+                                            : "One dot per time span, longest first — reading left to right: {$dotSpans}.";
+                                        $dotsHelp = "{$dotSpansSentence} Each dot compares the price now against where that span opened.\n\n- **Green** — price is up over that span.\n- **Red** — price is down over that span.\n\nHover a dot to see which span it is. A span with no fresh data is left out, so you may see fewer dots than spans.\n\nAll green means the price is rising almost everywhere. All red means it is falling. A mix means there is no clear direction yet.";
                                         $pathHelp = "A simple 'how much trouble is this trade in?' meter.\n\n- **Near 0%** — good. The price is close to where the bot would happily take its profit.\n- **Near 100%** — the price has moved a long way the wrong direction, so the trade is deep in the red.\n\nLower is better. The higher it climbs, the further the price has drifted against the trade.";
                                         $limitHelp = "The bot keeps a few backup buy orders waiting at lower prices. If the price drops to one, the bot buys a little more to improve its average price.\n\nThis shows how close the price is to hitting the **next** backup buy:\n\n- **0%** — still far away.\n- **100%** — about to trigger the next buy.";
                                         $filledHelp = "The bot lines up a few backup buy orders below your entry. This shows how many have filled so far, out of the total.\n\n**0 / 4** means none of the 4 backups have triggered yet — the price has not dropped far enough to need them.";
