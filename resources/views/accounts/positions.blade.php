@@ -78,6 +78,7 @@
             // sort/filter/page stick.
             key: cfg.key || cfg.sortKey,
             filter: 'ALL',
+            query: '',
             sortKey: cfg.sortKey,
             sortDir: 'desc',
             per: cfg.per || 0,
@@ -92,19 +93,45 @@
             init() {
                 const s = this._store()[this.key] || {};
                 this.filter = s.filter ?? 'ALL';
+                this.query = s.query ?? '';
                 this.sortKey = s.sortKey ?? cfg.sortKey;
                 this.sortDir = s.sortDir ?? 'desc';
                 this.page = s.page ?? 0;
                 this.open = s.open ?? null;
+                // Typing in the search box is the same event as pressing a
+                // filter: back to page one, collapse any open row, re-filter.
+                this.$watch('query', () => { this.page = 0; this.open = null; this.persist(); this.update(); });
                 this.update();
             },
             persist() {
                 this._store()[this.key] = {
-                    filter: this.filter, sortKey: this.sortKey, sortDir: this.sortDir,
+                    filter: this.filter, query: this.query, sortKey: this.sortKey, sortDir: this.sortDir,
                     page: this.page, open: this.open,
                 };
             },
             setFilter(f) { this.filter = f; this.page = 0; this.open = null; this.persist(); this.update(); },
+            clearQuery() { this.query = ''; },
+
+            /**
+             * Does this row answer the search box? Markets are stored by token
+             * (TOSHI), while a trader naturally types the pair (TOSHIUSDT), so
+             * a query that is the token plus a quote currency still matches.
+             * Side and close reason are searchable too — "short", "stop".
+             */
+            matchesQuery(row) {
+                const q = this.query.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+
+                if (q === '') return true;
+
+                const sym = (row.dataset.sSym || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+                const quotes = ['usdt', 'usdc', 'usd', 'busd', 'perp'];
+
+                if (sym !== '' && (sym.includes(q) || quotes.some((quote) => q === sym + quote))) return true;
+
+                return [row.dataset.side, row.dataset.sReason]
+                    .filter(Boolean)
+                    .some((field) => field.toLowerCase().replace(/[^a-z0-9]/g, '').includes(q));
+            },
             setSort(key) {
                 this.sortDir = this.sortKey === key ? (this.sortDir === 'asc' ? 'desc' : 'asc') : 'desc';
                 this.sortKey = key;
@@ -129,7 +156,7 @@
                     return this.sortDir === 'asc' ? c : -c;
                 });
                 rows.forEach((r) => table.appendChild(r));
-                const visible = rows.filter((r) => this.filter === 'ALL' || r.dataset.side === this.filter);
+                const visible = rows.filter((r) => (this.filter === 'ALL' || r.dataset.side === this.filter) && this.matchesQuery(r));
                 this.count = visible.length;
                 if (this.per) {
                     this.pageCount = Math.max(1, Math.ceil(visible.length / this.per));
@@ -462,7 +489,25 @@
                 </div>
                 <div class="text-[12.5px] text-fg-3 mt-1">Realized over the last 48 hours · click any row for detail</div>
             </div>
-            @include('partials.segmented', ['options' => ['ALL', 'LONG', 'SHORT']])
+            <div class="flex items-center gap-3 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
+                {{-- Market search. Filters the same row set the segmented
+                     control and the pager work on, so page counts follow. --}}
+                <div class="relative">
+                    <span class="absolute left-[9px] top-1/2 -translate-y-1/2 text-fg-mute pointer-events-none">
+                        <x-feathericon-search class="w-[13px] h-[13px]" stroke-width="1.75"/>
+                    </span>
+                    <input type="search" inputmode="search" autocomplete="off" aria-label="Search closed positions"
+                           placeholder="Search market…"
+                           x-model="query"
+                           @keydown.escape="clearQuery()"
+                           class="h-[34px] w-[190px] max-[640px]:w-full bg-surface border border-line rounded-control pl-[27px] pr-[27px] font-mono text-[11px] text-fg-1 placeholder:text-fg-mute transition-colors duration-fast ease-out focus:border-accent focus:outline-none"/>
+                    <button type="button" x-show="query !== ''" x-cloak @click="clearQuery()" aria-label="Clear search"
+                            class="absolute right-[7px] top-1/2 -translate-y-1/2 appearance-none bg-transparent border-0 p-0 cursor-pointer text-fg-mute hover:text-fg-1">
+                        <x-feathericon-x class="w-[13px] h-[13px]" stroke-width="2"/>
+                    </button>
+                </div>
+                @include('partials.segmented', ['options' => ['ALL', 'LONG', 'SHORT']])
+            </div>
         </div>
 
         <div class="card overflow-hidden">
@@ -542,8 +587,17 @@
                     @endforeach
                 </table>
             </div>
+            {{-- A search that matches nothing must say so; an empty table with
+                 a pager reads as a loading failure. --}}
+            <div x-show="count === 0" x-cloak class="py-10 text-center border-t border-line-soft">
+                <div class="font-sans text-[13.5px] font-semibold text-fg-1 mb-1">No closed position matches that.</div>
+                <div class="font-mono text-[11px] text-fg-mute">
+                    Nothing in the last 48 hours for <span class="text-fg-2" x-text="query.trim() === '' ? 'this filter' : `“${query.trim()}”`"></span>.
+                </div>
+            </div>
+
             <div class="py-3 px-5 border-t border-line-soft flex items-center justify-between gap-3">
-                <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-text="count + ' CLOSED · 48H WINDOW'">{{ count($closed) }} CLOSED · 48H WINDOW</span>
+                <span class="font-mono tabular-nums text-[11px] text-fg-mute" x-text="count + ' CLOSED · 48H WINDOW' + (query.trim() === '' ? '' : ' · FILTERED')">{{ count($closed) }} CLOSED · 48H WINDOW</span>
                 {{-- Numbered pager --}}
                 <div class="flex items-center gap-1.5" x-show="pageCount > 1">
                     <button type="button" :disabled="page === 0" @click="setPage(Math.max(0, page - 1))" aria-label="Previous page"

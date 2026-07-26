@@ -2,6 +2,22 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.37.0] — 2026-07-26
+
+### Search the closed-position history
+
+- [NEW FEATURE] Closed positions can be searched by market. Typing the token
+  or the full pair narrows the list to that market — the stored token and the
+  pair a trader actually types both match, along with side and close reason.
+- [IMPROVED] The pager follows the search: page count recalculates, the view
+  returns to page one, and the footer marks a narrowed list as filtered so it
+  cannot be mistaken for the whole 48-hour window.
+- [IMPROVED] A search that matches nothing says so, instead of leaving an empty
+  table above a pager. Escape or the clear button restores the full list, and
+  the query survives the ten-second refresh.
+- [VERIFIED] Full suite green: 269 tests / 1,372 assertions, plus the
+  production frontend build.
+
 ## [0.36.1] — 2026-07-26
 
 ### Dots that name their spans, one account stated plainly
