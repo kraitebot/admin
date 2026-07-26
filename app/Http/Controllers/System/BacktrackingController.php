@@ -552,6 +552,9 @@ final class BacktrackingController extends Controller
 
             $symbol->was_backtesting_approved = $approve;
             $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';
+            // Stamped on every decision, including a reversal, so the panel can
+            // tell the operator when the standing call was actually taken.
+            $symbol->backtesting_reviewed_at = now();
 
             if ($approve) {
                 $symbol->is_manually_enabled = true;
@@ -583,6 +586,7 @@ final class BacktrackingController extends Controller
             'ok' => true,
             'was_backtesting_approved' => $symbol->was_backtesting_approved,
             'backtesting_review_status' => $symbol->backtesting_review_status,
+            'backtesting_reviewed_at' => optional($symbol->backtesting_reviewed_at)->toIso8601String(),
             'percentage_gap_long' => $symbol->percentage_gap_long,
             'percentage_gap_short' => $symbol->percentage_gap_short,
             'profit_percentage' => $symbol->profit_percentage,
@@ -958,6 +962,9 @@ SYS;
                 'es.limit_quantity_multipliers',
                 'es.was_backtesting_approved',
                 'es.backtesting_review_status',
+                'es.backtesting_reviewed_at',
+                'es.profit_percentage',
+                'es.stop_market_percentage',
                 'es.direction',
             ]);
 
@@ -983,6 +990,9 @@ SYS;
                 'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
                 'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
                 'backtesting_review_status' => $row->backtesting_review_status,
+                'backtesting_reviewed_at' => $row->backtesting_reviewed_at,
+                'profit_percentage' => $row->profit_percentage,
+                'stop_market_percentage' => $row->stop_market_percentage,
                 'direction' => $row->direction !== null ? mb_strtoupper((string) $row->direction) : null,
                 'is_immediately_tradeable' => $immediatelyTradeableIds->has((int) $row->id),
             ];

@@ -50,12 +50,16 @@ beforeEach(function (): void {
             $table->text('limit_quantity_multipliers')->nullable();
             $table->boolean('was_backtesting_approved')->default(false);
             $table->string('backtesting_review_status')->nullable();
+            $table->dateTime('backtesting_reviewed_at')->nullable();
+            $table->string('profit_percentage')->nullable();
+            $table->string('stop_market_percentage')->nullable();
             $table->boolean('is_manually_enabled')->default(false);
             $table->json('api_statuses')->nullable();
             $table->boolean('has_no_indicator_data')->default(false);
             $table->boolean('is_marked_for_delisting')->default(false);
             $table->dateTime('system_disabled_at')->nullable();
             $table->boolean('is_price_aligned')->default(true);
+            $table->boolean('overlaps_with_binance')->default(false);
             $table->boolean('has_price_trend_misalignment')->default(false);
             $table->boolean('has_early_direction_change')->default(false);
             $table->boolean('has_invalid_indicator_direction')->default(false);
@@ -64,6 +68,7 @@ beforeEach(function (): void {
             $table->dateTime('tradeable_at')->nullable();
             $table->string('indicators_timeframe')->nullable();
             $table->json('btc_correlation_rolling')->nullable();
+            $table->timestamps();
         });
     }
     if (! Schema::hasTable('accounts')) {
@@ -338,4 +343,65 @@ it('no longer blocks approval on stale candle data (admin final call)', function
     // MySQL/core-coupled and can't complete under the SQLite stub, so we only
     // assert the coverage gate is gone — `data_not_ready` no longer appears.)
     expect($response->json('error'))->not->toBe('data_not_ready');
+});
+
+it('dates every approve or reject so a re-test knows how old the standing call is', function (): void {
+    $esId = seedBacktestableToken();
+    DB::table('exchange_symbols')->where('id', $esId)->update(['backtesting_reviewed_at' => null]);
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    // (The cross-exchange propagation in the core observer is MySQL-coupled and
+    // cannot complete under the SQLite stub — same limitation the coverage tests
+    // above document — so this asserts the persisted row, not the response.)
+    $this->actingAs($admin)
+        ->postJson('https://admin.kraite.test/system/backtesting/toggle-approval', [
+            'exchange_symbol_id' => $esId,
+            'approve' => false,
+            'timeframe' => '1d',
+        ]);
+
+    $row = DB::table('exchange_symbols')->where('id', $esId)->first();
+    $decidedAt = $row->backtesting_reviewed_at;
+
+    expect($row->backtesting_review_status)->toBe('rejected');
+
+    expect($decidedAt)->not->toBeNull()
+        ->and(Carbon\Carbon::parse($decidedAt)->isToday())->toBeTrue();
+});
+
+it('hands the console the live configuration and decision date behind each token', function (): void {
+    $esId = seedBacktestableToken();
+    DB::table('exchange_symbols')->where('id', $esId)->update([
+        'profit_percentage' => '0.41',
+        'stop_market_percentage' => '3.10',
+        'backtesting_reviewed_at' => '2026-07-23 15:28:07',
+    ]);
+    $admin = User::factory()->create(['is_admin' => true]);
+
+    $html = $this->actingAs($admin)->get('https://admin.kraite.test/system/backtesting')->assertSuccessful()->getContent();
+
+    // @js emits the payload as JSON.parse('…') with unicode-escaped quotes.
+    $payload = str_replace('\u0022', '"', (string) $html);
+    preg_match('/"liveTp":"([^"]*)"/', $payload, $tp);
+    preg_match('/"liveSl":"([^"]*)"/', $payload, $sl);
+    preg_match('/"decidedAt":"([^"]*)"/', $payload, $decided);
+
+    // The token carries what it is live with, so the form can be reset to the
+    // conditions the standing decision was taken against.
+    expect($tp[1] ?? null)->toBe('0.41')
+        ->and($sl[1] ?? null)->toBe('3.10')
+        ->and($decided[1] ?? '')->toContain('2026-07-23');
+});
+
+it('offers a reload of the live configuration and shows when the decision was taken', function (): void {
+    $view = file_get_contents(resource_path('views/system/backtesting.blade.php'));
+
+    expect($view)
+        ->toContain('Reload current configuration')
+        ->toContain('x-on:click="loadLiveConfiguration()"')
+        ->toContain('<template x-if="hasLiveConfiguration">')
+        // A decided token states when, and says so plainly when the date
+        // predates the audit trail rather than showing nothing.
+        ->toContain('<template x-if="status && decidedAtLabel">')
+        ->toContain('Decision date not recorded');
 });

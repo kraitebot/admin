@@ -25,6 +25,11 @@
                 'orders' => $it['total_limit_orders'],
                 'mult' => is_array($mult) ? implode(',', $mult) : '',
                 'status' => $it['backtesting_review_status'] ?: null,
+                'decidedAt' => $it['backtesting_reviewed_at'] ?? null,
+                // The configuration currently live on the token — what the
+                // standing decision was actually taken against.
+                'liveTp' => $it['profit_percentage'] !== null ? (string) $it['profit_percentage'] : '',
+                'liveSl' => $it['stop_market_percentage'] !== null ? (string) $it['stop_market_percentage'] : '',
                 'direction' => $it['direction'],
                 'immediateTradeable' => $it['is_immediately_tradeable'],
             ];
@@ -79,6 +84,7 @@
             result: null,                        // raw server result { rows, totals, regimes, meta }
             pair: null,
             reviews: {},                         // id -> status override
+            decisions: {},                       // id -> decision timestamp override
             ai: { loading: false, text: null, model: null },
             coverageWarning: null,               // data-not-ready alert (blocks the grade)
             coverageProgress: null,              // live "Fetching history… N/M" during the ensure-coverage block
@@ -153,6 +159,56 @@
                 return this.reviews[this.selected.id] !== undefined ? this.reviews[this.selected.id] : this.selected.status;
             },
             reviewMeta(status) { return this.REVIEW_META[status == null ? 'null' : status]; },
+
+            // When the standing decision was taken. Reads the fresh value first
+            // so a decision made in this session dates itself immediately.
+            get decidedAt() {
+                if (!this.selected) return null;
+                const stamp = this.decisions[this.selected.id] !== undefined
+                    ? this.decisions[this.selected.id]
+                    : this.selected.decidedAt;
+
+                if (!stamp) return null;
+
+                const at = new Date(stamp);
+
+                return isNaN(at.getTime()) ? null : at;
+            },
+            get decidedAtLabel() {
+                const at = this.decidedAt;
+
+                if (!at) return null;
+
+                return at.toLocaleString(undefined, {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                });
+            },
+
+            // Pull the configuration the token is actually live with — the one
+            // the standing decision was taken against — back into the form, so
+            // a re-test starts from the approved conditions instead of the
+            // account defaults selectToken() seeds.
+            get hasLiveConfiguration() {
+                const s = this.selected;
+
+                return !!s && !!(s.liveTp || s.liveSl || s.gapL || s.gapS);
+            },
+            loadLiveConfiguration() {
+                const s = this.selected;
+
+                if (!s || this.tokenLocked || !this.hasLiveConfiguration) return;
+
+                this.cfg = {
+                    ...this.cfg,
+                    tp: s.liveTp || this.cfg.tp,
+                    sl: s.liveSl || this.cfg.sl,
+                    gapL: s.gapL || this.cfg.gapL,
+                    gapS: s.gapS || this.cfg.gapS,
+                };
+                this.cfgOpen = true;
+                this.flashToast('Loaded the configuration this token is live with', 'ok');
+            },
 
             quoteOrder(q) { return q === 'USDT' ? 0 : q === 'USDC' ? 1 : 2; },
             // Stable per-token hue → each coin gets its own avatar without inventing brand palettes.
@@ -469,8 +525,16 @@
                 this.symbols.forEach((s) => {
                     if (s.token !== decidedToken) return;
                     s.status = data.backtesting_review_status;
-                    if (approve) s.immediateTradeable = false;
+                    s.decidedAt = data.backtesting_reviewed_at;
+                    if (approve) {
+                        s.immediateTradeable = false;
+                        s.liveTp = this.cfg.tp ? String(this.cfg.tp) : s.liveTp;
+                        s.liveSl = this.cfg.sl ? String(this.cfg.sl) : s.liveSl;
+                        s.gapL = this.cfg.gapL ? String(this.cfg.gapL) : s.gapL;
+                        s.gapS = this.cfg.gapS ? String(this.cfg.gapS) : s.gapS;
+                    }
                     this.reviews[s.id] = data.backtesting_review_status;
+                    this.decisions[s.id] = data.backtesting_reviewed_at;
                 });
                 this.flashToast(approve ? 'Approved — config live' : 'Rejected — no config pushed', approve ? 'ok' : 'reject');
                 // The decision buttons live at the bottom — jump the viewport
@@ -934,6 +998,21 @@
                             </x-slot:right>
                         </x-ui.card-head>
                         <div class="p-4 flex flex-col gap-2.5">
+                            {{-- When the standing decision was taken. Without it a
+                                 re-test of an already-decided token gives no clue
+                                 whether the call is a day or three months old. --}}
+                            <template x-if="status && decidedAtLabel">
+                                <div class="flex items-center gap-2 font-mono text-[10.5px] text-fg-mute">
+                                    <x-feathericon-clock class="w-[12px] h-[12px] flex-shrink-0" stroke-width="1.75"/>
+                                    <span><span x-text="reviewMeta(status).label"></span> <span class="text-fg-2" x-text="decidedAtLabel"></span></span>
+                                </div>
+                            </template>
+                            <template x-if="status && !decidedAtLabel">
+                                <div class="flex items-center gap-2 font-mono text-[10.5px] text-fg-mute">
+                                    <x-feathericon-clock class="w-[12px] h-[12px] flex-shrink-0" stroke-width="1.75"/>
+                                    <span>Decision date not recorded</span>
+                                </div>
+                            </template>
                             <span x-show="!result" class="ui-hint">Run a backtest before approving — the decision pushes the tested config live.</span>
                             {{-- system proposal — recommended decision derived from the grade --}}
                             <template x-if="result && proposal">
@@ -1002,6 +1081,15 @@
                             {{-- Approve is disabled on zero-resolved runs: nothing was
                                  tested, so there is no config to push live from here. --}}
                             <span x-show="result && resolvedSims === 0" class="ui-hint">Approve is locked — this run resolved no simulations, so there's nothing tested to push live.</span>
+                            {{-- Re-testing a decided token starts from account defaults,
+                                 which are not what the token is live with. This puts the
+                                 token's own approved conditions back into the form. --}}
+                            <template x-if="hasLiveConfiguration">
+                                <button type="button" x-on:click="loadLiveConfiguration()" :disabled="tokenLocked"
+                                        class="appearance-none cursor-pointer inline-flex items-center justify-center gap-2 h-[34px] rounded-control font-sans text-[12px] font-semibold border transition-colors duration-fast disabled:opacity-40 disabled:cursor-not-allowed ui-text border-line hover:border-line-strong bg-transparent">
+                                    <x-feathericon-rotate-ccw class="w-[14px] h-[14px]" stroke-width="1.75"/>Reload current configuration
+                                </button>
+                            </template>
                             <div class="flex gap-2">
                                 {{-- tokenLocked: deciding mid-fetch/verify/adjust-search would
                                      race the in-flight op and misfire the auto-advance chain. --}}

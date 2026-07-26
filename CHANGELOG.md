@@ -2,6 +2,25 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.38.0] — 2026-07-26
+
+### Backtesting shows when a decision was taken, and what it was taken on
+
+- [NEW FEATURE] A token that already carries an approve or reject now states
+  when that call was made, right under the Decision header. Decisions older
+  than the audit trail say so plainly instead of showing nothing.
+- [NEW FEATURE] "Reload current configuration" puts the token's live
+  take-profit, stop-loss and both ladder gaps back into the form, so re-testing
+  an approved token starts from the conditions the standing decision was taken
+  against instead of the account defaults.
+- [IMPROVED] Every approve and reject — including a reversal — stamps its own
+  date from now on, and the date follows the decision to the token's other
+  listings.
+- [DEPENDENCIES] Ships the shared trading core 1.86.0, which carries the
+  decision-date field and the audit-trail backfill.
+- [VERIFIED] Full suite green: 272 tests / 1,387 assertions, plus the
+  production frontend build.
+
 ## [0.37.1] — 2026-07-26
 
 ### Search control sits straight
