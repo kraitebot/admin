@@ -2,6 +2,18 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.37.1] — 2026-07-26
+
+### Search control sits straight
+
+- [BUG FIX] The magnifier in the closed-positions search sat below the text it
+  belonged to. Icon, field and clear button now share one row on the same
+  centre line, and the whole control highlights on focus.
+- [IMPROVED] The field reads "Search positions…" and no longer renders the
+  browser's own clear widget beside ours.
+- [VERIFIED] Full suite green: 269 tests / 1,375 assertions, plus the
+  production frontend build.
+
 ## [0.37.0] — 2026-07-26
 
 ### Search the closed-position history

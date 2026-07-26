@@ -490,19 +490,21 @@
                 <div class="text-[12.5px] text-fg-3 mt-1">Realized over the last 48 hours · click any row for detail</div>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0 max-[640px]:w-full max-[640px]:flex-wrap max-[640px]:gap-y-2.5">
-                {{-- Market search. Filters the same row set the segmented
-                     control and the pager work on, so page counts follow. --}}
-                <div class="relative">
-                    <span class="absolute left-[9px] top-1/2 -translate-y-1/2 text-fg-mute pointer-events-none">
-                        <x-feathericon-search class="w-[13px] h-[13px]" stroke-width="1.75"/>
-                    </span>
-                    <input type="search" inputmode="search" autocomplete="off" aria-label="Search closed positions"
-                           placeholder="Search market…"
+                {{-- Position search. Filters the same row set the segmented
+                     control and the pager work on, so page counts follow.
+                     Icon, field and clear button share one flex row rather
+                     than being positioned over the input — a `type="search"`
+                     field also brought its own browser clear widget next to
+                     ours, which differed per browser. --}}
+                <div class="h-[34px] w-[200px] max-[640px]:w-full inline-flex items-center gap-2 bg-surface border border-line rounded-control px-[10px] transition-colors duration-fast ease-out focus-within:border-accent">
+                    <x-feathericon-search class="w-[13px] h-[13px] text-fg-mute flex-shrink-0" stroke-width="1.75"/>
+                    <input type="text" autocomplete="off" aria-label="Search closed positions"
+                           placeholder="Search positions…"
                            x-model="query"
                            @keydown.escape="clearQuery()"
-                           class="h-[34px] w-[190px] max-[640px]:w-full bg-surface border border-line rounded-control pl-[27px] pr-[27px] font-mono text-[11px] text-fg-1 placeholder:text-fg-mute transition-colors duration-fast ease-out focus:border-accent focus:outline-none"/>
+                           class="flex-1 min-w-0 bg-transparent border-0 p-0 outline-none font-mono text-[11px] leading-none text-fg-1 placeholder:text-fg-mute"/>
                     <button type="button" x-show="query !== ''" x-cloak @click="clearQuery()" aria-label="Clear search"
-                            class="absolute right-[7px] top-1/2 -translate-y-1/2 appearance-none bg-transparent border-0 p-0 cursor-pointer text-fg-mute hover:text-fg-1">
+                            class="appearance-none bg-transparent border-0 p-0 flex-shrink-0 inline-flex items-center cursor-pointer text-fg-mute hover:text-fg-1">
                         <x-feathericon-x class="w-[13px] h-[13px]" stroke-width="2"/>
                     </button>
                 </div>

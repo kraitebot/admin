@@ -19,8 +19,13 @@ it('lets the trader search closed positions by market and keeps the pager honest
 
     expect($history)
         ->toContain('aria-label="Search closed positions"')
+        ->toContain('placeholder="Search positions…"')
         ->toContain('x-model="query"')
-        ->toContain('@keydown.escape="clearQuery()"');
+        ->toContain('@keydown.escape="clearQuery()"')
+        // Icon, field and clear button share one flex row so they sit on the
+        // same centre line — absolute positioning had the icon riding low.
+        ->toContain('inline-flex items-center gap-2 bg-surface border border-line rounded-control px-[10px]')
+        ->toContain('focus-within:border-accent');
 
     expect($view)
         // Search narrows the same row set the segmented filter works on, so
