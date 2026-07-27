@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.40.0] — 2026-07-27
+
+### The dashboard now names every pause, including the error-storm monitor
+
+- The "openings paused" banner covers all three pause sources and says which
+  one is holding: market shock breaker (with resumption countdown), black-swan
+  regime gate (score + countdown), or the error-storm monitor — which shows
+  "holds until cleared from Runtime Settings" instead of a countdown it would
+  not honour. Until now the monitor pause was invisible: on 2026-07-27 opens
+  sat parked for four hours while the widget read calm.
+- The mobile API dashboard tile carries the same pause surface (reason,
+  until-when, human countdown) so the phone can display it.
+
 ## [0.39.0] — 2026-07-27
 
 ### The circuit-breaker pause is now tunable from Runtime Settings

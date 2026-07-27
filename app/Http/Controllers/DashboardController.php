@@ -675,6 +675,14 @@ class DashboardController extends Controller
             'score' => $bscs['score'],
             'band' => $bscs['band'],
             'blocked' => $bscs['blocked'],
+            // Pause surface — covers all three sources (fast shock breaker,
+            // slow regime gate, error-storm monitor latch) so the phone can
+            // say WHY opens are parked and until when. 'monitor' has no
+            // until: it holds until an operator clears it.
+            'paused' => $bscs['paused'],
+            'pause_reason' => $bscs['pause_reason'],
+            'cooldown_remaining' => $bscs['cooldown_remaining'],
+            'cooldown_until' => $bscs['cooldown_until'],
             'status' => $bscs['status'],
             'is_stale' => $bscs['is_stale'],
             'block_threshold' => $bscs['block_threshold'],
@@ -699,13 +707,26 @@ class DashboardController extends Controller
         $blocked = $index->shouldBlockOpens();
         $cooldownUntil = $index->cooldownUntil();
 
+        // Third pause source, outside BSCS entirely: the error-storm
+        // monitor flips the openings switch off (allow_opening_positions)
+        // and holds it until an operator clears it — no auto-until.
+        // 2026-07-27 incident: opens sat parked for 4h while this widget
+        // showed "calm, no cooldown", because only BSCS was surfaced.
+        $openingsSwitchEnabled = (bool) (Kraite::find(1)?->allow_opening_positions ?? true);
+        $paused = $blocked || ! $openingsSwitchEnabled;
+
         // Inferred pause source. The fast 1-minute market-shock detector
         // arms the same cooldown the slow score gate uses, even when the
         // score is nowhere near the block threshold — so a cooldown active
         // with a sub-threshold score is a SHOCK cooldown; at/above the
         // threshold it's the regime gate. (No persisted reason column.)
+        // The monitor latch outranks both for display: it never expires on
+        // its own, so naming a cooldown here would promise a resumption
+        // time the latch does not honour.
         $pauseReason = null;
-        if ($blocked) {
+        if (! $openingsSwitchEnabled) {
+            $pauseReason = 'monitor';
+        } elseif ($blocked) {
             // Regime gate is the cause ONLY when a computed score is at/above
             // the block threshold (the only way the slow gate arms a cooldown).
             // Everything else — sub-threshold score, or no score yet — can only
@@ -714,8 +735,8 @@ class DashboardController extends Controller
         }
 
         $statusLine = match (true) {
+            $paused => 'New trades paused.',
             $score === null => 'Awaiting first compute…',
-            $blocked => 'New trades paused.',
             $band === 'critical' => 'Market in critical regime.',
             $band === 'fragile' => 'New trades use smaller size.',
             $band === 'elevated' => 'Market moving more than usual.',
@@ -756,6 +777,8 @@ class DashboardController extends Controller
             // until when. pause_reason is 'shock' (fast 1-min breaker) or
             // 'regime' (slow score gate at ≥ block_threshold).
             'pause_reason' => $pauseReason,
+            'paused' => $paused,
+            'openings_switch_enabled' => $openingsSwitchEnabled,
             'cooldown_active' => $index->isCooldownActive(),
             'cooldown_remaining' => $this->humanUntil($cooldownUntil),
             'cooldown_until' => $cooldownUntil ? $cooldownUntil->toIso8601String() : null,

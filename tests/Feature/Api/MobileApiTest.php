@@ -330,6 +330,7 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         'updated_at' => now(),
     ]);
     DB::table('kraite')->where('id', 1)->update([
+        'allow_opening_positions' => true,
         'bscs_score' => 67,
         'bscs_band' => 'fragile',
         'bscs_synced_at' => now()->subMinutes(30),
@@ -354,19 +355,106 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         ->assertJsonPath('data.dashboard.bscs.position_cap.short.effective', 3)
         ->assertJsonPath('data.dashboard.bscs.position_cap.short.maximum', 6)
         ->assertJsonPath('data.dashboard.bscs.position_cap.ratio_percent', 50)
-        ->assertJsonMissingPath('data.dashboard.bscs.components')
-        ->assertJsonMissingPath('data.dashboard.bscs.cooldown_until');
+        ->assertJsonPath('data.dashboard.bscs.paused', false)
+        ->assertJsonPath('data.dashboard.bscs.pause_reason', null)
+        ->assertJsonPath('data.dashboard.bscs.cooldown_until', null)
+        ->assertJsonMissingPath('data.dashboard.bscs.components');
 
     expect(array_keys($response->json('data.dashboard.bscs')))->toBe([
         'score',
         'band',
         'blocked',
+        'paused',
+        'pause_reason',
+        'cooldown_remaining',
+        'cooldown_until',
         'status',
         'is_stale',
         'block_threshold',
         'computed_ago',
         'position_cap',
     ])->and(DB::table('kraite')->where('id', 1)->first())->toEqual($before);
+});
+
+it('surfaces the error-storm monitor latch on the mobile tile with no false resumption time', function (): void {
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile latch owner',
+        'email' => 'mobile-bscs-latch@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Latch account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    // The 2026-07-27 shape: BSCS calm, no cooldown — but the error-storm
+    // monitor flipped the openings switch off. The tile must say paused,
+    // name the monitor, and promise no resumption time.
+    DB::table('kraite')->where('id', 1)->update([
+        'allow_opening_positions' => false,
+        'bscs_score' => 0,
+        'bscs_band' => 'calm',
+        'bscs_synced_at' => now(),
+        'bscs_block_threshold' => 80,
+        'bscs_cooldown_until' => null,
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.paused', true)
+        ->assertJsonPath('data.dashboard.bscs.pause_reason', 'monitor')
+        ->assertJsonPath('data.dashboard.bscs.blocked', false)
+        ->assertJsonPath('data.dashboard.bscs.cooldown_until', null)
+        ->assertJsonPath('data.dashboard.bscs.cooldown_remaining', null)
+        ->assertJsonPath('data.dashboard.bscs.status', 'New trades paused.');
+});
+
+it('surfaces a shock cooldown on the mobile tile with its until-time', function (): void {
+    $now = CarbonImmutable::parse('2026-07-19 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile shock owner',
+        'email' => 'mobile-bscs-shock@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Shock account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    // Fast breaker shape: calm sub-threshold score with an armed cooldown.
+    DB::table('kraite')->where('id', 1)->update([
+        'allow_opening_positions' => true,
+        'bscs_score' => 10,
+        'bscs_band' => 'calm',
+        'bscs_synced_at' => now(),
+        'bscs_block_threshold' => 80,
+        'bscs_cooldown_until' => $now->addMinutes(45),
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $response = $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.paused', true)
+        ->assertJsonPath('data.dashboard.bscs.pause_reason', 'shock')
+        ->assertJsonPath('data.dashboard.bscs.status', 'New trades paused.');
+
+    expect((string) $response->json('data.dashboard.bscs.cooldown_until'))
+        ->toContain('2026-07-19T12:45:00')
+        ->and($response->json('data.dashboard.bscs.cooldown_remaining'))->not->toBeNull();
 });
 
 it('returns an explicit stale no-data BSCS summary before the first compute', function (): void {
@@ -384,6 +472,10 @@ it('returns an explicit stale no-data BSCS summary before the first compute', fu
         'created_at' => now(),
         'updated_at' => now(),
     ]);
+
+    // The stub row defaults the openings switch OFF; production default is
+    // on. Pin it so this test exercises "awaiting compute", not the pause.
+    DB::table('kraite')->where('id', 1)->update(['allow_opening_positions' => true]);
 
     Sanctum::actingAs($owner, ['dashboard:read']);
 

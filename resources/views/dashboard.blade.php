@@ -406,20 +406,27 @@
             </div>
         </div>
 
-        {{-- ===================== BLOCKED BANNER (real BSCS gate) ===================== --}}
-        <div x-show="d?.bscs?.blocked" x-cloak
+        {{-- ===================== PAUSED BANNER (any pause source) ===================== --}}
+        <div x-show="d?.bscs?.paused ?? d?.bscs?.blocked" x-cloak
              class="flex items-center gap-3 py-[13px] px-4 mb-5 rounded-control bg-pnldown-bg text-pnldown border" style="border-color: color-mix(in srgb, var(--danger) 45%, transparent);">
             <span class="flex flex-shrink-0 animate-pulse-soft"><x-feathericon-alert-triangle class="w-[18px] h-[18px]" stroke-width="1.75"/></span>
             <span class="text-[13px] leading-[1.45] flex-1 min-w-0">
                 <strong class="text-pnldown-strong font-bold">New position openings paused</strong> —
-                {{-- The fast market-shock breaker can pause opens with the score still calm, so name the actual cause. --}}
+                {{-- Name the actual cause: fast shock breaker, error-storm monitor latch, or the slow regime gate. --}}
                 <template x-if="d?.bscs?.pause_reason === 'shock'">
                     <span>market shock circuit breaker tripped</span>
                 </template>
-                <template x-if="d?.bscs?.pause_reason !== 'shock'">
+                <template x-if="d?.bscs?.pause_reason === 'monitor'">
+                    <span>error-storm monitor tripped</span>
+                </template>
+                <template x-if="d?.bscs?.pause_reason !== 'shock' && d?.bscs?.pause_reason !== 'monitor'">
                     <span>Black Swan regime is <span class="font-mono text-pnldown-strong font-semibold"><span x-text="bandMeta().label"></span> <span x-text="scoreDisplay()"></span></span></span>
                 </template>
-                <span x-show="d?.bscs?.cooldown_remaining">. Resumes in <span class="font-mono text-pnldown-strong font-semibold" x-text="d.bscs.cooldown_remaining"></span></span>.
+                {{-- The monitor latch never expires on its own — a countdown here would lie. --}}
+                <template x-if="d?.bscs?.pause_reason === 'monitor'">
+                    <span>. Holds until cleared from Runtime Settings</span>
+                </template>
+                <span x-show="d?.bscs?.pause_reason !== 'monitor' && d?.bscs?.cooldown_remaining">. Resumes in <span class="font-mono text-pnldown-strong font-semibold" x-text="d.bscs.cooldown_remaining"></span></span>.
                 Existing positions are still managed.
             </span>
         </div>
@@ -968,11 +975,11 @@ MARKDOWN;
                         <div class="flex items-baseline gap-[9px] flex-wrap">
                             <span class="font-mono text-[32px] font-semibold leading-none tracking-[-0.03em]" :style="`color: ${bandMeta().color}`" x-text="scoreDisplay()"></span>
                             <span class="font-mono text-[11.5px] text-fg-mute whitespace-nowrap">/ 1.00 · <span :style="`color: ${bandMeta().color}; font-weight: 600`" x-text="bandMeta().label"></span></span>
-                            {{-- name the shock breaker explicitly: the score can read calm while the fast detector holds opens shut --}}
+                            {{-- name the pause source explicitly: the score can read calm while the fast detector or the error-storm monitor holds opens shut --}}
                             <span class="font-mono text-[9.5px] tracking-[0.06em] ml-auto self-center inline-flex items-center gap-[5px]"
-                                  :class="d?.bscs?.pause_reason === 'shock' ? 'text-warn font-bold' : 'text-fg-mute'">
-                                <template x-if="d?.bscs?.pause_reason === 'shock'"><span class="w-[6px] h-[6px] rounded-chip bg-warn animate-pulse-soft"></span></template>
-                                <span x-text="!d?.bscs?.blocked ? 'NEW POS. ALLOWED' : (d?.bscs?.pause_reason === 'shock' ? 'MARKET SHOCK' : 'NEW POS. PAUSED')"></span>
+                                  :class="(d?.bscs?.pause_reason === 'shock' || d?.bscs?.pause_reason === 'monitor') ? 'text-warn font-bold' : 'text-fg-mute'">
+                                <template x-if="d?.bscs?.pause_reason === 'shock' || d?.bscs?.pause_reason === 'monitor'"><span class="w-[6px] h-[6px] rounded-chip bg-warn animate-pulse-soft"></span></template>
+                                <span x-text="!(d?.bscs?.paused ?? d?.bscs?.blocked) ? 'NEW POS. ALLOWED' : (d?.bscs?.pause_reason === 'shock' ? 'MARKET SHOCK' : (d?.bscs?.pause_reason === 'monitor' ? 'ERROR STORM' : 'NEW POS. PAUSED'))"></span>
                             </span>
                         </div>
                         <div>
