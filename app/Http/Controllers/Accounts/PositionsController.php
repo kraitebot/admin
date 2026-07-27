@@ -1378,6 +1378,16 @@ class PositionsController extends Controller
                 return;
             }
 
+            // A zero-price entry is a not-yet-priced fill (MARKET orders
+            // report price 0 until the fill confirmation lands seconds
+            // later). Folding it in would add cost-free quantity and drag
+            // the average entry toward zero, inflating every projected
+            // outcome — the TOSHIUSDT display symptom (2026-07-26). Skip
+            // the row until it carries a real price.
+            if (bccomp($price, '0', 18) <= 0) {
+                return;
+            }
+
             $cumulativeQty = bcadd($cumulativeQty, $qty, 18);
             $cumulativeCost = bcadd($cumulativeCost, bcmul($qty, $price, 18), 18);
 

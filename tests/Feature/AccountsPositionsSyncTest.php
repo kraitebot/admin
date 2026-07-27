@@ -249,3 +249,56 @@ it('treats a matched order re-placed after the snapshot as unverified, not drift
         ->assertJsonPath('pairs.0.orders.0.status', 'unverified')
         ->assertJsonPath('pairs.0.status', 'synced');
 });
+
+it('excludes a not-yet-priced market fill from the pnl projections instead of averaging in zero-cost quantity', function (): void {
+    [$userId, $accountId] = seedSyncedAccount();
+
+    // The TOSHIUSDT display symptom (2026-07-26): a filled MARKET entry
+    // whose recorded price is still 0 (fill confirmation not applied)
+    // must NOT contribute a million zero-cost units to the ladder's
+    // average entry — that drags the average toward zero and every
+    // projected outcome inflates absurdly.
+    $positionId = DB::table('positions')->value('id');
+    DB::table('orders')->insert([
+        ['position_id' => $positionId, 'type' => 'MARKET', 'status' => 'FILLED', 'side' => 'BUY', 'client_order_id' => 'k-zero', 'exchange_order_id' => 'x-zero', 'price' => 0, 'quantity' => 1001816],
+        ['position_id' => $positionId, 'type' => 'LIMIT', 'status' => 'FILLED', 'side' => 'BUY', 'client_order_id' => 'k-real', 'exchange_order_id' => 'x-real', 'price' => 60.0, 'quantity' => 2],
+    ]);
+
+    $response = $this->actingAs(User::findOrFail($userId))
+        ->get("https://admin.kraite.test/accounts/positions/data?account_id={$accountId}")
+        ->assertSuccessful();
+
+    $rows = collect($response->json('pairs.0.pnl_projections'));
+
+    // The zero-priced MARKET row is skipped entirely; the ladder is
+    // seeded by the priced rungs alone (the fixture's 1.12 @ 61.665 rung
+    // sorts first, then this test's 2 @ 60), so the blended average is
+    // (1.12×61.665 + 2×60) / 3.12 = 60.5977 — never a zero-diluted blend.
+    expect($rows->where('type', 'MARKET'))->toBeEmpty()
+        ->and($rows->first()['type'])->toBe('LIMIT 1')
+        ->and((float) $rows->first()['avg_entry'])->toBe(61.665)
+        ->and((float) $rows->first()['size'])->toBe(1.12)
+        ->and($rows[1]['type'])->toBe('LIMIT 2')
+        ->and((float) $rows[1]['avg_entry'])->toEqualWithDelta(60.5977, 0.0001)
+        ->and((float) $rows[1]['size'])->toBe(3.12);
+});
+
+it('keeps a properly priced market fill in the pnl projections', function (): void {
+    [$userId, $accountId] = seedSyncedAccount();
+
+    $positionId = DB::table('positions')->value('id');
+    DB::table('orders')->insert([
+        ['position_id' => $positionId, 'type' => 'MARKET', 'status' => 'FILLED', 'side' => 'BUY', 'client_order_id' => 'k-priced', 'exchange_order_id' => 'x-priced', 'price' => 67.764, 'quantity' => 0.56],
+    ]);
+
+    $response = $this->actingAs(User::findOrFail($userId))
+        ->get("https://admin.kraite.test/accounts/positions/data?account_id={$accountId}")
+        ->assertSuccessful();
+
+    $rows = collect($response->json('pairs.0.pnl_projections'));
+    $market = $rows->firstWhere('type', 'MARKET');
+
+    expect($market)->not->toBeNull()
+        ->and((float) $market['avg_entry'])->toBe(67.764)
+        ->and((float) $market['size'])->toBe(0.56);
+});

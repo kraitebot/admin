@@ -2,6 +2,19 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.38.1] — 2026-07-27
+
+### Position projections can no longer be poisoned by an unpriced fill
+
+- A market entry whose fill price has not landed yet (or was historically
+  corrupted to zero, as in the TOSHIUSDT incident) is now excluded from the
+  ladder projection grid instead of contributing cost-free quantity — which
+  dragged the average entry toward zero and made every projected outcome,
+  including the stop-loss row, look like enormous profit.
+- The four corrupted historical entries were corrected in the trading records
+  from the archived exchange fill events, so old TOSHIUSDT and AWEUSDT rows
+  now display truthfully too.
+
 ## [0.38.0] — 2026-07-26
 
 ### Backtesting shows when a decision was taken, and what it was taken on
