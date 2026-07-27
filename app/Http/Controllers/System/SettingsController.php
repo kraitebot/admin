@@ -27,6 +27,7 @@ final class SettingsController extends Controller
         'elast_enabled',
         'trail_retention_hours',
         'bscs_freshness_max_seconds',
+        'bscs_cooldown_hours',
     ];
 
     public function index(): View
@@ -45,6 +46,7 @@ final class SettingsController extends Controller
                 'corr_enabled' => Kraite::correlationComputationEnabled(),
                 'elast_enabled' => Kraite::elasticityComputationEnabled(),
                 'trail_retention_hours' => Kraite::trailRetentionHours(),
+                'bscs_cooldown_hours' => (int) ($bscs->cooldownHours() ?? 12),
             ],
             'bscsBlocksOpens' => $bscsBlocksOpens,
             'newOpensAllowed' => $canTrade

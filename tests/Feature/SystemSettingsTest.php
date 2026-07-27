@@ -76,6 +76,7 @@ it('persists every editable runtime setting including explicit false values', fu
             'elast_enabled' => 1,
             'trail_retention_hours' => 48,
             'bscs_freshness_max_seconds' => 7200,
+            'bscs_cooldown_hours' => 12,
         ])
         ->assertRedirect(route('system.settings'))
         ->assertSessionHasNoErrors()
@@ -91,6 +92,7 @@ it('persists every editable runtime setting including explicit false values', fu
         ->and($engine->elast_enabled)->toBeTrue()
         ->and($engine->trail_retention_hours)->toBe(48)
         ->and($engine->bscs_freshness_max_seconds)->toBe(7200)
+        ->and($engine->bscs_cooldown_hours)->toBe(12)
         ->and(Kraite::canTrade())->toBeFalse()
         ->and(Kraite::notificationsEnabled())->toBeFalse()
         ->and(Kraite::correlationType())->toBe('spearman');
@@ -109,6 +111,7 @@ it('preserves inherited defaults as null overrides', function (): void {
             'elast_enabled' => 'inherit',
             'trail_retention_hours' => null,
             'bscs_freshness_max_seconds' => 6900,
+            'bscs_cooldown_hours' => null,
         ])
         ->assertSessionHasNoErrors();
 
@@ -119,7 +122,8 @@ it('preserves inherited defaults as null overrides', function (): void {
         ->and($engine->td_correlation_type)->toBeNull()
         ->and($engine->corr_enabled)->toBeNull()
         ->and($engine->elast_enabled)->toBeNull()
-        ->and($engine->trail_retention_hours)->toBeNull();
+        ->and($engine->trail_retention_hours)->toBeNull()
+        ->and($engine->bscs_cooldown_hours)->toBeNull();
 });
 
 it('rejects invalid runtime settings without changing the singleton', function (): void {
@@ -137,6 +141,7 @@ it('rejects invalid runtime settings without changing the singleton', function (
             'elast_enabled' => 1,
             'trail_retention_hours' => -1,
             'bscs_freshness_max_seconds' => -1,
+            'bscs_cooldown_hours' => 0,
         ])
         ->assertRedirect(route('system.settings'))
         ->assertInvalid([
@@ -145,6 +150,7 @@ it('rejects invalid runtime settings without changing the singleton', function (
             'corr_enabled',
             'trail_retention_hours',
             'bscs_freshness_max_seconds',
+            'bscs_cooldown_hours',
         ]);
 
     expect(Kraite::findOrFail(1)->getRawOriginal())->toBe($before);

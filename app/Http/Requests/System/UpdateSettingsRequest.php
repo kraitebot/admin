@@ -39,6 +39,7 @@ final class UpdateSettingsRequest extends FormRequest
             'elast_enabled' => ['nullable', 'boolean'],
             'trail_retention_hours' => ['nullable', 'integer', 'min:0', 'max:4294967295'],
             'bscs_freshness_max_seconds' => ['required', 'integer', 'min:0', 'max:4294967295'],
+            'bscs_cooldown_hours' => ['nullable', 'integer', 'min:1', 'max:168'],
         ];
     }
 
@@ -56,6 +57,7 @@ final class UpdateSettingsRequest extends FormRequest
             'elast_enabled' => 'elasticity computation switch',
             'trail_retention_hours' => 'trail retention',
             'bscs_freshness_max_seconds' => 'BSCS freshness window',
+            'bscs_cooldown_hours' => 'BSCS cooldown window',
         ];
     }
 

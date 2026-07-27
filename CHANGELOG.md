@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.39.0] — 2026-07-27
+
+### The circuit-breaker pause is now tunable from Runtime Settings
+
+- New "Cooldown window" field under BSCS safety: how many hours new openings
+  stay paused after a critical black-swan score (1–168). Blank inherits the
+  engine default, now 12 hours. Changes apply on the next hourly analysis and
+  land in the settings audit trail like every other runtime control.
+- Ships engine v1.88.0.
+
 ## [0.38.1] — 2026-07-27
 
 ### Position projections can no longer be poisoned by an unpriced fill

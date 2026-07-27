@@ -159,6 +159,14 @@
                     <input id="bscs_freshness_max_seconds" name="bscs_freshness_max_seconds" type="number" min="0" step="1"
                            value="{{ old('bscs_freshness_max_seconds', $engine->bscs_freshness_max_seconds) }}" class="{{ $input }}" required>
                 </x-form.field>
+                <x-form.field
+                    label="Cooldown window"
+                    for="bscs_cooldown_hours"
+                    help="Hours new openings stay paused after a critical score. Blank inherits {{ $effective['bscs_cooldown_hours'] }}h; the window re-arms while the score stays critical.">
+                    <input id="bscs_cooldown_hours" name="bscs_cooldown_hours" type="number" min="1" max="168" step="1"
+                           value="{{ old('bscs_cooldown_hours', $engine->bscs_cooldown_hours) }}" placeholder="Inherit {{ $effective['bscs_cooldown_hours'] }}"
+                           class="{{ $input }}">
+                </x-form.field>
             </x-form.group>
 
             <x-form.group title="Data retention" icon="database" hint="diagnostic history" :cols="1">

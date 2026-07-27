@@ -83,6 +83,7 @@ abstract class TestCase extends BaseTestCase
             $table->boolean('bscs_block_active')->default(false);
             $table->unsignedTinyInteger('bscs_block_threshold')->default(80);
             $table->unsignedInteger('bscs_freshness_max_seconds')->default(6900);
+            $table->unsignedSmallInteger('bscs_cooldown_hours')->nullable();
             $table->dateTime('bscs_override_until')->nullable();
             $table->string('bscs_override_reason')->nullable();
             $table->dateTime('bscs_cooldown_until')->nullable();
