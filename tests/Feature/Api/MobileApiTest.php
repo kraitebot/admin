@@ -72,6 +72,17 @@ function prepareMobileDashboardDataSchema(): void
 
     Schema::create('market_regime_snapshots', function (Blueprint $table): void {
         $table->id();
+        $table->dateTime('computed_at')->nullable();
+        $table->decimal('vol_expansion_value', 8, 4)->nullable();
+        $table->boolean('vol_expansion_fired')->default(false);
+        $table->decimal('range_blowout_value', 8, 4)->nullable();
+        $table->boolean('range_blowout_fired')->default(false);
+        $table->decimal('corr_regime_value', 6, 4)->nullable();
+        $table->boolean('corr_regime_fired')->default(false);
+        $table->decimal('rejection_pct_value', 6, 2)->nullable();
+        $table->boolean('rejection_pct_fired')->default(false);
+        $table->decimal('fut_vol_value', 8, 4)->nullable();
+        $table->boolean('fut_vol_fired')->default(false);
     });
 }
 
@@ -337,6 +348,19 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         'bscs_block_threshold' => 80,
         'bscs_cooldown_until' => null,
     ]);
+    DB::table('market_regime_snapshots')->insert([
+        'computed_at' => now()->subMinutes(12),
+        'vol_expansion_value' => 1.4213,
+        'vol_expansion_fired' => true,
+        'range_blowout_value' => 1.6800,
+        'range_blowout_fired' => true,
+        'corr_regime_value' => 0.5122,
+        'corr_regime_fired' => false,
+        'rejection_pct_value' => -7.25,
+        'rejection_pct_fired' => true,
+        'fut_vol_value' => 1.0500,
+        'fut_vol_fired' => false,
+    ]);
     $before = DB::table('kraite')->where('id', 1)->first();
 
     Sanctum::actingAs($owner, ['dashboard:read']);
@@ -349,7 +373,9 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         ->assertJsonPath('data.dashboard.bscs.status', 'New trades use smaller size.')
         ->assertJsonPath('data.dashboard.bscs.is_stale', false)
         ->assertJsonPath('data.dashboard.bscs.block_threshold', 80)
-        ->assertJsonPath('data.dashboard.bscs.computed_ago', null)
+        ->assertJsonPath('data.dashboard.bscs.computed_ago', '12m ago')
+        // Frozen at 12:00 sharp; the hourly recompute lands at minute 50.
+        ->assertJsonPath('data.dashboard.bscs.next_compute_in', 'in 50m')
         ->assertJsonPath('data.dashboard.bscs.position_cap.long.effective', 3)
         ->assertJsonPath('data.dashboard.bscs.position_cap.long.maximum', 6)
         ->assertJsonPath('data.dashboard.bscs.position_cap.short.effective', 3)
@@ -357,8 +383,7 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         ->assertJsonPath('data.dashboard.bscs.position_cap.ratio_percent', 50)
         ->assertJsonPath('data.dashboard.bscs.paused', false)
         ->assertJsonPath('data.dashboard.bscs.pause_reason', null)
-        ->assertJsonPath('data.dashboard.bscs.cooldown_until', null)
-        ->assertJsonMissingPath('data.dashboard.bscs.components');
+        ->assertJsonPath('data.dashboard.bscs.cooldown_until', null);
 
     expect(array_keys($response->json('data.dashboard.bscs')))->toBe([
         'score',
@@ -372,8 +397,43 @@ it('returns the exact bounded BSCS summary for the mobile market-regime tile', f
         'is_stale',
         'block_threshold',
         'computed_ago',
+        'next_compute_in',
         'position_cap',
+        'components',
+    ])->and($response->json('data.dashboard.bscs.components'))->toBe([
+        ['key' => 'vol_expansion', 'label' => 'Vol expansion', 'value' => 1.42, 'fired' => true],
+        ['key' => 'range_blowout', 'label' => 'Range blowout', 'value' => 1.68, 'fired' => true],
+        ['key' => 'corr_regime', 'label' => 'Correlation regime', 'value' => 0.51, 'fired' => false],
+        ['key' => 'rejection_pct', 'label' => 'Rejection %', 'value' => -7.25, 'fired' => true],
+        ['key' => 'fut_vol', 'label' => 'Futures vol', 'value' => 1.05, 'fired' => false],
     ])->and(DB::table('kraite')->where('id', 1)->first())->toEqual($before);
+});
+
+it('returns an empty BSCS sub-signal list before the first compute lands', function (): void {
+    $this->travelTo(CarbonImmutable::parse('2026-07-19 12:00:00'));
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Mobile BSCS pre-compute owner',
+        'email' => 'mobile-bscs-precompute@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'BSCS pre-compute account',
+        'total_positions_long' => 6,
+        'total_positions_short' => 6,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.bscs.components', [])
+        ->assertJsonPath('data.dashboard.bscs.computed_ago', null);
 });
 
 it('surfaces the error-storm monitor latch on the mobile tile with no false resumption time', function (): void {

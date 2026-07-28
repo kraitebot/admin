@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.41.0] — 2026-07-28
+
+### The mobile API now promises the next market assessment
+
+- The mobile dashboard's market-regime summary carries a countdown to the
+  next hourly score recompute (`next_compute_in`, pre-phrased "in 37m" /
+  "about now"), so the phone can show when the market gets reassessed instead
+  of only how old the current reading is.
+- Production engine pinned to core v1.90.0, the newest published tag.
+
 ## [0.40.0] — 2026-07-27
 
 ### The dashboard now names every pause, including the error-storm monitor

@@ -664,7 +664,9 @@ class DashboardController extends Controller
      *     is_stale: bool,
      *     block_threshold: int,
      *     computed_ago: ?string,
+     *     next_compute_in: string,
      *     position_cap: array{long: array{effective: int, maximum: int}, short: array{effective: int, maximum: int}, ratio_percent: int},
+     *     components: list<array{key: string, label: string, value: ?float, fired: bool}>,
      * }
      */
     private function mobileBscsBadge(Account $account): array
@@ -687,7 +689,16 @@ class DashboardController extends Controller
             'is_stale' => $bscs['is_stale'],
             'block_threshold' => $bscs['block_threshold'],
             'computed_ago' => $bscs['computed_ago'],
+            // Countdown to the next hourly score recompute, so the tile can
+            // promise when the market will be reassessed instead of only
+            // saying how old the current reading is.
+            'next_compute_in' => $bscs['next_compute_in'],
             'position_cap' => $bscs['position_cap'],
+            // Sub-signal breakdown — the phone renders it only when the
+            // regime is off calm or opens are parked, but the payload always
+            // carries it so the tile never has to fetch twice. Empty list
+            // until the first compute lands.
+            'components' => $bscs['components'],
         ];
     }
 
@@ -762,6 +773,10 @@ class DashboardController extends Controller
             foreach ($signalMap as $key => $label) {
                 $value = $snapshot->{$key.'_value'};
                 $components[] = [
+                    // Stable identifier so a client can attach its own copy
+                    // (the phone's per-signal explanations) without matching
+                    // on the display label.
+                    'key' => $key,
                     'label' => $label,
                     'value' => $value !== null ? round((float) $value, 2) : null,
                     'fired' => (bool) $snapshot->{$key.'_fired'},
