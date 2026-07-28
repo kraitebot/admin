@@ -61,6 +61,9 @@ class ProjectionsController extends Controller
      *  - `actuals`     : map of YYYY-MM-DD → exchange-reported net PnL from
      *                    positions closed on that day.
      *  - `current_wallet`: latest `total_wallet_balance` for the account.
+     *  - `realized_roi_pct`: what the viewed month has actually returned —
+     *                    its daily rates chained (time-weighted), so a
+     *                    deposit inside the month never reads as a gain.
      *  - `investment_basis`: auto-assessed personal capital still funding
      *                    the account, plus PnL-coverage metadata.
      *  - `scenarios`   : pessimistic / neutral / optimistic *daily*
@@ -103,6 +106,7 @@ class ProjectionsController extends Controller
             'actuals' => $this->normalizeRevenues($financials->dailyRevenues($monthWindow)),
             'current_wallet' => $investmentBasis['current_wallet'],
             'month_start_wallet' => $financials->startWallet($monthWindow),
+            'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
             'scenarios' => $this->normalizeScenarios($financials->scenarios($currentMonthWindow)),
             'investment_basis' => [
                 'amount' => $this->normalizeMoney($investmentBasis['amount']),

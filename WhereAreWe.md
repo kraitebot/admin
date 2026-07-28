@@ -1,6 +1,24 @@
 # WhereAreWe
 
-_Last updated: 2026-07-25_
+_Last updated: 2026-07-29_
+
+## Session 2026-07-29 — transferred money stopped counting as profit
+
+- A 1,100 deposit into a ~3,900 account exposed three places where cash paid
+  in was reported as performance. Daily rates now divide by the wallet each
+  day actually opened with, window returns chain those rates instead of
+  leaning on one frozen opening balance, and the monthly/yearly outlook is
+  what was delivered chained with growth on today's wallet.
+- The dashboard's portfolio tile shows trading movement only — a transfer no
+  longer paints a green double-digit gain, and a day without closes shows no
+  chip at all.
+- The public site's daily return, overall return, projected month, and
+  sparkline inherit the same engine fix.
+- Left as-is deliberately: the system dashboard's "capital under management"
+  delta still counts a transfer, because that tile measures capital, not
+  performance.
+- Targeted coverage green: 31 tests / 197 assertions in admin, plus the
+  public-stats fleet path on `kraite.test`.
 
 ## Session 2026-07-25 — ladder vocabulary, last close, expired sign-ins
 

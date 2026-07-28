@@ -97,6 +97,7 @@ class ProjectionsController extends Controller
                 ->all(),
             'current_wallet' => $investmentBasis['current_wallet'],
             'month_start_wallet' => $financials->startWallet($monthWindow),
+            'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
             'scenarios' => $this->normalizeScenarios(
                 $financials->scenarios(Window::thisMonth($now)),
             ),

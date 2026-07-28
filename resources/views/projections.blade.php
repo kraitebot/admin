@@ -94,7 +94,7 @@
                 _todayAnchored: false,
                 // Safe stub so the always-rendered control row never reads a
                 // null `m` during the first async fetch; replaced on response.
-                m: { type: 'current', dim: 30, cells: [], startedAt: null, realized: 0, projected: 0, endBal: 0, monthlyPct: 0, cumFromToday: 0, rate: 0, rates: { pess: 0, neutral: 0, opt: 0, n: 0 }, S0: 0, firstWeekday: 0 },
+                m: { type: 'current', dim: 30, cells: [], startedAt: null, realized: 0, projected: 0, endBal: 0, realizedPct: null, monthlyPct: 0, cumFromToday: 0, rate: 0, rates: { pess: 0, neutral: 0, opt: 0, n: 0 }, S0: 0, firstWeekday: 0 },
                 fetched: null,
                 totalsCells: [],
 
@@ -303,6 +303,10 @@
                     const rate = rates[this.scenario] || 0;
                     const S0 = (f.current_wallet != null) ? parseFloat(f.current_wallet) : 0;
                     const monthStart = (f.month_start_wallet != null) ? parseFloat(f.month_start_wallet) : null;
+                    // What the month has actually returned, straight from the
+                    // engine: its daily rates chained. Balance-to-balance maths
+                    // would fold any deposit into the month's "return".
+                    const realizedPct = (f.realized_roi_pct != null) ? parseFloat(f.realized_roi_pct) : null;
                     const actuals = f.actuals || {};
                     const key = (d) => `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
                     const has = (d) => Object.prototype.hasOwnProperty.call(actuals, key(d));
@@ -310,13 +314,14 @@
                     const realizedSum = () => Object.values(actuals).reduce((s, v) => s + parseFloat(v), 0);
 
                     const cells = [];
-                    let startedAt, realized = null, projected = null, endBal;
+                    let startedAt, realized = null, projected = null, endBal, monthlyPct;
 
                     if (type === 'past') {
                         for (let d = 1; d <= dim; d++) cells.push({ day: d, kind: has(d) ? 'realized' : 'empty', amount: has(d) ? amt(d) : null });
                         realized = realizedSum();
                         startedAt = monthStart;
                         endBal = (monthStart != null) ? monthStart + realized : null;
+                        monthlyPct = realizedPct || 0;
                     } else if (type === 'current') {
                         for (let d = 1; d <= dim; d++) {
                             if (d < this.curD) cells.push({ day: d, kind: has(d) ? 'realized' : 'empty', amount: has(d) ? amt(d) : null });
@@ -327,6 +332,10 @@
                         realized = realizedSum();
                         endBal = S0 * Math.pow(1 + rate, dim - this.curD);
                         projected = endBal - S0;
+                        // Delivered so far, chained with the growth still to
+                        // come — never end balance over month-open balance,
+                        // which would count transferred money as return.
+                        monthlyPct = ((1 + (realizedPct || 0) / 100) * (S0 ? endBal / S0 : 1) - 1) * 100;
                     } else {
                         for (let d = 1; d <= dim; d++) {
                             const k = this.idxOf(y, m, d);
@@ -335,11 +344,14 @@
                         startedAt = S0 * Math.pow(1 + rate, this.idxOf(y, m, 1) - 1);
                         endBal = S0 * Math.pow(1 + rate, this.idxOf(y, m, dim));
                         projected = endBal - startedAt;
+                        // Pure forward maths — no real money moves in a month
+                        // that has not happened yet.
+                        monthlyPct = startedAt ? (endBal / startedAt - 1) * 100 : 0;
                     }
 
                     return {
-                        type, dim, cells, startedAt, realized, projected, endBal,
-                        monthlyPct: (endBal != null && startedAt) ? (endBal / startedAt - 1) * 100 : 0,
+                        type, dim, cells, startedAt, realized, projected, endBal, realizedPct,
+                        monthlyPct: isFinite(monthlyPct) ? monthlyPct : 0,
                         cumFromToday: (endBal != null) ? endBal - S0 : 0,
                         rate, rates, S0,
                         firstWeekday: (new Date(Date.UTC(y, m, 1)).getUTCDay() + 6) % 7,   // Mon=0
@@ -362,7 +374,7 @@
                         ? { value: '—', cls: 'text-fg-faint', sub: '' }
                         : { value: fmtSignedFull(m.projected || 0), css: tone.css, sub: tone.label.toUpperCase() + ' · PROJ' };
                     const monthlyCss = t === 'past' ? (m.monthlyPct >= 0 ? 'var(--pnl-up-fg)' : 'var(--pnl-down-fg)') : tone.css;
-                    const realPct = (m.startedAt && m.S0) ? (m.S0 / m.startedAt - 1) * 100 : 0;
+                    const realPct = m.realizedPct || 0;
                     const projPct = m.S0 ? (m.endBal / m.S0 - 1) * 100 : 0;
                     const monthlySub = t === 'past' ? 'REALIZED'
                         : t === 'current' ? `${fmtPct(realPct, 1)} REAL · ${fmtPct(projPct, 1)} PROJ`

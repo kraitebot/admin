@@ -468,8 +468,9 @@ class DashboardController extends Controller
     /**
      * KPI strip — real numbers only:
      *
-     *  - Portfolio value: latest wallet snapshot + 24h delta + the recent
-     *    snapshot series for the sparkline.
+     *  - Portfolio value: latest wallet snapshot + the recent snapshot
+     *    series for the sparkline. Its 24h delta is trade-driven, not
+     *    wallet-driven, so transferred money never reads as a gain.
      *  - P&L today / 30d: realized trade PnL via AccountFinancials (the
      *    same engine Projections and the marketing site read), so the
      *    dashboard can never disagree with them. 30d carries a sparkline
@@ -496,15 +497,26 @@ class DashboardController extends Controller
 
         $balance = $series === [] ? null : end($series);
 
+        // One clock for both halves of the chip: the wallet it divides by and
+        // the window it sums trades over have to mean the same "24h ago".
+        $now = CarbonImmutable::now();
+
         $dayAgo = DB::table('account_balance_history')
             ->where('account_id', $account->id)
-            ->where('created_at', '<=', now()->subDay())
+            ->where('created_at', '<=', $now->subDay())
             ->orderByDesc('id')
             ->value('total_wallet_balance');
 
+        // The chip beside the portfolio value is read as performance, so it
+        // reports the trading slice of the last 24h only. Raw wallet drift
+        // would paint a deposit as a double-digit "gain" — the wallet grew,
+        // the trader did not. Cash flow is exactly `walletChange − tradePnl`,
+        // so dividing trade PnL alone by the 24h-ago wallet strips it out.
+        $pnl24h = $financials->realizedDelta(Window::between($now->subDay(), $now));
+
         $balanceDelta24hPct = null;
-        if ($balance !== null && $dayAgo !== null && (float) $dayAgo > 0) {
-            $balanceDelta24hPct = round((($balance - (float) $dayAgo) / (float) $dayAgo) * 100, 2);
+        if ($pnl24h !== null && $dayAgo !== null && (float) $dayAgo > 0) {
+            $balanceDelta24hPct = round((float) bcmul(bcdiv($pnl24h, (string) $dayAgo, 8), '100', 4), 2);
         }
 
         // ---- realized P&L: today + 30d (trade-PnL sourced) ----

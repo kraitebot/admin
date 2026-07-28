@@ -141,7 +141,10 @@ it('serves the month feed with realized actuals and observed scenarios', functio
     // One observed day → all three scenarios collapse onto its daily rate (1%).
     expect((float) $response->json('scenarios.neutral_pct'))->toEqualWithDelta(0.01, 0.0001)
         ->and((float) $response->json('current_wallet'))->toBe(1010.0)
-        ->and((float) $response->json('month_start_wallet'))->toBe(1000.0);
+        ->and((float) $response->json('month_start_wallet'))->toBe(1000.0)
+        // The month's own return, chained from its daily rates — the calendar
+        // reads this instead of measuring today's wallet against month open.
+        ->and($response->json('realized_roi_pct'))->toEqualWithDelta(1.0, 0.0001);
 });
 
 it('automatically adjusts the investment basis for money movements not explained by trading pnl', function (): void {
@@ -497,6 +500,19 @@ it('renders the yearly outlook and nested monthly and yearly navigation', functi
         ->assertSee('data-child-icon="calendar"', false)
         ->assertSee('data-child-icon="bar-chart-2"', false)
         ->assertSee(route('projections.yearly.data'), false);
+});
+
+it('builds the monthly return from delivered plus projected, never balance over balance', function (): void {
+    $view = file_get_contents(resource_path('views/projections.blade.php'));
+
+    expect($view)
+        // Server-side realized rate feeds both the headline and the REAL split.
+        ->toContain('const realizedPct = (f.realized_roi_pct != null) ? parseFloat(f.realized_roi_pct) : null;')
+        ->toContain('const realPct = m.realizedPct || 0;')
+        ->toContain('monthlyPct = ((1 + (realizedPct || 0) / 100) * (S0 ? endBal / S0 : 1) - 1) * 100;')
+        // The old wallet-over-wallet forms would fold a deposit into "return".
+        ->not->toContain('(m.S0 / m.startedAt - 1) * 100')
+        ->not->toContain('monthlyPct: (endBal != null && startedAt) ? (endBal / startedAt - 1) * 100 : 0');
 });
 
 it('states the account plainly when there is nothing to switch between', function (): void {

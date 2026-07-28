@@ -2,6 +2,30 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.42.0] — 2026-07-29
+
+### Money paid in is no longer counted as profit
+
+- Every return percentage now divides by the capital that actually did the
+  trading. Each day is scored against the wallet it opened with, and a
+  window's return chains those daily rates together instead of measuring
+  today's balance against the one the window opened with. Paying money into
+  an account raises the euros it can earn and leaves its reported rate alone.
+- The monthly and yearly outlook is what the period has already delivered
+  chained with the growth still expected from today's wallet, so a deposit
+  can no longer appear inside a projected return.
+- The dashboard's portfolio tile reports trading movement only. A transfer
+  stops painting a green double-digit gain, and a day with no closed
+  positions shows no change at all rather than wallet drift.
+- The projections calendar reads the month's own return from the engine
+  instead of deriving it from balances, so its headline and its
+  "real vs projected" split agree with everything else.
+- Unchanged on purpose: the system dashboard's capital-under-management
+  delta still counts transfers, because that tile measures capital rather
+  than performance.
+- Production engine pinned to core v1.91.0, which carries the shared fix for
+  admin and kraite.com alike.
+
 ## [0.41.0] — 2026-07-28
 
 ### The mobile API now promises the next market assessment
