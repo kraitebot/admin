@@ -52,6 +52,39 @@
             // layout stacks six before paging.
             perPage() { return this.cols === 3 ? 6 : this.cols === 2 ? 4 : 6; },
 
+            // ---- trading day basis suggestion ----
+            // Answered in this tab: hides the dialog immediately, without
+            // waiting for the next poll to drop the hint from the payload.
+            basisHintAnswered: false,
+            async answerBasisHint(accept) {
+                const hint = this.d?.day_basis_hint;
+                if (!hint) return;
+                this.basisHintAnswered = true;
+                try {
+                    await fetch(@js(route('profile.day-basis-hint')), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            // No csrf-token meta exists in this layout, and the
+                            // page is server-rendered, so the token travels with it.
+                            'X-CSRF-TOKEN': @js(csrf_token()),
+                        },
+                        body: JSON.stringify({
+                            country_code: hint.country_code,
+                            accept: accept,
+                            utc_offset_minutes: hint.suggested_offset_minutes,
+                        }),
+                    });
+                    // Switching re-slices every figure on the page, so reload
+                    // rather than leave the old day's numbers on screen.
+                    if (accept) window.location.reload();
+                } catch (_) {
+                    // The answer is recorded on the next successful attempt;
+                    // the dialog stays dismissed either way for this tab.
+                }
+            },
+
             // ---- data ----
             spinning: false,
             async refresh() {
@@ -336,6 +369,43 @@
             'start' => route('dashboard.connectivity.test'),
             'status' => route('accounts.connectivity.status', '__UUID__'),
         ]))">
+
+        {{-- Trading day basis: the trader turned up somewhere new. We offer,
+             we never switch on our own — the basis is set to match their
+             exchange, and the exchange setting does not travel with them. --}}
+        <template x-if="d?.day_basis_hint && !basisHintAnswered">
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4"
+                 style="background: rgba(15, 23, 42, 0.45); backdrop-filter: blur(3px);">
+                <div class="w-full max-w-md rounded-2xl bg-white border border-gray-200 shadow-2xl p-8">
+                    <div class="w-14 h-14 mx-auto mb-4 rounded-full bg-sky-50 border border-sky-200 flex items-center justify-center">
+                        <x-feathericon-map-pin class="w-7 h-7 text-sky-600" stroke-width="2"/>
+                    </div>
+                    <h2 class="font-sans font-bold text-[20px] tracking-[-0.02em] text-gray-900 mb-2 text-center">
+                        You appear to be in <span x-text="d.day_basis_hint.country_name"></span>
+                    </h2>
+                    <p class="text-[14px] text-gray-600 leading-relaxed mb-4 text-center">
+                        Your trading day currently starts at
+                        <span class="font-mono text-gray-900" x-text="d.day_basis_hint.current_label"></span>,
+                        matching your exchange. Local time here is
+                        <span class="font-mono text-gray-900" x-text="d.day_basis_hint.suggested_label"></span>.
+                    </p>
+                    <p class="text-[12.5px] text-gray-500 leading-relaxed mb-6 text-center">
+                        Only switch if you also changed the day basis on your exchange —
+                        otherwise the two will disagree about which trades belong to today.
+                    </p>
+                    <div class="flex gap-3">
+                        <button type="button" @click="answerBasisHint(false)"
+                                class="flex-1 h-[40px] rounded-control border border-gray-300 bg-white text-[13px] font-semibold text-gray-700 hover:bg-gray-50 transition-colors">
+                            Keep <span x-text="d.day_basis_hint.current_label"></span>
+                        </button>
+                        <button type="button" @click="answerBasisHint(true)"
+                                class="flex-1 h-[40px] rounded-control bg-gray-900 text-[13px] font-semibold text-white hover:bg-gray-800 transition-colors">
+                            Switch to <span x-text="d.day_basis_hint.suggested_label"></span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </template>
 
         @if (session('registration_welcome'))
             {{-- One-shot welcome popup after the kraite.com registration handoff --}}

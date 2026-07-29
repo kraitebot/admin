@@ -2,6 +2,24 @@
 
 _Last updated: 2026-07-29_
 
+## Session 2026-07-29 (later) — daily figures now match the exchange
+
+- The remaining gap against Binance (+11.51 here vs +9.83 there) was not the
+  timezone: we filed a trade's whole result under its close date while the
+  exchange books each fee and fill when it charges it. A position spanning
+  midnight carried its opening commission and overnight funding into the
+  wrong day.
+- Daily figures now come from a mirrored exchange income ledger
+  (`account_incomes`), each record on its own booking day. Position-level PnL
+  is unchanged; windows older than the ledger keep close-date grouping.
+- The sync asks per account in one paginated call. The per-symbol shape
+  tripped Binance's 2,400/min per-IP limit during investigation — a limit the
+  trading engine shares.
+- Moving country now offers the local day basis once, with a Keep/Switch
+  choice on both the dashboard and the phone. It never switches on its own:
+  the basis matches the trader's exchange, which does not travel with them.
+- Coverage: 358 admin, 85 kraite.com, 56 mobile.
+
 ## Session 2026-07-29 — the trading day now starts when the exchange says
 
 - Kraite counted every trader's day in UTC while Binance counted Bruno's

@@ -2,6 +2,26 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.44.0] — 2026-07-29
+
+### Daily profit is now counted the way your exchange counts it
+
+- Your daily figure is built from the exchange's own record of every fee and
+  fill, each counted on the day it was actually charged. A position you open
+  one evening and close the next morning now leaves its opening fee on the
+  first day, and funding on a position you are still holding counts the day
+  it is taken — not whenever that position eventually closes.
+- That was the last gap against Binance: for the same hours we read +11.51
+  where the exchange read +9.83, because we were piling a trade's whole cost
+  onto its closing day. Same money, wrong day.
+- Older months are untouched. They keep the figures they always had, since
+  the exchange only serves recent history.
+- Landing in another country now offers to move your trading day to local
+  time — once, with Keep and Switch, on the dashboard and on the phone. It
+  never changes on its own: your trading day is set to match your exchange,
+  and that setting does not travel with you.
+- Production engine pinned to core v1.93.1.
+
 ## [0.43.0] — 2026-07-29
 
 ### Your trading day now starts when your exchange says it does

@@ -18,6 +18,7 @@ use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Position;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
+use Kraite\Core\Support\Financial\DayBasisLocationHint;
 use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\Bscs;
 
@@ -157,8 +158,32 @@ class DashboardController extends Controller
             'positions' => $positions,
             'activity' => $this->activityFeed($account),
             'connectivity_servers' => $this->connectivityServers(),
+            'day_basis_hint' => $this->dayBasisHint(),
             'generated_at' => now()->toIso8601String(),
         ];
+    }
+
+    /**
+     * A one-time offer to move the trading day basis after the trader shows up
+     * in a different country. Never changes anything on its own — the basis is
+     * there to match their exchange, which does not travel with them.
+     *
+     * The country comes from the CDN edge, which sees the real client IP; the
+     * origin only ever sees Cloudflare's.
+     *
+     * @return array<string, mixed>|null
+     */
+    private function dayBasisHint(): ?array
+    {
+        $user = Auth::user();
+
+        if ($user === null) {
+            return null;
+        }
+
+        $hint = DayBasisLocationHint::for($user, request()->header('CF-IPCountry'));
+
+        return $hint?->toArray();
     }
 
     /**
@@ -179,6 +204,7 @@ class DashboardController extends Controller
                 'exchange' => $account->apiSystem?->name ?? 'Unknown',
             ],
             'kpis' => $this->kpis($account, $positions),
+            'day_basis_hint' => $this->dayBasisHint(),
             'bscs' => $this->mobileBscsBadge($account),
             'last_position_closed_at' => $this->lastPositionClosedAt($account),
             'positions' => $positions,

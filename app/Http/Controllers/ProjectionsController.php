@@ -149,9 +149,13 @@ class ProjectionsController extends Controller
 
     public function yearlyData(YearlyProjectionPlanner $planner): JsonResponse
     {
+        // `incomes_synced_from` comes along deliberately: the financial engine
+        // reads it off the account to decide whether a window can be built
+        // from the exchange income ledger, and an account hydrated without it
+        // would quietly fall back to close-day figures.
         $accounts = Account::query()
             ->when(! Auth::user()->is_admin, fn ($query) => $query->where('user_id', Auth::id()))
-            ->get(['id']);
+            ->get(['id', 'incomes_synced_from']);
         $now = CarbonImmutable::now();
         $financials = new FleetFinancials($accounts);
         $scenarios = $financials->scenarios(Window::thisMonth($now));

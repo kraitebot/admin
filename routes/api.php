@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\DashboardController;
 use App\Http\Controllers\Api\V1\PasskeyController;
 use App\Http\Controllers\Api\V1\PositionsController;
 use App\Http\Controllers\Api\V1\ProjectionsController;
+use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
 Route::domain(config('domains.api'))->group(function (): void {
@@ -42,6 +43,11 @@ Route::domain(config('domains.api'))->group(function (): void {
             Route::get('/passkeys', [PasskeyController::class, 'index'])
                 ->middleware('throttle:30,1');
             Route::get('/passkeys/register/options', [PasskeyController::class, 'registrationOptions'])
+                ->middleware('throttle:10,1');
+            // Answering the "you appear to be in <country>" offer. A read token
+            // is enough: this only records a reporting preference, and refusing
+            // it here would leave the phone unable to dismiss its own dialog.
+            Route::post('/profile/day-basis-hint', [ProfileController::class, 'resolveDayBasisHint'])
                 ->middleware('throttle:10,1');
             Route::post('/passkeys', [PasskeyController::class, 'store'])
                 ->middleware('throttle:10,1');

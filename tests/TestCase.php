@@ -187,6 +187,10 @@ abstract class TestCase extends BaseTestCase
             $table->json('notification_channels')->nullable();
             // Trading-day basis in minutes from UTC; 0 keeps the UTC day.
             $table->smallInteger('utc_offset_minutes')->default(0);
+            // Where the trader was last seen, and the last country a basis
+            // suggestion was offered for.
+            $table->string('last_seen_country', 2)->nullable();
+            $table->string('basis_hint_country', 2)->nullable();
         });
     }
 }

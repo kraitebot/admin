@@ -54,6 +54,10 @@ Route::domain(config('domains.admin'))->group(function () {
 
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+        // Answer to the "you appear to be in <country>" offer. Both answers
+        // are recorded, so a declined suggestion stays declined.
+        Route::post('/profile/day-basis-hint', [ProfileController::class, 'resolveDayBasisHint'])
+            ->name('profile.day-basis-hint');
         Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 
         // Dashboard data feed
