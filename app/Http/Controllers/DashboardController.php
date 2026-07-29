@@ -520,8 +520,11 @@ class DashboardController extends Controller
         }
 
         // ---- realized P&L: today + 30d (trade-PnL sourced) ----
-        $todayWindow = Window::today();
-        $monthWindow = Window::lastDays(30);
+        // "Today" is the trader's day, which starts when their exchange says
+        // it does — a UTC+2 trader's day opened at 22:00 UTC yesterday.
+        $basis = $financials->reportingDay();
+        $todayWindow = Window::today($now, $basis);
+        $monthWindow = Window::lastDays(30, $now, $basis);
 
         $pnlToday = $financials->realizedDelta($todayWindow);
         $pnl30d = $financials->realizedDelta($monthWindow);

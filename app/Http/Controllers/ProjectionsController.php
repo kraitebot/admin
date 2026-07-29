@@ -92,11 +92,19 @@ class ProjectionsController extends Controller
         $month = (int) $request->input('month');
 
         $now = CarbonImmutable::now();
-        $monthAnchor = CarbonImmutable::create($year, $month, 1);
-        $monthWindow = Window::thisMonth($monthAnchor);
-        $currentMonthWindow = Window::thisMonth($now);
-
         $financials = new AccountFinancials($account);
+
+        // Calendar days, the month's edges and "today" all follow the day
+        // basis the trader's exchange uses, so a close at 22:30 UTC lands on
+        // the same square here as it does on their exchange statement.
+        $dayBasis = $financials->reportingDay();
+        // Midday, not midnight: a trader west of UTC would see 00:00 on the
+        // 1st shifted back into the previous month, and the whole calendar
+        // would silently render the wrong month.
+        $monthAnchor = CarbonImmutable::create($year, $month, 1, 12);
+        $monthWindow = Window::thisMonth($monthAnchor, $dayBasis);
+        $currentMonthWindow = Window::thisMonth($now, $dayBasis);
+
         $investmentBasis = $financials->investmentBasis();
 
         return response()->json([
@@ -117,7 +125,9 @@ class ProjectionsController extends Controller
                 'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
                 'is_complete' => $investmentBasis['is_complete'],
             ],
-            'today' => $now->toDateString(),
+            'today' => $dayBasis->dateOf($now),
+            'utc_offset_minutes' => $dayBasis->offsetMinutes,
+            'day_basis_label' => $dayBasis->label(),
         ]);
     }
 

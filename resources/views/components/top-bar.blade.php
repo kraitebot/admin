@@ -9,6 +9,12 @@
     $user = auth()->user();
     $userName = $user?->name ?? 'Guest';
     $userRole = $user?->is_admin ? 'SYSADMIN' : 'TRADER';
+
+    // The trader's day basis drives the header clock, so the time on screen
+    // is the one their daily figures are counted against.
+    $dayBasis = \Kraite\Core\Support\Financial\ReportingDay::forUser($user);
+    $dayBasisMinutes = $dayBasis->offsetMinutes;
+    $dayBasisLabel = $dayBasis->label();
     $userInitials = collect(explode(' ', trim($userName)))
         ->filter()
         ->map(fn ($w) => mb_strtoupper(mb_substr($w, 0, 1)))
@@ -16,7 +22,7 @@
         ->implode('') ?: '?';
 @endphp
 <header class="h-14 flex-shrink-0 bg-[#07090b] flex items-center gap-4 px-5 z-20 max-[640px]:px-3 max-[640px]:gap-2"
-        x-data="{ now: '' , tick() { const d = new Date(); const pad = n => String(n).padStart(2,'0'); this.now = pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds()); } }"
+        x-data="{ now: '', basisMinutes: {{ (int) ($dayBasisMinutes ?? 0) }}, tick() { const d = new Date(Date.now() + this.basisMinutes * 60000); const pad = n => String(n).padStart(2,'0'); this.now = pad(d.getUTCHours())+':'+pad(d.getUTCMinutes())+':'+pad(d.getUTCSeconds()); } }"
         x-init="tick(); setInterval(() => tick(), 1000)">
     {{-- Phone-only hamburger — opens the nav drawer (the vertical rail is
          hidden ≤640px). --}}
@@ -40,7 +46,10 @@
 
     <div class="font-mono text-[12px] text-ink-7 tabular-nums flex items-center gap-2 max-[820px]:hidden">
         <span class="w-1.5 h-1.5 rounded-chip bg-green-500"></span>
-        <span x-text="now + ' UTC'"></span>
+        {{-- The trader's own clock: the same basis their trading day and
+             daily P&L are counted on, so the header never implies a day
+             boundary the numbers below do not use. --}}
+        <span x-text="now + ' {{ $dayBasisLabel ?? 'UTC+00:00' }}'"></span>
     </div>
     <div class="w-px h-6 bg-ink-3"></div>
 

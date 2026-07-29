@@ -84,8 +84,18 @@ class ProjectionsController extends Controller
         int $month,
         CarbonImmutable $now,
     ): array {
-        $monthWindow = Window::thisMonth(CarbonImmutable::create($year, $month, 1));
         $financials = new AccountFinancials($account);
+
+        // Same day basis the web calendar uses — the phone must not slice the
+        // month on different hours than the browser does.
+        $dayBasis = $financials->reportingDay();
+
+        // Midday, not midnight: a trader west of UTC would see 00:00 on the
+        // 1st shifted back into the previous month, and the whole calendar
+        // would silently render the wrong month.
+        $monthAnchor = CarbonImmutable::create($year, $month, 1, 12);
+        $monthWindow = Window::thisMonth($monthAnchor, $dayBasis);
+
         $investmentBasis = $financials->investmentBasis();
 
         return [
@@ -99,7 +109,7 @@ class ProjectionsController extends Controller
             'month_start_wallet' => $financials->startWallet($monthWindow),
             'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
             'scenarios' => $this->normalizeScenarios(
-                $financials->scenarios(Window::thisMonth($now)),
+                $financials->scenarios(Window::thisMonth($now, $dayBasis)),
             ),
             'investment_basis' => [
                 'amount' => $this->normalizeMoney($investmentBasis['amount']),
@@ -110,7 +120,9 @@ class ProjectionsController extends Controller
                 'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
                 'is_complete' => $investmentBasis['is_complete'],
             ],
-            'today' => $now->toDateString(),
+            'today' => $dayBasis->dateOf($now),
+            'utc_offset_minutes' => $dayBasis->offsetMinutes,
+            'day_basis_label' => $dayBasis->label(),
         ];
     }
 

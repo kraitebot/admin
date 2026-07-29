@@ -185,6 +185,8 @@ abstract class TestCase extends BaseTestCase
             $table->boolean('is_active')->default(true);
             $table->boolean('is_admin')->default(false);
             $table->json('notification_channels')->nullable();
+            // Trading-day basis in minutes from UTC; 0 keeps the UTC day.
+            $table->smallInteger('utc_offset_minutes')->default(0);
         });
     }
 }

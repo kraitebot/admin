@@ -58,6 +58,21 @@
                         </div>
                     @endif
                 </div>
+                <div>
+                    <div class="{{ $lbl }}">Trading day basis</div>
+                    <select name="utc_offset_minutes" class="{{ $ctrl }}">
+                        @foreach($dayBasisOptions as $minutes => $label)
+                            <option value="{{ $minutes }}" @selected((int) old('utc_offset_minutes', $user->utc_offset_minutes ?? 0) === $minutes)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('utc_offset_minutes')<div class="{{ $err }}">{{ $message }}</div>@enderror
+                    <div class="text-[12px] text-fg-3 mt-2 leading-[1.5]">
+                        The hour your trading day starts. Match it to your exchange —
+                        on Binance it is <span class="text-fg-1">Settings → Trade Preference → Change Basis</span> —
+                        so daily profit here covers the same hours it does there.
+                        Stored times never change; only which day they are counted under.
+                    </div>
+                </div>
                 <div class="flex items-center gap-3 pt-1">
                     <button type="submit" class="{{ $btnPrimary }}">Save changes</button>
                 </div>

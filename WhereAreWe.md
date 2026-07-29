@@ -2,6 +2,20 @@
 
 _Last updated: 2026-07-29_
 
+## Session 2026-07-29 — the trading day now starts when the exchange says
+
+- Kraite counted every trader's day in UTC while Binance counted Bruno's
+  from UTC+2, so at 23:38 UTC the dashboard showed a full UTC day (+$4.72)
+  against an exchange day only 1h38m old.
+- Traders now pick a **Trading day basis** on their profile (the same fixed
+  UTC offset their exchange stores). The daily P&L tile, calendar squares,
+  scenario band, month edges and the header clock all follow it.
+- Stored timestamps stay UTC everywhere — only the question "which day does
+  this trade belong to" moved.
+- Public site figures span every trader, so they stay on UTC deliberately.
+- Coverage: 327 admin tests, 85 on kraite.com, 56 mobile unit tests plus
+  typecheck.
+
 ## Session 2026-07-29 — transferred money stopped counting as profit
 
 - A 1,100 deposit into a ~3,900 account exposed three places where cash paid

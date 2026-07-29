@@ -2,6 +2,28 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.43.0] — 2026-07-29
+
+### Your trading day now starts when your exchange says it does
+
+- Your profile carries a **Trading day basis** — the hour your trading day
+  rolls over. Match it to your exchange (on Binance: Settings → Trade
+  Preference → Change Basis) and daily profit here covers exactly the same
+  hours it does there. Everyone stays on UTC until they change it.
+- P&L today, the projections calendar squares, the scenario band, the
+  month's opening and closing edges and the clock in the header all follow
+  that basis. A close at 22:30 UTC lands on tomorrow's square for a UTC+2
+  trader, exactly as it does on their exchange statement.
+- The phone shows which basis its calendar is drawn on and opens on the
+  month you are actually in, rather than the one your handset's clock is in.
+- Stored times never move. Position history, order history and audit records
+  stay UTC — only the day a figure is counted under follows the basis.
+- Note it does not close the whole gap against an exchange's own daily
+  figure: exchanges usually report total equity change including open
+  positions, often converted to a display currency, while Kraite reports
+  realised profit from closed trades in the settlement currency.
+- Production engine pinned to core v1.92.0.
+
 ## [0.42.0] — 2026-07-29
 
 ### Money paid in is no longer counted as profit
