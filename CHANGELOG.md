@@ -2,6 +2,18 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.45.0] — 2026-07-29
+
+### Engine refresh
+
+- [CHANGED] Ships `kraitebot/core` 1.95.0, which meters every Binance call
+  against the shared per-address budget instead of only checking once when a
+  job starts. Admin makes exchange calls through the same client, so the
+  console can no longer contribute to an unmetered burst either.
+- [CHANGED] Third-party dependencies refreshed for local development
+  (Guzzle, Resend, Pint, Symfony polyfills). Production resolves nothing on
+  the server — its lock moved for `kraitebot/core` alone, verified by diff.
+
 ## [0.44.0] — 2026-07-29
 
 ### Daily profit is now counted the way your exchange counts it
