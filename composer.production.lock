@@ -1608,16 +1608,16 @@
         },
         {
             "name": "kraitebot/core",
-            "version": "v1.95.0",
+            "version": "v1.96.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/kraitebot/core.git",
-                "reference": "7c7aa499b602de9c09c53b3bad04298c09641bf9"
+                "reference": "2ae1e01085de897cc11ec4df75885b5a2539c3dd"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/kraitebot/core/zipball/7c7aa499b602de9c09c53b3bad04298c09641bf9",
-                "reference": "7c7aa499b602de9c09c53b3bad04298c09641bf9",
+                "url": "https://api.github.com/repos/kraitebot/core/zipball/2ae1e01085de897cc11ec4df75885b5a2539c3dd",
+                "reference": "2ae1e01085de897cc11ec4df75885b5a2539c3dd",
                 "shasum": ""
             },
             "require": {
@@ -1671,10 +1671,10 @@
                 "laravel"
             ],
             "support": {
-                "source": "https://github.com/kraitebot/core/tree/v1.95.0",
+                "source": "https://github.com/kraitebot/core/tree/v1.96.0",
                 "issues": "https://github.com/kraitebot/core/issues"
             },
-            "time": "2026-07-29T15:06:00+00:00"
+            "time": "2026-07-30T21:57:22+00:00"
         },
         {
             "name": "laravel-notification-channels/pushover",

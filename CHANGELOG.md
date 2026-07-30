@@ -2,6 +2,21 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.46.0] — 2026-07-30
+
+### The trader app owns its notification history
+
+- [ADDED] Authenticated iPhones can register their Expo token and safely move
+  the same physical device between trader accounts.
+- [ADDED] The mobile API returns only the current trader's app-channel
+  notification history, newest first, with cursor pagination.
+- [ADDED] Signing out disables that phone for the current trader before the
+  access token is removed.
+- [DEPENDENCY] Production ships `kraitebot/core` 1.96.0 for push delivery,
+  encrypted device storage, audit history, and app-only breaker events.
+- [VERIFIED] Mobile notification API coverage passes: 4 tests and 39
+  assertions.
+
 ## [0.45.0] — 2026-07-29
 
 ### Engine refresh

@@ -48,6 +48,8 @@ abstract class TestCase extends BaseTestCase
         $this->stubCoreUsersTableExtensions();
         $this->stubCoreKraiteSingleton();
         $this->stubCoreModelLogsSchema();
+        $this->stubCoreNotificationLogsSchema();
+        $this->stubCoreAppPushDevicesSchema();
     }
 
     /**
@@ -87,6 +89,7 @@ abstract class TestCase extends BaseTestCase
             $table->dateTime('bscs_override_until')->nullable();
             $table->string('bscs_override_reason')->nullable();
             $table->dateTime('bscs_cooldown_until')->nullable();
+            $table->string('bscs_cooldown_source', 32)->nullable();
             $table->decimal('top_up_minimum_when_covered_usdt', 12, 4)->default(20);
             $table->boolean('in_private_beta')->default(false);
             $table->timestamps();
@@ -124,6 +127,59 @@ abstract class TestCase extends BaseTestCase
             $table->timestamps();
 
             $table->index(['loggable_type', 'loggable_id']);
+        });
+    }
+
+    private function stubCoreNotificationLogsSchema(): void
+    {
+        if (Schema::hasTable('notification_logs')) {
+            return;
+        }
+
+        Schema::create('notification_logs', function (Blueprint $table): void {
+            $table->id();
+            $table->uuid('uuid')->unique();
+            $table->unsignedBigInteger('notification_id')->nullable();
+            $table->string('canonical');
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->string('relatable_type')->nullable();
+            $table->unsignedBigInteger('relatable_id')->nullable();
+            $table->string('channel');
+            $table->string('recipient');
+            $table->string('message_id')->nullable();
+            $table->timestamp('sent_at');
+            $table->timestamp('opened_at')->nullable();
+            $table->timestamp('soft_bounced_at')->nullable();
+            $table->timestamp('hard_bounced_at')->nullable();
+            $table->string('status')->default('delivered');
+            $table->boolean('passed_threshold')->default(true);
+            $table->json('http_headers_sent')->nullable();
+            $table->json('http_headers_received')->nullable();
+            $table->json('gateway_response')->nullable();
+            $table->longText('content_dump')->nullable();
+            $table->longText('raw_email_content')->nullable();
+            $table->text('error_message')->nullable();
+            $table->timestamps();
+        });
+    }
+
+    private function stubCoreAppPushDevicesSchema(): void
+    {
+        if (Schema::hasTable('app_push_devices')) {
+            return;
+        }
+
+        Schema::create('app_push_devices', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('user_id')->nullable();
+            $table->text('expo_push_token');
+            $table->char('token_hash', 64)->unique();
+            $table->string('platform', 16)->default('ios');
+            $table->string('device_name', 100);
+            $table->string('app_version', 32)->nullable();
+            $table->timestamp('last_registered_at');
+            $table->timestamp('disabled_at')->nullable();
+            $table->timestamps();
         });
     }
 

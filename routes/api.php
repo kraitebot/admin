@@ -5,9 +5,11 @@ declare(strict_types=1);
 use App\Http\Controllers\Accounts\AccountController;
 use App\Http\Controllers\Api\V1\AuthController;
 use App\Http\Controllers\Api\V1\DashboardController;
+use App\Http\Controllers\Api\V1\NotificationController;
 use App\Http\Controllers\Api\V1\PasskeyController;
 use App\Http\Controllers\Api\V1\PositionsController;
 use App\Http\Controllers\Api\V1\ProjectionsController;
+use App\Http\Controllers\Api\V1\PushDeviceController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -37,6 +39,10 @@ Route::domain(config('domains.api'))->group(function (): void {
                 ->middleware('throttle:30,1');
             Route::get('/projections', ProjectionsController::class)
                 ->middleware('throttle:30,1');
+            Route::get('/notifications', NotificationController::class)
+                ->middleware('throttle:30,1');
+            Route::put('/push-devices/current', [PushDeviceController::class, 'store'])
+                ->middleware('throttle:10,1');
             Route::get('/accounts', [AccountController::class, 'mobileData'])
                 ->name('api.accounts.index')
                 ->middleware('throttle:30,1');
