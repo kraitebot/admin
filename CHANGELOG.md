@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.46.1] — 2026-08-01
+
+### Background trader notifications show one unread event
+
+- [DEPENDENCY] Production ships `kraitebot/core` 1.96.1 so background iPhone
+  pushes mark the Kraite Home Screen badge with `1` until the app reads them.
+- [UNCHANGED] The production lock moved for `kraitebot/core` alone.
+
 ## [0.46.0] — 2026-07-30
 
 ### The trader app owns its notification history
