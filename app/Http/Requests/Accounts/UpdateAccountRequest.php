@@ -10,9 +10,7 @@ use Illuminate\Validation\Rule;
 use Kraite\Core\Models\Account;
 
 /**
- * Validation + ownership gate for the edit-account form. Sysadmin can hit
- * any account; everyone else is scoped to their own — same 404 surface
- * either way.
+ * Validation + ownership gate for the edit-account form.
  *
  * The numeric `in:` lists are deliberate — the operator picks from a
  * curated set of values rather than free-typing arbitrary numbers, which
@@ -40,13 +38,10 @@ final class UpdateAccountRequest extends FormRequest
 
     public function authorize(): bool
     {
-        $query = Account::where('id', $this->input('account_id'));
-
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        return $query->exists();
+        return Account::query()
+            ->where('id', $this->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->exists();
     }
 
     /**

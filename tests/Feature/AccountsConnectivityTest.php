@@ -236,23 +236,26 @@ it('requires explicit mobile write access and preserves trader ownership', funct
     )->assertForbidden();
 });
 
-it('keeps mobile account access owner-scoped for administrators', function (): void {
+it('rejects existing administrator tokens from mobile account routes', function (): void {
     $administrator = User::factory()->create(['is_admin' => true]);
     $otherTrader = User::factory()->create();
     $ownedAccount = createAccountForConnectivityTest($administrator, true);
     $foreignAccount = createAccountForConnectivityTest($otherTrader, true);
+    $originalOwnedName = $ownedAccount->name;
+    $originalForeignName = $foreignAccount->name;
 
     Sanctum::actingAs($administrator, ['dashboard:read', 'accounts:write']);
 
     $this->getJson('https://api.kraite.com/v1/accounts')
-        ->assertSuccessful()
-        ->assertJsonCount(1, 'data.accounts')
-        ->assertJsonPath('data.accounts.0.id', $ownedAccount->id);
+        ->assertForbidden();
 
     $this->patchJson(
         'https://api.kraite.com/v1/accounts',
         validAccountConfigurationPayload($foreignAccount),
-    )->assertNotFound();
+    )->assertForbidden();
+
+    expect($ownedAccount->fresh()->name)->toBe($originalOwnedName)
+        ->and($foreignAccount->fresh()->name)->toBe($originalForeignName);
 });
 
 it('serves owned quote assets to the mobile app behind the write ability', function (): void {

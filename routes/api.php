@@ -30,7 +30,7 @@ Route::domain(config('domains.api'))->group(function (): void {
         Route::post('/auth/passkey/token', [PasskeyController::class, 'authenticate'])
             ->middleware('throttle:10,1');
 
-        Route::middleware(['auth:sanctum', 'ability:dashboard:read'])->group(function (): void {
+        Route::middleware(['auth:sanctum', 'trader', 'ability:dashboard:read'])->group(function (): void {
             Route::delete('/auth/token', [AuthController::class, 'destroy'])
                 ->middleware('throttle:10,1');
             Route::get('/dashboard', DashboardController::class)

@@ -15,6 +15,18 @@ test('password can be confirmed', function (): void {
     $response->assertSessionHasNoErrors();
 });
 
+test('confirmed sysadmin passwords fall back to the system dashboard', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'confirmed-password-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+
+    $this->actingAs($admin)
+        ->post('/confirm-password', ['password' => 'password'])
+        ->assertRedirect(route('system.dashboard', absolute: false))
+        ->assertSessionHasNoErrors();
+});
+
 test('password is not confirmed with an invalid password', function (): void {
     $user = User::factory()->create();
 

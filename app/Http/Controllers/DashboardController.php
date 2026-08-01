@@ -45,18 +45,8 @@ class DashboardController extends Controller
 
     public function index(): View
     {
-        $isAdmin = (bool) Auth::user()->is_admin;
-
-        // Sysadmin sees every account (cross-user); regular users see
-        // only their own. Ordered to match the dropdown's expected
-        // grouping: by user (admin view), then exchange + account name.
-        $query = Account::with(['apiSystem', 'user.subscription']);
-
-        if (! $isAdmin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $accountModels = $query
+        $accountModels = Account::with(['apiSystem', 'user.subscription'])
+            ->where('user_id', Auth::id())
             ->orderBy('user_id')
             ->orderBy('name')
             ->get();
@@ -77,7 +67,6 @@ class DashboardController extends Controller
 
         return view('dashboard', [
             'accounts' => $accounts,
-            'isAdmin' => $isAdmin,
             'initialAccountId' => $initialAccount?->id,
             'initialPayload' => $initialAccount ? $this->payload($initialAccount) : null,
             // The engine's configured spans, longest first — the same order
@@ -98,14 +87,10 @@ class DashboardController extends Controller
             'account_id' => ['required', 'integer'],
         ]);
 
-        // Sysadmin can read any account; everyone else is scoped to owner.
-        $query = Account::where('id', $request->input('account_id'));
-
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $account = $query->firstOrFail();
+        $account = Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
         return response()->json($this->payload($account));
     }
@@ -125,13 +110,12 @@ class DashboardController extends Controller
             'account_id' => ['required', 'integer'],
         ]);
 
-        $query = Account::where('id', $request->input('account_id'));
+        $account = Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        return response()->json($connectivity->start($query->firstOrFail()));
+        return response()->json($connectivity->start($account));
     }
 
     /**

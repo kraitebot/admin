@@ -25,6 +25,28 @@ test('email can be verified', function (): void {
     $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
 });
 
+test('verified sysadmin emails return to the system dashboard', function (): void {
+    $admin = User::factory()->unverified()->create([
+        'email' => 'verified-email-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+
+    Event::fake();
+
+    $verificationUrl = URL::temporarySignedRoute(
+        'verification.verify',
+        now()->addMinutes(60),
+        ['id' => $admin->id, 'hash' => sha1($admin->email)],
+    );
+
+    $this->actingAs($admin)
+        ->get($verificationUrl)
+        ->assertRedirect(route('system.dashboard', absolute: false));
+
+    Event::assertDispatched(Verified::class);
+    expect($admin->fresh()->hasVerifiedEmail())->toBeTrue();
+});
+
 test('email is not verified with an invalid hash', function (): void {
     $user = User::factory()->unverified()->create();
 

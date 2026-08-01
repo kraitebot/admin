@@ -116,6 +116,37 @@ it('issues a scoped expiring token for valid credentials', function (): void {
     ]);
 });
 
+it('refuses to issue a trader token to a sysadmin', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'mobile-admin@kraite.test',
+        'password' => 'correct-password',
+        'is_admin' => true,
+    ]);
+
+    $this->postJson('https://api.kraite.com/v1/auth/token', [
+        'email' => $admin->email,
+        'password' => 'correct-password',
+        'device_name' => 'Admin iPhone',
+    ])->assertForbidden();
+
+    expect(DB::table('personal_access_tokens')
+        ->where('tokenable_type', $admin->getMorphClass())
+        ->where('tokenable_id', $admin->id)
+        ->exists())->toBeFalse();
+});
+
+it('rejects an existing sysadmin token from trader mobile routes', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'existing-token-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+
+    Sanctum::actingAs($admin, ['dashboard:read', 'accounts:write']);
+
+    $this->getJson('https://api.kraite.com/v1/accounts')
+        ->assertForbidden();
+});
+
 it('rejects invalid credentials without issuing a token', function (): void {
     User::factory()->create([
         'email' => 'trader@kraite.test',

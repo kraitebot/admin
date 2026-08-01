@@ -2,6 +2,18 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.47.2] — 2026-08-01
+
+### Strict role separation and accurate open P&L
+
+- [SECURITY] Sysadmins are confined to the system workspace across browser,
+  mobile API, token, registration-handoff, billing, and account-data paths;
+  trader routes can no longer expose client surfaces or data to an admin
+  session left open on the same computer.
+- [FIXED] Open-position entry prices and unrealized P&L use the weighted
+  average of filled entry orders, matching the exchange after ladder fills
+  instead of overstating movement from the first fill alone.
+
 ## [0.47.1] — 2026-08-01
 
 ### Secure frontend dependency refresh

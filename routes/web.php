@@ -36,7 +36,8 @@ Route::post('/webhooks/payments', [NowPaymentsWebhookController::class, 'handle'
 | Trader surface — admin domain
 |--------------------------------------------------------------------------
 | The client product. Everything a trader can see lives here; the
-| sysadmin surface is a separate host (see routes/console-web.php).
+| sysadmin surface is role-separated under /system (see
+| routes/console-web.php). Sysadmins never enter this route group.
 */
 
 Route::domain(config('domains.admin'))->group(function () {
@@ -47,9 +48,9 @@ Route::domain(config('domains.admin'))->group(function () {
         ->where('token', '[A-Za-z0-9]{64}')
         ->name('register.handoff');
 
-    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'verified'])->name('dashboard');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->middleware(['auth', 'trader', 'verified'])->name('dashboard');
 
-    Route::middleware('auth')->group(function () {
+    Route::middleware(['auth', 'trader'])->group(function () {
         Route::view('/2', 'prototypes.dashboard-v2')->name('dashboard.prototype');
 
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

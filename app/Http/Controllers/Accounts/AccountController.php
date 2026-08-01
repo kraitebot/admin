@@ -56,7 +56,6 @@ class AccountController extends Controller
 
     public function edit(AccountServerConnectivityService $connectivity): View
     {
-        $isAdmin = (bool) Auth::user()->is_admin;
         $accountModels = $this->editableAccountModels();
 
         $connectivityServerModels = $connectivity->apiConnectivityServers();
@@ -81,13 +80,12 @@ class AccountController extends Controller
         return view('accounts.edit', [
             'accounts' => $accounts,
             'connectivityServers' => $connectivityServers,
-            'isAdmin' => $isAdmin,
         ]);
     }
 
     public function mobileData(AccountServerConnectivityService $connectivity): JsonResponse
     {
-        $accountModels = $this->editableAccountModels(ownerOnly: true);
+        $accountModels = $this->editableAccountModels();
         $connectivityServerModels = $connectivity->apiConnectivityServers();
         $activeConnectivityBans = $this->activeConnectivityBans($accountModels);
 
@@ -127,11 +125,10 @@ class AccountController extends Controller
     {
         $request->validate(['account_id' => ['required', 'integer']]);
 
-        $query = Account::where('id', $request->input('account_id'));
-        if ($this->mustScopeToCurrentUser()) {
-            $query->where('user_id', Auth::id());
-        }
-        $account = $query->firstOrFail();
+        $account = Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
         $assets = Cache::remember(
             "account.{$account->id}.available-quotes",
@@ -184,10 +181,8 @@ class AccountController extends Controller
             ->withCount([
                 'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
             ])
-            ->where('id', $request->input('account_id'));
-        if ($this->mustScopeToCurrentUser()) {
-            $query->where('user_id', Auth::id());
-        }
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id());
         $account = $query->firstOrFail();
 
         $data = $request->only(self::EDITABLE_FIELDS);
@@ -201,7 +196,7 @@ class AccountController extends Controller
 
         $this->rejectLockedQuoteChanges($account, $data);
 
-        if (! Auth::user()->is_admin && $account->disabled_reason !== null) {
+        if ($account->disabled_reason !== null) {
             $data['can_trade'] = false;
         }
 
@@ -469,38 +464,23 @@ class AccountController extends Controller
 
     /**
      * Accounts the caller may edit, minus the throwaway connectivity drafts.
-     * Pass $ownerOnly to force owner scoping even for administrators.
      *
      * @return Collection<int, Account>
      */
-    private function editableAccountModels(bool $ownerOnly = false): Collection
+    private function editableAccountModels(): Collection
     {
         $query = Account::with(['apiSystem', 'user.subscription'])
             ->withCount([
                 'positions as open_positions_count' => static fn (Builder $query): Builder => $query->opened(),
             ])
             ->where('name', 'not like', self::ACCOUNT_CONNECTIVITY_DRAFT_PREFIX.'%')
-            ->where('name', '!=', self::REGISTRATION_CONNECTIVITY_DRAFT_NAME);
-
-        if ($ownerOnly || $this->mustScopeToCurrentUser()) {
-            $query->where('user_id', Auth::id());
-        }
+            ->where('name', '!=', self::REGISTRATION_CONNECTIVITY_DRAFT_NAME)
+            ->where('user_id', Auth::id());
 
         return $query
             ->orderBy('user_id')
             ->orderBy('name')
             ->get();
-    }
-
-    /**
-     * Single ownership gate for every account lookup in this controller.
-     * Non-admins only ever reach their own accounts; admins keep the
-     * cross-user reach the web console needs, but never over the mobile
-     * API — those tokens stay owner-scoped no matter who holds them.
-     */
-    private function mustScopeToCurrentUser(): bool
-    {
-        return ! Auth::user()->is_admin || request()->routeIs('api.accounts.*');
     }
 
     /**
@@ -680,13 +660,10 @@ class AccountController extends Controller
 
     private function accountForCurrentUser(int $accountId): Account
     {
-        $query = Account::with(['apiSystem', 'user'])->where('id', $accountId);
-
-        if ($this->mustScopeToCurrentUser()) {
-            $query->where('user_id', Auth::id());
-        }
-
-        return $query->firstOrFail();
+        return Account::with(['apiSystem', 'user'])
+            ->where('id', $accountId)
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
     }
 
     private function accountForBlock(string $blockUuid): Account

@@ -129,14 +129,10 @@ class PositionsController extends Controller
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
-        // Sysadmin reads any account; everyone else stays scoped to owner.
-        $query = Account::where('id', $request->input('account_id'));
-
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $account = $query->firstOrFail();
+        $account = Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
         $perPage = (int) $request->input('per_page', 25);
         $page = (int) $request->input('page', 1);
 
@@ -149,7 +145,8 @@ class PositionsController extends Controller
             ->paginate($perPage, ['*'], 'page', $page);
 
         $positions = collect($paginator->items())->map(function ($p) {
-            [$pnl, $pnlKind] = $this->computePnl($p);
+            $entryPrice = $this->entryPrice($p);
+            [$pnl, $pnlKind] = $this->computePnl($p, $entryPrice);
 
             return [
                 'id' => $p->id,
@@ -157,7 +154,7 @@ class PositionsController extends Controller
                 'direction' => $p->direction,
                 'status' => $p->status,
                 'quantity' => (string) $p->quantity,
-                'opening_price' => (string) $p->opening_price,
+                'opening_price' => $this->displayEntryPrice($entryPrice),
                 'closing_price' => (string) ($p->closing_price ?? ''),
                 'mark_price' => $p->exchangeSymbol?->mark_price !== null ? (string) $p->exchangeSymbol->mark_price : null,
                 'leverage' => (string) $p->leverage,
@@ -192,17 +189,11 @@ class PositionsController extends Controller
 
     public function index()
     {
-        $isAdmin = (bool) Auth::user()->is_admin;
-
-        // Sysadmin sees every account (cross-user) — same surface as the
-        // dashboard. Regular users stay scoped to their own.
-        $query = Account::with('apiSystem', 'user');
-
-        if (! $isAdmin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $accountModels = $query->orderBy('user_id')->orderBy('name')->get();
+        $accountModels = Account::with('apiSystem', 'user')
+            ->where('user_id', Auth::id())
+            ->orderBy('user_id')
+            ->orderBy('name')
+            ->get();
 
         $accounts = $accountModels->map(fn (Account $account) => [
             'id' => $account->id,
@@ -243,6 +234,9 @@ class PositionsController extends Controller
 
         $positions = $openModels->map(fn ($p) => $this->mapOpenRow($p))->all();
         $closed = $closedModels->map(fn ($p) => $this->mapClosedRow($p))->all();
+        $noPositions = ! Position::query()
+            ->whereIn('account_id', $accountIds)
+            ->exists();
 
         $details = [];
         foreach ($openModels as $p) {
@@ -254,10 +248,10 @@ class PositionsController extends Controller
 
         return view('accounts.positions', [
             'accounts' => $accounts,
-            'isAdmin' => $isAdmin,
             'positions' => $positions,
             'closed' => $closed,
             'details' => $details,
+            'noPositions' => $noPositions,
         ]);
     }
 
@@ -295,12 +289,13 @@ class PositionsController extends Controller
      */
     private function mapOpenRow($p): array
     {
-        [$pnl] = $this->computePnl($p);
+        $entryPrice = $this->entryPrice($p);
+        [$pnl] = $this->computePnl($p, $entryPrice);
         $pnlF = $pnl !== null ? (float) $pnl : 0.0;
         $marginF = (float) ($p->margin ?? 0);
         $qtyF = (float) ($p->quantity ?? 0);
         $mark = $p->exchangeSymbol?->mark_price;
-        $markF = ($mark !== null && (string) $mark !== '') ? (float) $mark : (float) $p->opening_price;
+        $markF = ($mark !== null && (string) $mark !== '') ? (float) $mark : (float) $entryPrice;
         $notional = $qtyF * $markF;
         $limits = $p->orders->where('type', 'LIMIT');
         $total = max(1, (int) ($p->total_limit_orders ?? $limits->count()));
@@ -317,7 +312,7 @@ class PositionsController extends Controller
             'lev' => ((int) $p->leverage).'×',
             'status' => $statusLower === 'waping' ? 'waped' : ($statusLower === 'opening' ? 'opening' : null),
             'filled' => $filled.' / '.$total,
-            'open' => $this->fmtNum($p->opening_price),
+            'open' => $this->fmtNum($this->displayEntryPrice($entryPrice)),
             'tp' => $this->fmtNum($p->orders->firstWhere('type', 'PROFIT-LIMIT')?->price ?? $p->first_profit_price),
             'mark' => ($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—',
             'liq' => '—',
@@ -337,7 +332,8 @@ class PositionsController extends Controller
      */
     private function mapClosedRow($p): array
     {
-        [$pnl] = $this->computePnl($p);
+        $entryPrice = $this->entryPrice($p);
+        [$pnl] = $this->computePnl($p, $entryPrice);
         $pnlF = $pnl !== null ? (float) $pnl : 0.0;
         $marginF = (float) ($p->margin ?? 0);
 
@@ -348,7 +344,7 @@ class PositionsController extends Controller
             'icon' => $p->exchangeSymbol?->symbol?->image_url,
             'side' => strtolower((string) $p->direction),
             'lev' => ((int) $p->leverage).'×',
-            'entry' => $this->fmtNum($p->opening_price),
+            'entry' => $this->fmtNum($this->displayEntryPrice($entryPrice)),
             'exit' => $this->fmtNum($p->closing_price),
             'size' => $this->fmtNum($p->quantity),
             'pnl' => round($pnlF, 2),
@@ -387,7 +383,8 @@ class PositionsController extends Controller
      */
     private function mapDetail($p, bool $closed): array
     {
-        [$pnl] = $this->computePnl($p);
+        $entryPrice = $this->entryPrice($p);
+        [$pnl] = $this->computePnl($p, $entryPrice);
         $mark = $p->exchangeSymbol?->mark_price;
 
         $orders = $p->orders->map(fn ($o) => [
@@ -415,7 +412,7 @@ class PositionsController extends Controller
             'margin' => (int) round((float) ($p->margin ?? 0)),
             'qty' => $this->fmtNum($p->quantity),
             'total' => max(1, (int) ($p->total_limit_orders ?? $p->orders->where('type', 'LIMIT')->count())),
-            'openPrice' => $this->fmtNum($p->opening_price),
+            'openPrice' => $this->fmtNum($this->displayEntryPrice($entryPrice)),
             'markPrice' => $closed ? $this->fmtNum($p->closing_price) : (($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—'),
             'pnl' => $pnl !== null ? round((float) $pnl, 2) : 0.0,
             'tpPct' => $p->profit_percentage !== null ? (float) $p->profit_percentage : 0.0,
@@ -432,15 +429,10 @@ class PositionsController extends Controller
             'account_id' => ['required', 'integer'],
         ]);
 
-        // Sysadmin reads any account; everyone else stays scoped to owner.
-        $query = Account::with(['apiSystem'])
-            ->where('id', $request->input('account_id'));
-
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $account = $query->firstOrFail();
+        $account = Account::with(['apiSystem'])
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
         // Age computed DB-side (opened_at vs NOW()). The connection is pinned
         // to UTC and engine timestamps are true UTC, so the diff is correct.
@@ -1027,6 +1019,9 @@ class PositionsController extends Controller
             if (strtoupper((string) $o->side) !== $entrySide) {
                 continue;
             }
+            if (! in_array(strtoupper((string) $o->type), ['MARKET', 'LIMIT'], true)) {
+                continue;
+            }
             if (strtoupper((string) $o->status) !== 'FILLED') {
                 continue;
             }
@@ -1044,8 +1039,9 @@ class PositionsController extends Controller
             $remaining = bcsub($posQty, $totalQty, 18);
 
             $partials = $dbPos->orders
-                ->filter(function ($o) use ($entrySide) {
+                ->filter(function ($o) use ($entrySide): bool {
                     return strtoupper((string) $o->status) === 'PARTIALLY_FILLED'
+                        && in_array(strtoupper((string) $o->type), ['MARKET', 'LIMIT'], true)
                         && strtoupper((string) $o->side) === $entrySide;
                 })
                 ->sortBy('id');
@@ -1255,7 +1251,7 @@ class PositionsController extends Controller
      * still-open positions. Fees are ignored (gross). Returns null when
      * we don't have enough data to compute.
      */
-    private function computePnl($p): array
+    private function computePnl($p, ?string $entryPrice): array
     {
         $isClosed = in_array(strtolower((string) $p->status), ['closed', 'cancelled', 'failed'], true);
 
@@ -1264,7 +1260,7 @@ class PositionsController extends Controller
             return [$this->trim((string) $p->pnl), 'realized'];
         }
 
-        $open = $p->opening_price;
+        $open = $entryPrice;
         $qty = $p->quantity;
         $direction = strtoupper((string) $p->direction);
 
@@ -1295,6 +1291,21 @@ class PositionsController extends Controller
         $pnl = bcmul($diff, (string) $qty, 18);
 
         return [$this->trim($pnl), 'unrealized'];
+    }
+
+    /**
+     * The stored opening_price is only the first fill. Once ladder orders
+     * fill, the exchange and every PnL calculation use the weighted entry.
+     */
+    private function entryPrice($position): ?string
+    {
+        return $this->computeWeightedAvgEntry($position, strtoupper((string) $position->direction))
+            ?? ($position->opening_price !== null ? (string) $position->opening_price : null);
+    }
+
+    private function displayEntryPrice(?string $entryPrice): ?string
+    {
+        return $entryPrice !== null ? bcadd($entryPrice, '0', 8) : null;
     }
 
     private function trim(string $n): string

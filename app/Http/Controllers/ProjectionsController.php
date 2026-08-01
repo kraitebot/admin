@@ -20,14 +20,8 @@ class ProjectionsController extends Controller
 {
     public function index(): View
     {
-        $isAdmin = (bool) Auth::user()->is_admin;
-
-        $query = Account::with(['apiSystem', 'user']);
-        if (! $isAdmin) {
-            $query->where('user_id', Auth::id());
-        }
-
-        $accounts = $query
+        $accounts = Account::with(['apiSystem', 'user'])
+            ->where('user_id', Auth::id())
             ->orderBy('user_id')
             ->orderBy('name')
             ->get()
@@ -42,17 +36,9 @@ class ProjectionsController extends Controller
         // account that has never traded has nothing to project. On any query
         // failure default to SHOWING the page (the data feed degrades on its
         // own) rather than hiding it behind the first-run screen.
-        $noPositions = rescue(fn (): bool => ! Position::query()
-            ->when(! $isAdmin, fn ($q) => $q->whereIn(
-                'account_id',
-                Account::where('user_id', Auth::id())->select('id'),
-            ))
-            ->exists(), false);
-
         return view('projections', [
             'accounts' => $accounts,
-            'isAdmin' => $isAdmin,
-            'noPositions' => $noPositions,
+            'noPositions' => $this->hasNoPositions(),
         ]);
     }
 
@@ -82,11 +68,10 @@ class ProjectionsController extends Controller
             'month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
 
-        $query = Account::where('id', $request->input('account_id'));
-        if (! Auth::user()->is_admin) {
-            $query->where('user_id', Auth::id());
-        }
-        $account = $query->firstOrFail();
+        $account = Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
 
         $year = (int) $request->input('year');
         $month = (int) $request->input('month');
@@ -133,18 +118,19 @@ class ProjectionsController extends Controller
 
     public function yearly(): View
     {
-        $isAdmin = (bool) Auth::user()->is_admin;
+        return view('projections.yearly', [
+            'noPositions' => $this->hasNoPositions(),
+        ]);
+    }
 
-        $noPositions = rescue(fn (): bool => ! Position::query()
-            ->when(! $isAdmin, fn ($query) => $query->whereIn(
+    private function hasNoPositions(): bool
+    {
+        return rescue(fn (): bool => ! Position::query()
+            ->whereIn(
                 'account_id',
                 Account::where('user_id', Auth::id())->select('id'),
-            ))
+            )
             ->exists(), false);
-
-        return view('projections.yearly', [
-            'noPositions' => $noPositions,
-        ]);
     }
 
     public function yearlyData(YearlyProjectionPlanner $planner): JsonResponse
@@ -154,7 +140,7 @@ class ProjectionsController extends Controller
         // from the exchange income ledger, and an account hydrated without it
         // would quietly fall back to close-day figures.
         $accounts = Account::query()
-            ->when(! Auth::user()->is_admin, fn ($query) => $query->where('user_id', Auth::id()))
+            ->where('user_id', Auth::id())
             ->get(['id', 'incomes_synced_from']);
         $now = CarbonImmutable::now();
         $financials = new FleetFinancials($accounts);

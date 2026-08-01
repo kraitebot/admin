@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Routing\Middleware\ThrottleRequests;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\URL;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Payment;
@@ -49,6 +50,47 @@ function makeCappedPlan(): Subscription
         'is_active' => true,
     ]);
 }
+
+it('rejects a signed trader top-up link targeting a sysadmin', function (): void {
+    $admin = makeBillingUser([
+        'name' => 'Billing Boundary Admin',
+        'email' => 'billing-boundary-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+
+    $url = URL::temporarySignedRoute('billing.quick-topup', now()->addMinute(), [
+        'user' => $admin->id,
+        'amount' => 25,
+        'coin' => 'usdttrc20',
+    ]);
+
+    $this->get($url)->assertForbidden();
+
+    expect(Payment::query()->where('user_id', $admin->id)->exists())->toBeFalse();
+});
+
+it('rejects an authenticated sysadmin opening a signed trader top-up link', function (): void {
+    $admin = makeBillingUser([
+        'name' => 'Signed Link Admin',
+        'email' => 'signed-link-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+    $trader = makeBillingUser([
+        'name' => 'Signed Link Trader',
+        'email' => 'signed-link-trader@kraite.test',
+        'is_admin' => false,
+    ]);
+
+    $url = URL::temporarySignedRoute('billing.quick-topup', now()->addMinute(), [
+        'user' => $trader->id,
+        'amount' => 25,
+        'coin' => 'usdttrc20',
+    ]);
+
+    $this->actingAs($admin)->get($url)->assertForbidden();
+
+    expect(Payment::query()->where('user_id', $trader->id)->exists())->toBeFalse();
+});
 
 it('rejects setting an active account that belongs to another user', function (): void {
     $plan = makeCappedPlan();

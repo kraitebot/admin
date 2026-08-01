@@ -216,6 +216,39 @@ it('issues a read-only mobile token after a verified passkey assertion', functio
     expect(DB::table('personal_access_tokens')->where('tokenable_id', $user->id)->count())->toBe(1);
 });
 
+it('refuses to issue a trader token after a sysadmin passkey assertion', function (): void {
+    $admin = User::factory()->create([
+        'name' => 'Mobile passkey admin',
+        'email' => 'mobile-passkey-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+    $passkey = $admin->passkeys()->create([
+        'name' => 'Admin iPhone',
+        'credential_id' => 'admin-credential-id',
+        'credential' => [],
+    ]);
+    $passkey->setRelation('user', $admin);
+    $options = app(GenerateVerificationOptions::class)();
+    $challengeId = app(PasskeyChallengeStore::class)->issue(
+        'authentication',
+        WebAuthn::toJson($options),
+    );
+    $verify = Mockery::mock(VerifyPasskey::class);
+    $verify->shouldReceive('__invoke')->once()->andReturn($passkey);
+    app()->instance(VerifyPasskey::class, $verify);
+
+    $this->postJson(passkeyApiUrl('/v1/auth/passkey/token'), [
+        'challenge_id' => $challengeId,
+        'credential' => passkeyAssertionCredential(),
+        'device_name' => 'Admin Face ID iPhone',
+    ])->assertForbidden();
+
+    expect(DB::table('personal_access_tokens')
+        ->where('tokenable_type', $admin->getMorphClass())
+        ->where('tokenable_id', $admin->id)
+        ->exists())->toBeFalse();
+});
+
 it('rejects malformed passkey payloads as validation errors', function (): void {
     $this->postJson(passkeyApiUrl('/v1/auth/passkey/token'), [
         'challenge_id' => fake()->uuid(),

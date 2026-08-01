@@ -5,13 +5,6 @@
     //  - the DB-vs-exchange reconcile sub-row (live data() endpoint) is omitted
     //  - the "All accounts" picker is display-only (positions already span all
     //    of the user's accounts); per-account filtering isn't wired yet
-    $accountIds = auth()->user()->is_admin
-        ? null
-        : Kraite\Core\Models\Account::where('user_id', auth()->id())->pluck('id');
-    $noPositions = ! Kraite\Core\Models\Position::query()
-        ->when($accountIds !== null, fn ($q) => $q->whereIn('account_id', $accountIds))
-        ->exists();
-
     // ---- formatters (shared with partials.position-detail) ----
     $num = fn (string|int|float $s): float => (float) str_replace(',', '', (string) $s);
     $usd0 = fn (float|int $n): string => '$' . number_format(round($n));

@@ -38,6 +38,22 @@ it('still takes a sysadmin to the page that was waiting', function (): void {
         ->assertRedirect('https://admin.kraite.test/system/positions');
 });
 
+it('drops a waiting trader page when a sysadmin signs in', function (): void {
+    $admin = User::factory()->create([
+        'email' => 'intended-admin@kraite.test',
+        'is_admin' => true,
+    ]);
+
+    $this->withSession(['url.intended' => 'https://admin.kraite.test/projections'])
+        ->post('https://admin.kraite.test/login', [
+            'email' => $admin->email,
+            'password' => 'password',
+        ])
+        ->assertRedirect(route('system.dashboard', absolute: false));
+
+    $this->assertAuthenticatedAs($admin);
+});
+
 it('keeps honouring a waiting page a trader is allowed to open', function (): void {
     $trader = User::factory()->create(['is_admin' => false]);
 

@@ -5,12 +5,17 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 
 class MobileTokenIssuer
 {
     /** @return array{token: string, token_type: string, expires_at: string, passkeys_enabled: bool, user: array{id: int, name: string, email: string}} */
     public function issue(User $user, string $deviceName): array
     {
+        if ((bool) $user->is_admin) {
+            throw new AuthorizationException('Trader access required.');
+        }
+
         $expiresAt = now()->addDays(30);
         $token = $user->createToken(
             trim($deviceName) ?: 'Kraite iPhone',

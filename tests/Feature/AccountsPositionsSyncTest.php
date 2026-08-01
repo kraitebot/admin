@@ -150,6 +150,77 @@ function seedExchangeSnapshots(int $accountId): void
     }
 }
 
+it('uses the weighted average entry for open-position pnl and display', function (): void {
+    $owner = User::factory()->create();
+    $apiSystemId = DB::table('api_systems')->insertGetId(['name' => 'Binance', 'canonical' => 'binance']);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Main',
+        'margin_mode' => 'CROSSED',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $exchangeSymbolId = DB::table('exchange_symbols')->insertGetId([
+        'token' => 'TEST',
+        'mark_price' => 90,
+        'price_precision' => 2,
+    ]);
+    $positionId = DB::table('positions')->insertGetId([
+        'account_id' => $accountId,
+        'exchange_symbol_id' => $exchangeSymbolId,
+        'parsed_trading_pair' => 'TESTUSDT',
+        'direction' => 'LONG',
+        'status' => 'active',
+        'quantity' => 3,
+        'opening_price' => 100,
+        'leverage' => 10,
+        'margin' => 100,
+        'opened_at' => now()->subHour(),
+        'created_at' => now()->subHour(),
+        'updated_at' => now(),
+    ]);
+    DB::table('orders')->insert([
+        [
+            'position_id' => $positionId,
+            'type' => 'MARKET',
+            'status' => 'FILLED',
+            'side' => 'BUY',
+            'quantity' => 1,
+            'price' => 100,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'position_id' => $positionId,
+            'type' => 'LIMIT',
+            'status' => 'FILLED',
+            'side' => 'BUY',
+            'quantity' => 2,
+            'price' => 80,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'position_id' => $positionId,
+            'type' => 'PROFIT-LIMIT',
+            'status' => 'FILLED',
+            'side' => 'BUY',
+            'quantity' => 3,
+            'price' => 120,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $response = $this->actingAs($owner)
+        ->getJson("https://admin.kraite.test/accounts/positions/history?account_id={$accountId}")
+        ->assertSuccessful()
+        ->assertJsonPath('positions.0.opening_price', '86.66666666');
+
+    expect((float) $response->json('positions.0.pnl'))->toBe(10.0);
+});
+
 it('compares against the engine snapshots and reports the matched position as synced', function (): void {
     [$userId, $accountId] = seedSyncedAccount();
     seedExchangeSnapshots($accountId);

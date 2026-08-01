@@ -351,6 +351,10 @@ final class BillingController extends Controller
 
         $user = KraiteUser::with('subscription')->findOrFail((int) $data['user']);
 
+        if ($request->user()?->is_admin || $user->is_admin) {
+            abort(403, 'Trader access required.');
+        }
+
         if (! $user->is_active) {
             abort(403, 'User is not active.');
         }

@@ -64,11 +64,8 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      *
-     * The landing target follows the user's ROLE: sysadmins land on the
-     * system overview (their default surface), everyone else on the trader
-     * dashboard. Sysadmins can switch to the trader surface any time via the
-     * top-bar toggle; the `admin` middleware still 403s non-admins on any
-     * `system.*` route they reach directly.
+     * The landing target follows the user's role. Intended destinations from
+     * another role are discarded before redirecting.
      */
     public function store(LoginRequest $request): RedirectResponse
     {
@@ -81,7 +78,7 @@ class AuthenticatedSessionController extends Controller
         // leaves that page waiting, and sending the next person there just
         // walls them with a 403 — so a non-admin drops it and lands on their
         // own dashboard instead.
-        if (! $isAdmin && $this->intendedRequiresAdmin($request)) {
+        if ($this->intendedRequiresDifferentRole($request, $isAdmin)) {
             $request->session()->forget('url.intended');
         }
 
@@ -95,12 +92,11 @@ class AuthenticatedSessionController extends Controller
     }
 
     /**
-     * Whether the page waiting behind this login is one only a sysadmin may
-     * open. Resolved from the route's own middleware so a future admin-only
-     * route outside `/system` is covered too; the prefix is the fallback for
-     * an intended URL the router cannot match.
+     * Whether the page waiting behind this login belongs to the other role.
+     * Resolved from route middleware so future role-specific routes are
+     * covered without maintaining a path list.
      */
-    private function intendedRequiresAdmin(Request $request): bool
+    private function intendedRequiresDifferentRole(Request $request, bool $isAdmin): bool
     {
         $intended = $request->session()->get('url.intended');
 
@@ -114,9 +110,14 @@ class AuthenticatedSessionController extends Controller
         $probe = Request::create($intended);
         $match = collect(Route::getRoutes())->first(fn (RoutingRoute $route): bool => $route->matches($probe));
 
-        return $match !== null
-            ? in_array('admin', $match->gatherMiddleware(), true)
-            : str_starts_with((string) parse_url($intended, PHP_URL_PATH), '/system');
+        if ($match !== null) {
+            $incompatibleMiddleware = $isAdmin ? 'trader' : 'admin';
+
+            return in_array($incompatibleMiddleware, $match->gatherMiddleware(), true);
+        }
+
+        return ! $isAdmin
+            && str_starts_with((string) parse_url($intended, PHP_URL_PATH), '/system');
     }
 
     /**

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureAdmin;
+use App\Http\Middleware\EnsureTrader;
 use App\Http\Middleware\SecurityHeaders;
 use Dotenv\Dotenv;
 use Illuminate\Foundation\Application;
@@ -45,6 +46,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'admin' => EnsureAdmin::class,
+            'trader' => EnsureTrader::class,
             'ability' => CheckAbilities::class,
         ]);
 

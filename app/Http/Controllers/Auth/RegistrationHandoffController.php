@@ -20,9 +20,14 @@ final class RegistrationHandoffController extends Controller
 {
     public function __invoke(Request $request, string $token): RedirectResponse
     {
+        if ($request->user()?->is_admin) {
+            return redirect()->route('system.dashboard');
+        }
+
         $user = User::query()
             ->where('remember_token', hash('sha256', $token))
             ->where('status', 'active')
+            ->where('is_admin', false)
             ->first();
 
         if ($user === null) {
