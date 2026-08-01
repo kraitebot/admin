@@ -25,7 +25,7 @@ User::withoutEvents(function (): void {
             'name' => 'Browser Registration',
             'email_verified_at' => now(),
             'password' => 'temporary-password',
-            'status' => 'confirmed',
+            'status' => 'active',
             'is_active' => true,
             'can_trade' => false,
             'is_admin' => false,
@@ -33,6 +33,7 @@ User::withoutEvents(function (): void {
             'active_account_id' => null,
             'current_connectivity_test_uuid' => '22222222-2222-4222-8222-222222222222',
             'notification_channels' => ['mail'],
+            'remember_token' => hash('sha256', str_repeat('a', 64)),
         ],
     );
 
@@ -76,6 +77,8 @@ User::withoutEvents(function (): void {
         'binance_api_secret' => 'binance-secret',
     ];
     $account->save();
+
+    $user->forceFill(['active_account_id' => $account->id])->save();
 
     Step::whereIn('block_uuid', [
         '22222222-2222-4222-8222-222222222222',

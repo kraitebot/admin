@@ -65,7 +65,7 @@ it('uses one full-width footer for the rail status and footer content', function
         ->and($xpath->query('//*[@data-rail]//*[@data-rail-status]')->length)->toBe(0);
 });
 
-it('omits the retired revenue link from sysadmin navigation', function (): void {
+it('omits redundant and retired links from sysadmin navigation', function (): void {
     $admin = User::factory()->create([
         'email' => 'shell-navigation-'.uniqid().'@example.test',
         'is_admin' => true,
@@ -80,7 +80,9 @@ it('omits the retired revenue link from sysadmin navigation', function (): void 
     $document->loadHTML($html, LIBXML_NOERROR | LIBXML_NOWARNING);
     $xpath = new DOMXPath($document);
 
-    expect($xpath->query('//*[@data-id="revenue"]')->length)->toBe(0)
+    expect($xpath->query('//*[@data-id="dispatch"]')->length)->toBe(0)
+        ->and($xpath->query('//*[@data-id="revenue"]')->length)->toBe(0)
+        ->and($xpath->query('//*[@data-id="engine"]')->length)->toBe(2)
         ->and($xpath->query('//*[@data-id="billing"]')->length)->toBe(2);
 });
 

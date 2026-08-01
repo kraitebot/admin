@@ -2,6 +2,20 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.47.0] — 2026-08-01
+
+### Laravel 13 and safer database diagnosis
+
+- [ADDED] The System SQL workspace accepts bounded read-only queries with
+  binding support and pagination, so production diagnosis no longer requires
+  direct database access or permits mutations.
+- [CHANGED] Production runs Laravel 13.23.0 with `kraitebot/core` 1.98.0,
+  AI Bridge 1.4.0, Step Dispatcher 1.20.2, and Blade Feather Icons 6.0.3.
+- [CHANGED] Local tests use Pest 5 with automatic TIA. Production installs an
+  exact runtime-only lock with no test, TIA, or development scope.
+- [VERIFIED] The full suite passes: 388 tests and 1,779 assertions, plus the
+  frontend build, static analysis, formatting, and production-lock audit.
+
 ## [0.46.1] — 2026-08-01
 
 ### Background trader notifications show one unread event

@@ -69,9 +69,6 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::get('/sql-query', [SqlQueryController::class, 'index'])->name('system.sql-query');
     Route::post('/sql-query', [SqlQueryController::class, 'execute'])->name('system.sql-query.execute');
     Route::get('/sql-query/tables', [SqlQueryController::class, 'tables'])->name('system.sql-query.tables');
-    Route::post('/sql-query/truncate', [SqlQueryController::class, 'truncate'])->middleware('throttle:3,1')->name('system.sql-query.truncate');
-    Route::get('/sql-query/primary-key', [SqlQueryController::class, 'primaryKey'])->name('system.sql-query.primary-key');
-    Route::post('/sql-query/update', [SqlQueryController::class, 'update'])->name('system.sql-query.update');
 
     // Commands
     Route::get('/commands', [CommandsController::class, 'index'])->name('system.commands');

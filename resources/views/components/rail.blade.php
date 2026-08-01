@@ -14,7 +14,6 @@
             ['id' => 'positions',   'label' => 'Positions',  'route' => 'system.positions',    'params' => [],          'icon' => 'layers'],
             ['id' => 'engine',      'label' => 'Engine',     'route' => 'system.engine',       'params' => [],          'icon' => 'cpu'],
             ['id' => 'backtesting', 'label' => 'Backtest',   'route' => 'system.backtesting',  'params' => [],          'icon' => 'bar-chart-2'],
-            ['id' => 'dispatch',    'label' => 'Dispatch',   'route' => 'system.steps',        'params' => ['default'], 'icon' => 'git-branch'],
             ['id' => 'infra',      'label' => 'Infra',      'route' => 'system.infra',      'params' => [],          'icon' => 'server'],
             ['id' => 'exchanges',  'label' => 'Exchanges',  'route' => 'system.exchanges',  'params' => [],          'icon' => 'shuffle'],
             ['id' => 'sql',        'label' => 'SQL',        'route' => 'system.sql-query',  'params' => [],          'icon' => 'database'],

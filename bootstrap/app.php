@@ -48,7 +48,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'ability' => CheckAbilities::class,
         ]);
 
-        $middleware->validateCsrfTokens(except: [
+        $middleware->preventRequestForgery(except: [
             'webhooks/payments',
         ]);
     })
