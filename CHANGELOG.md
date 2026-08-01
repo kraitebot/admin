@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.47.1] — 2026-08-01
+
+### Secure frontend dependency refresh
+
+- [DEPENDENCY] Axios is updated to 1.19.0 after a new high-severity advisory
+  made the previously tested lock fail the live registry audit.
+- [VERIFIED] The npm dependency audit reports zero vulnerabilities.
+
 ## [0.47.0] — 2026-08-01
 
 ### Laravel 13 and safer database diagnosis
