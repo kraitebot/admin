@@ -41,6 +41,8 @@ Route::domain(config('domains.api'))->group(function (): void {
                 ->middleware('throttle:30,1');
             Route::get('/notifications', NotificationController::class)
                 ->middleware('throttle:30,1');
+            Route::patch('/notifications/read', [NotificationController::class, 'markRead'])
+                ->middleware('throttle:30,1');
             Route::put('/push-devices/current', [PushDeviceController::class, 'store'])
                 ->middleware('throttle:10,1');
             Route::get('/accounts', [AccountController::class, 'mobileData'])

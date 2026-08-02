@@ -177,6 +177,7 @@ abstract class TestCase extends BaseTestCase
             $table->string('platform', 16)->default('ios');
             $table->string('device_name', 100);
             $table->string('app_version', 32)->nullable();
+            $table->unsignedInteger('unread_count')->default(0);
             $table->timestamp('last_registered_at');
             $table->timestamp('disabled_at')->nullable();
             $table->timestamps();

@@ -48,6 +48,8 @@ it('registers one encrypted iPhone token and safely transfers the same device to
         ->and(DB::table('app_push_devices')->value('user_id'))
         ->toBe($firstTrader->id);
 
+    DB::table('app_push_devices')->where('id', $deviceId)->update(['unread_count' => 4]);
+
     Sanctum::actingAs($secondTrader, ['dashboard:read']);
 
     $this->putJson('https://api.kraite.com/v1/push-devices/current', [
@@ -64,8 +66,56 @@ it('registers one encrypted iPhone token and safely transfers the same device to
         ->toBe($secondTrader->id)
         ->and(DB::table('app_push_devices')->value('device_name'))
         ->toBe('Replacement name')
+        ->and(DB::table('app_push_devices')->value('unread_count'))
+        ->toBe(0)
         ->and(DB::table('app_push_devices')->value('disabled_at'))
         ->toBeNull();
+});
+
+it('marks only visible trader events read and synchronizes every active phone badge', function (): void {
+    $trader = User::factory()->create();
+    $otherTrader = User::factory()->create();
+    $currentToken = 'ExponentPushToken[current_badge_device]';
+    $secondCurrentToken = 'ExponentPushToken[second_current_badge_device]';
+    $otherToken = 'ExponentPushToken[other_badge_device]';
+
+    insertPushDevice($trader->id, $currentToken);
+    insertPushDevice($trader->id, $secondCurrentToken);
+    insertPushDevice($otherTrader->id, $otherToken);
+    insertNotificationLog($trader->id, 'app', 'event-current-one', 'Current one', now()->subMinute());
+    insertNotificationLog($trader->id, 'app', 'event-current-two', 'Current two', now());
+    insertNotificationLog($otherTrader->id, 'app', 'event-other', 'Other', now());
+    DB::table('app_push_devices')->where('user_id', $trader->id)->update(['unread_count' => 2]);
+    DB::table('app_push_devices')->where('user_id', $otherTrader->id)->update(['unread_count' => 1]);
+    Sanctum::actingAs($trader, ['dashboard:read']);
+
+    $this->patchJson('https://api.kraite.com/v1/notifications/read', [
+        'event_ids' => ['event-current-two'],
+    ])->assertOk()
+        ->assertJsonPath('data.unread_count', 1);
+
+    $this->patchJson('https://api.kraite.com/v1/notifications/read', [
+        'event_ids' => ['event-current-two'],
+    ])->assertOk()
+        ->assertJsonPath('data.unread_count', 1);
+
+    $this->patchJson('https://api.kraite.com/v1/notifications/read', [
+        'event_ids' => [],
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('event_ids');
+
+    expect(DB::table('notification_logs')->where('content_dump->id', 'event-current-one')->value('opened_at'))
+        ->toBeNull()
+        ->and(DB::table('notification_logs')->where('content_dump->id', 'event-current-two')->value('opened_at'))
+        ->not->toBeNull()
+        ->and(DB::table('notification_logs')->where('content_dump->id', 'event-other')->value('opened_at'))
+        ->toBeNull()
+        ->and(DB::table('app_push_devices')->where('token_hash', hash('sha256', $currentToken))->value('unread_count'))
+        ->toBe(1)
+        ->and(DB::table('app_push_devices')->where('token_hash', hash('sha256', $secondCurrentToken))->value('unread_count'))
+        ->toBe(1)
+        ->and(DB::table('app_push_devices')->where('token_hash', hash('sha256', $otherToken))->value('unread_count'))
+        ->toBe(1);
 });
 
 it('rejects unauthenticated, Android, and malformed push registrations', function (): void {
@@ -141,6 +191,8 @@ it('returns only the current traders app history newest first with an opaque nex
         ->assertJsonPath('data.notifications.0.title', 'Notification 31')
         ->assertJsonPath('data.notifications.0.body', 'Body 31')
         ->assertJsonPath('data.notifications.0.severity', 'high')
+        ->assertJsonPath('data.notifications.0.is_read', false)
+        ->assertJsonPath('data.unread_count', 31)
         ->json('data');
 
     expect($firstPage['next_cursor'])->toBeString();
@@ -228,6 +280,7 @@ function insertPushDevice(int $userId, string $token): void
         'token_hash' => hash('sha256', $token),
         'platform' => 'ios',
         'device_name' => 'iPhone',
+        'unread_count' => 0,
         'last_registered_at' => now(),
         'created_at' => now(),
         'updated_at' => now(),
