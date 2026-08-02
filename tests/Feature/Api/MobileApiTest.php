@@ -296,7 +296,7 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
         ->assertJsonPath('data.dashboard.positions', []);
 });
 
-it('returns exact BTC price, four-hour closes, and four candle directions with the mobile dashboard', function (): void {
+it('returns exact BTC price, trader-day change, four-hour closes, and four candle directions with the mobile dashboard', function (): void {
     $now = CarbonImmutable::parse('2026-08-02 12:00:00');
     $this->travelTo($now);
     prepareMobileDashboardDataSchema();
@@ -304,6 +304,7 @@ it('returns exact BTC price, four-hour closes, and four candle directions with t
     $owner = User::factory()->create([
         'name' => 'BTC dashboard owner',
         'email' => 'btc-dashboard-owner@kraite.test',
+        'utc_offset_minutes' => 120,
     ]);
     $apiSystemId = DB::table('api_systems')->insertGetId([
         'name' => 'Binance',
@@ -341,12 +342,12 @@ it('returns exact BTC price, four-hour closes, and four candle directions with t
     DB::table('candles')->insert([
         'exchange_symbol_id' => $exchangeSymbolId,
         'timeframe' => '15m',
-        'open' => '99999',
-        'close' => '99999',
-        'timestamp' => $now->subMinutes(255)->timestamp,
+        'open' => '67000',
+        'close' => '67000',
+        'timestamp' => $now->subHours(14)->timestamp,
     ]);
 
-    foreach (['1d' => '67000', '12h' => '69000', '4h' => '68234.567', '1h' => '68000'] as $timeframe => $open) {
+    foreach (['1d' => '66000', '12h' => '69000', '4h' => '68234.567', '1h' => '68000'] as $timeframe => $open) {
         DB::table('candles')->insert([
             'exchange_symbol_id' => $exchangeSymbolId,
             'timeframe' => $timeframe,
@@ -382,6 +383,7 @@ it('returns exact BTC price, four-hour closes, and four candle directions with t
         ->assertJsonPath('data.dashboard.btc.token', 'BTC')
         ->assertJsonPath('data.dashboard.btc.name', 'Bitcoin')
         ->assertJsonPath('data.dashboard.btc.mark', '68234.56')
+        ->assertJsonPath('data.dashboard.btc.day_change_pct', '1.84')
         ->assertJsonCount(17, 'data.dashboard.btc.spark_4h')
         ->assertJsonPath('data.dashboard.btc.spark_4h.0', 68000)
         ->assertJsonPath('data.dashboard.btc.spark_4h.16', 68016)

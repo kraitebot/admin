@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.50.0] — 2026-08-02
+
+### Trader-day BTC market context
+
+- [NEW] The mobile dashboard payload includes BTC's trader-day percentage
+  change from the exact 15-minute candle at the configured reporting midnight.
+- [VERIFIED] The reporting-day calculation uses the authenticated trader's
+  configured UTC offset and preserves exchange-precision live marks.
+
 ## [0.49.0] — 2026-08-02
 
 ### BTC market context for the trader Dashboard

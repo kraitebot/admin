@@ -19,6 +19,7 @@ use Kraite\Core\Models\Position;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\DayBasisLocationHint;
+use Kraite\Core\Support\Financial\ReportingDay;
 use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\Bscs;
 
@@ -930,9 +931,44 @@ class DashboardController extends Controller
             'name' => $btc->name ?? 'Bitcoin',
             'image' => $btc->image_url,
             'mark' => $markFormatted,
+            'day_change_pct' => $this->btcTraderDayChangePct($exchangeSymbolId, $mark),
             'spark_4h' => $this->btcFourHourSpark($exchangeSymbolId),
             'dots' => $this->buildTimeframeDots($mark, $opens),
         ];
+    }
+
+    /**
+     * Live BTC change from midnight in the trader's configured day basis.
+     * Reporting offsets are quarter-hour aligned, so the matching 15-minute
+     * candle is the exact opening price for that trader day.
+     */
+    private function btcTraderDayChangePct(int $exchangeSymbolId, ?string $mark): ?string
+    {
+        if ($mark === null || ! is_numeric($mark)) {
+            return null;
+        }
+
+        $dayStart = ReportingDay::forUser(Auth::user())
+            ->startOfDayUtc(CarbonImmutable::now())
+            ->getTimestamp();
+        $dayOpen = DB::table('candles')
+            ->where('exchange_symbol_id', $exchangeSymbolId)
+            ->where('timeframe', '15m')
+            ->where('timestamp', $dayStart)
+            ->value('open');
+
+        if (! is_numeric($dayOpen) || bccomp((string) $dayOpen, '0', 16) <= 0) {
+            return null;
+        }
+
+        $change = bcmul(
+            bcdiv(bcsub($mark, (string) $dayOpen, 16), (string) $dayOpen, 16),
+            '100',
+            8,
+        );
+        $rounded = bcround($change, precision: 2);
+
+        return bccomp($rounded, '0', 2) === 0 ? '0.00' : $rounded;
     }
 
     /**
