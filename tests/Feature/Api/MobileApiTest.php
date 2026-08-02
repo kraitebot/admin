@@ -25,6 +25,7 @@ beforeEach(function (): void {
     Schema::create('api_systems', function (Blueprint $table): void {
         $table->id();
         $table->string('name');
+        $table->string('canonical')->nullable();
     });
 
     Schema::create('accounts', function (Blueprint $table): void {
@@ -42,6 +43,10 @@ beforeEach(function (): void {
 });
 
 afterEach(function (): void {
+    Schema::dropIfExists('candles');
+    Schema::dropIfExists('exchange_symbol_prices');
+    Schema::dropIfExists('exchange_symbols');
+    Schema::dropIfExists('symbols');
     Schema::dropIfExists('market_regime_snapshots');
     Schema::dropIfExists('account_balance_history');
     Schema::dropIfExists('positions');
@@ -52,6 +57,39 @@ afterEach(function (): void {
 
 function prepareMobileDashboardDataSchema(): void
 {
+    Schema::create('symbols', function (Blueprint $table): void {
+        $table->id();
+        $table->string('token');
+        $table->string('name')->nullable();
+        $table->string('image_url')->nullable();
+    });
+
+    Schema::create('exchange_symbols', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('symbol_id');
+        $table->unsignedBigInteger('api_system_id');
+        $table->string('quote');
+        $table->unsignedTinyInteger('price_precision')->default(8);
+        $table->decimal('tick_size', 20, 8)->default(0);
+    });
+
+    Schema::create('exchange_symbol_prices', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('exchange_symbol_id')->unique();
+        $table->decimal('mark_price', 20, 8)->nullable();
+        $table->dateTime('mark_price_synced_at')->nullable();
+        $table->timestamps();
+    });
+
+    Schema::create('candles', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('exchange_symbol_id');
+        $table->string('timeframe');
+        $table->decimal('open', 20, 8);
+        $table->decimal('close', 20, 8);
+        $table->unsignedBigInteger('timestamp');
+    });
+
     Schema::create('positions', function (Blueprint $table): void {
         $table->id();
         $table->unsignedBigInteger('account_id');
@@ -258,6 +296,112 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
         ->assertJsonPath('data.dashboard.positions', []);
 });
 
+it('returns exact BTC price, four-hour closes, and four candle directions with the mobile dashboard', function (): void {
+    $now = CarbonImmutable::parse('2026-08-02 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'BTC dashboard owner',
+        'email' => 'btc-dashboard-owner@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId([
+        'name' => 'Binance',
+        'canonical' => 'binance',
+    ]);
+    DB::table('kraite')->where('id', 1)->update([
+        'timeframes' => json_encode(['1h', '4h', '12h', '1d'], JSON_THROW_ON_ERROR),
+    ]);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Main account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $symbolId = DB::table('symbols')->insertGetId([
+        'token' => 'BTC',
+        'name' => 'Bitcoin',
+        'image_url' => 'https://assets.kraite.test/btc.png',
+    ]);
+    $exchangeSymbolId = DB::table('exchange_symbols')->insertGetId([
+        'symbol_id' => $symbolId,
+        'api_system_id' => $apiSystemId,
+        'quote' => 'USDT',
+        'price_precision' => 2,
+        'tick_size' => '0.01',
+    ]);
+    DB::table('exchange_symbol_prices')->insert([
+        'exchange_symbol_id' => $exchangeSymbolId,
+        'mark_price' => '68234.56700000',
+        'mark_price_synced_at' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('candles')->insert([
+        'exchange_symbol_id' => $exchangeSymbolId,
+        'timeframe' => '15m',
+        'open' => '99999',
+        'close' => '99999',
+        'timestamp' => $now->subMinutes(255)->timestamp,
+    ]);
+
+    foreach (['1d' => '67000', '12h' => '69000', '4h' => '68234.567', '1h' => '68000'] as $timeframe => $open) {
+        DB::table('candles')->insert([
+            'exchange_symbol_id' => $exchangeSymbolId,
+            'timeframe' => $timeframe,
+            'open' => $open,
+            'close' => '68234.567',
+            'timestamp' => $now->timestamp,
+        ]);
+    }
+
+    foreach (range(0, 16) as $index) {
+        DB::table('candles')->insert([
+            'exchange_symbol_id' => $exchangeSymbolId,
+            'timeframe' => '15m',
+            'open' => (string) (68000 + $index),
+            'close' => (string) (68000 + $index),
+            'timestamp' => $now->subMinutes((16 - $index) * 15)->timestamp,
+        ]);
+    }
+
+    $beforeCandles = DB::table('candles')
+        ->where('exchange_symbol_id', $exchangeSymbolId)
+        ->orderBy('id')
+        ->get()
+        ->all();
+    $beforePrice = DB::table('exchange_symbol_prices')
+        ->where('exchange_symbol_id', $exchangeSymbolId)
+        ->first();
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->assertJsonPath('data.dashboard.btc.token', 'BTC')
+        ->assertJsonPath('data.dashboard.btc.name', 'Bitcoin')
+        ->assertJsonPath('data.dashboard.btc.mark', '68234.56')
+        ->assertJsonCount(17, 'data.dashboard.btc.spark_4h')
+        ->assertJsonPath('data.dashboard.btc.spark_4h.0', 68000)
+        ->assertJsonPath('data.dashboard.btc.spark_4h.16', 68016)
+        ->assertJsonCount(4, 'data.dashboard.btc.dots')
+        ->assertJsonPath('data.dashboard.btc.dots.0.timeframe', '1d')
+        ->assertJsonPath('data.dashboard.btc.dots.0.direction', 'up')
+        ->assertJsonPath('data.dashboard.btc.dots.1.direction', 'down')
+        ->assertJsonPath('data.dashboard.btc.dots.2.direction', 'flat')
+        ->assertJsonPath('data.dashboard.btc.dots.3.direction', 'up');
+
+    expect(DB::table('candles')
+        ->where('exchange_symbol_id', $exchangeSymbolId)
+        ->orderBy('id')
+        ->get()
+        ->all())->toEqual($beforeCandles)
+        ->and(DB::table('exchange_symbol_prices')
+            ->where('exchange_symbol_id', $exchangeSymbolId)
+            ->first())->toEqual($beforePrice);
+});
+
 it('returns the latest clean close for only the selected account', function (): void {
     $now = CarbonImmutable::parse('2026-07-21 12:00:00');
     $this->travelTo($now);
@@ -317,6 +461,7 @@ it('returns the latest clean close for only the selected account', function (): 
 
     $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
         ->assertOk()
+        ->assertJsonPath('data.dashboard.btc', null)
         ->assertJsonPath(
             'data.dashboard.last_position_closed_at',
             $now->subMinutes(5)->toIso8601String(),

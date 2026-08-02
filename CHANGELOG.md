@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.49.0] — 2026-08-02
+
+### BTC market context for the trader Dashboard
+
+- [NEW] The mobile dashboard payload includes Binance BTC's exchange-precision
+  mark, 17-point four-hour 15m series, icon/name, and four active timeframe
+  direction signals.
+- [PRESERVED] The payload remains bounded and read-only, using existing candle
+  data without adding exchange requests or ingestion work.
+
 ## [0.47.2] — 2026-08-01
 
 ### Strict role separation and accurate open P&L

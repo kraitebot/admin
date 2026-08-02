@@ -172,8 +172,8 @@ class DashboardController extends Controller
 
     /**
      * Bounded read-only payload for the first-party mobile dashboard.
-     * Deliberately omits activity, connectivity and global BTC queries. BSCS
-     * is included as a bounded platform-risk summary for the mobile KPI tile.
+     * Deliberately omits activity and connectivity. BTC and BSCS are included
+     * as bounded market-context summaries for the mobile dashboard.
      *
      * @return array<string, mixed>
      */
@@ -189,6 +189,7 @@ class DashboardController extends Controller
             ],
             'kpis' => $this->kpis($account, $positions),
             'day_basis_hint' => $this->dayBasisHint(),
+            'btc' => $this->btcStrip(),
             'bscs' => $this->mobileBscsBadge($account),
             'last_position_closed_at' => $this->lastPositionClosedAt($account),
             'positions' => $positions,
@@ -905,27 +906,55 @@ class DashboardController extends Controller
             ->where('symbols.token', 'BTC')
             ->where('exchange_symbols.quote', 'USDT')
             ->where('api_systems.canonical', 'binance')
-            ->select('exchange_symbols.id as es_id', 'exchange_symbols.mark_price', 'symbols.image_url')
+            ->select('exchange_symbols.id as es_id', 'symbols.name', 'symbols.image_url')
             ->first();
 
         if (! $btc) {
             return null;
         }
 
-        $opens = $this->loadCandleOpens([(int) $btc->es_id])[$btc->es_id] ?? [];
-        $mark = $this->markOrLastClose((int) $btc->es_id, $btc->mark_price !== null ? (string) $btc->mark_price : null);
+        $exchangeSymbolId = (int) $btc->es_id;
+        $opens = $this->loadCandleOpens([$exchangeSymbolId])[$exchangeSymbolId] ?? [];
+        $btcEs = ExchangeSymbol::find($exchangeSymbolId);
+        $mark = $this->markOrLastClose(
+            $exchangeSymbolId,
+            $btcEs?->mark_price !== null ? (string) $btcEs->mark_price : null,
+        );
 
         // Format with the actual BTC exchange-symbol precision so the
         // dashboard mirrors what Binance shows ($69,123.45 not $69,123.4567).
-        $btcEs = ExchangeSymbol::find($btc->es_id);
         $markFormatted = $mark !== null && $btcEs ? api_format_price($mark, $btcEs) : $mark;
 
         return [
             'token' => 'BTC',
+            'name' => $btc->name ?? 'Bitcoin',
             'image' => $btc->image_url,
             'mark' => $markFormatted,
+            'spark_4h' => $this->btcFourHourSpark($exchangeSymbolId),
             'dots' => $this->buildTimeframeDots($mark, $opens),
         ];
+    }
+
+    /**
+     * Seventeen 15-minute closes span exactly four hours from first to last
+     * point. The shock-breaker path already maintains this BTC series, so the
+     * mobile chart adds no exchange request or ingestion workload.
+     *
+     * @return array<int, float>
+     */
+    private function btcFourHourSpark(int $exchangeSymbolId): array
+    {
+        return DB::table('candles')
+            ->where('exchange_symbol_id', $exchangeSymbolId)
+            ->where('timeframe', '15m')
+            ->orderByDesc('timestamp')
+            ->limit(17)
+            ->pluck('close')
+            ->reverse()
+            ->filter(fn (mixed $close): bool => is_numeric($close))
+            ->map(fn (mixed $close): float => (float) $close)
+            ->values()
+            ->all();
     }
 
     /**
