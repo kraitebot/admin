@@ -207,6 +207,36 @@ it('returns only the current traders app history newest first with an opaque nex
         ->assertJsonValidationErrors('cursor');
 });
 
+it('returns the sole pending event when newer history fills the first page', function (): void {
+    $trader = User::factory()->create();
+    $base = now()->subHour();
+
+    for ($index = 1; $index <= 31; $index++) {
+        insertNotificationLog(
+            userId: $trader->id,
+            channel: 'app',
+            eventId: "event-{$index}",
+            title: "Notification {$index}",
+            sentAt: $base->copy()->addMinutes($index),
+        );
+    }
+
+    DB::table('notification_logs')
+        ->where('user_id', $trader->id)
+        ->where('channel', 'app')
+        ->where('content_dump->id', '<>', 'event-1')
+        ->update(['opened_at' => now()]);
+
+    Sanctum::actingAs($trader, ['dashboard:read']);
+
+    $this->getJson('https://api.kraite.com/v1/notifications')
+        ->assertOk()
+        ->assertJsonPath('data.unread_count', 1)
+        ->assertJsonPath('data.pending_notification.id', 'event-1')
+        ->assertJsonPath('data.notifications.0.id', 'event-31')
+        ->assertJsonPath('data.notifications.0.is_read', true);
+});
+
 it('logs out the current phone, disables only its push token, and preserves other sessions', function (): void {
     $trader = User::factory()->create();
     $otherTrader = User::factory()->create();

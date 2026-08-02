@@ -18,14 +18,32 @@ final class NotificationController extends Controller
 {
     private const PAGE_SIZE = 30;
 
+    private const NOTIFICATION_COLUMNS = [
+        'id',
+        'uuid',
+        'canonical',
+        'status',
+        'sent_at',
+        'opened_at',
+        'content_dump',
+    ];
+
     public function __invoke(NotificationHistoryRequest $request): JsonResponse
     {
         $history = NotificationLog::query()
             ->where('user_id', (int) $request->user()->id)
             ->where('channel', 'app');
         $unreadCount = (clone $history)->whereNull('opened_at')->count();
+        $pendingNotification = $unreadCount === 1
+            ? (clone $history)
+                ->whereNull('opened_at')
+                ->select(self::NOTIFICATION_COLUMNS)
+                ->orderByDesc('sent_at')
+                ->orderByDesc('id')
+                ->first()
+            : null;
         $notifications = $history
-            ->select(['id', 'uuid', 'canonical', 'status', 'sent_at', 'opened_at', 'content_dump'])
+            ->select(self::NOTIFICATION_COLUMNS)
             ->orderByDesc('sent_at')
             ->orderByDesc('id')
             ->cursorPaginate(self::PAGE_SIZE);
@@ -36,6 +54,7 @@ final class NotificationController extends Controller
                     ->map(fn (NotificationLog $log): array => $this->serialize($log))
                     ->values(),
                 'unread_count' => $unreadCount,
+                'pending_notification' => $pendingNotification ? $this->serialize($pendingNotification) : null,
                 'next_cursor' => $notifications->nextCursor()?->encode(),
             ],
         ]);
