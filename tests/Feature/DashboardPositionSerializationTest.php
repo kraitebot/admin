@@ -93,6 +93,7 @@ it('excludes a cancelled ladder order after its replacement is created', functio
         ->and(array_column($serialized['limits'], 'status'))->not->toContain('CANCELLED')
         ->and($serialized['stop_loss_price'])->toBe('0.2')
         ->and($serialized['max_pain'])->toBe('151.79540000')
+        ->and($serialized['max_pain_formatted'])->toBe('151.7954')
         ->and($serialized['track']['sl_pct'])->toBe(100.0);
 });
 
@@ -276,6 +277,7 @@ it('uses SL as the live-price destination after every limit has filled', functio
     expect($serialized['filled_count'])->toBe(4)
         ->and($serialized['alpha_limit_pct'])->toBe('0.0')
         ->and($serialized['max_pain'])->toBeNull()
+        ->and($serialized['max_pain_formatted'])->toBeNull()
         ->and($serialized['stop_loss_price'])->toBe('50')
         ->and($serialized['track'])->toBe([
             'tp_pct' => 80.0,

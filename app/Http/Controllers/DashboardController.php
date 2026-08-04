@@ -1073,6 +1073,7 @@ class DashboardController extends Controller
         $quantity = (string) ($position->quantity ?? '0');
         $size = $this->computeSize($quantity, $currentPrice);
         $pnl = $position->unrealizedPnl();
+        $maxPain = $position->getAttribute('max_pain');
 
         $openingPrice = $position->opening_price !== null ? (string) $position->opening_price : null;
 
@@ -1130,7 +1131,8 @@ class DashboardController extends Controller
 
             'size' => $size,
             'pnl' => $pnl,
-            'max_pain' => $position->getAttribute('max_pain'),
+            'max_pain' => $maxPain,
+            'max_pain_formatted' => $fmtPrice(is_numeric($maxPain) ? (string) $maxPain : null),
 
             'filled_count' => $filledCount,
             'total_limits' => $totalLimits,
