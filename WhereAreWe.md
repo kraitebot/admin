@@ -1,3 +1,17 @@
+# WhereAreWe — 2026-08-04 (Laravel-owned operational monitoring)
+
+## Date
+
+2026-08-04
+
+## This release
+
+- **The fleet overview reads the application heartbeat:** admin no longer
+  schedules or re-seeds a hidden self-rescheduling metrics loop.
+- **Monitoring ownership is explicit:** ingestion owns the heartbeat and
+  operational snapshot cadence; admin remains a read-only dashboard consumer
+  over the shared Redis metrics connection.
+
 # WhereAreWe
 
 _Last updated: 2026-07-29_

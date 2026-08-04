@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.50.1] — 2026-08-04
+
+### Laravel-owned operational monitoring
+
+- [CHANGED] Admin no longer owns or re-seeds the fleet heartbeat schedule;
+  ingestion is the single cadence owner and the dashboard remains a reader.
+- [VERIFIED] Targeted Pest 5/TIA coverage passes: 11 tests and 62 assertions;
+  PHP syntax and Pint checks pass.
+
 ## [0.50.0] — 2026-08-02
 
 ### Trader-day BTC market context

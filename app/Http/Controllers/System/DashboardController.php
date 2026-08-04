@@ -336,8 +336,8 @@ class DashboardController extends Controller
 
     /**
      * Rollout state derived from the fleet heartbeat's reported core version.
-     * Hosts that report no version (hyperion's bash agent, boxes on a core
-     * build predating the version field) are excluded from the drift math.
+     * Hosts that report no version (snapshots predating the version field)
+     * are excluded from the drift math.
      *
      * @param  array<int, array<string, mixed>>  $fleet
      * @return array<string, mixed>

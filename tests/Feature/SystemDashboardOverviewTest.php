@@ -198,7 +198,7 @@ it('derives deploy rollout drift from the versions the fleet heartbeat reports',
         'reported_at' => CarbonImmutable::now()->toIso8601String(),
         'version' => 'v1.61.2',
     ]));
-    // hyperion's bash agent reports no version key at all.
+    // An older heartbeat snapshot reports no version key at all.
     $conn->shouldReceive('get')->with('kraite:fleet:hyperion')->andReturn(json_encode([
         'reported_at' => CarbonImmutable::now()->toIso8601String(),
     ]));

@@ -11,17 +11,11 @@ use Kraite\Core\Support\Fleet\FleetMetricsCollector;
 use Kraite\Core\Support\Fleet\FleetMetricsRepository;
 
 /**
- * The heartbeat's defining behaviour: every run writes a snapshot and
- * re-queues the NEXT run onto this box's own `<hostname>` queue — and that
- * re-dispatch must survive a failed write so the loop can't silently die.
- *
- * The collector + repository are `final`, so the test drives them for real and
- * mocks only the `fleet` Redis connection underneath the repository.
+ * The scheduler owns heartbeat cadence. The queued job writes exactly one
+ * snapshot and never creates a hidden second cadence by re-dispatching itself.
  */
 beforeEach(function (): void {
     config([
-        // A real queue driver — the heartbeat deliberately refuses to
-        // self-reschedule on `sync` (it would recurse inline forever).
         'queue.default' => 'redis',
         'kraite.fleet_metrics.report_interval_seconds' => 300,
         'kraite.fleet_metrics.key_prefix' => 'kraite:fleet:',
@@ -29,7 +23,7 @@ beforeEach(function (): void {
     ]);
 });
 
-it('writes a snapshot and reschedules itself onto its own hostname queue', function (): void {
+it('writes one snapshot without rescheduling itself', function (): void {
     Bus::fake();
 
     $conn = Mockery::mock(Connection::class);
@@ -41,13 +35,10 @@ it('writes a snapshot and reschedules itself onto its own hostname queue', funct
         app(FleetMetricsRepository::class),
     );
 
-    Bus::assertDispatched(
-        ReportFleetMetricsJob::class,
-        fn (ReportFleetMetricsJob $job): bool => $job->hostname === 'eos' && $job->queue === 'eos',
-    );
+    Bus::assertNotDispatched(ReportFleetMetricsJob::class);
 });
 
-it('keeps the heartbeat alive by rescheduling even when the write throws', function (): void {
+it('logs a failed write without creating an unscheduled retry loop', function (): void {
     Bus::fake();
     Log::shouldReceive('channel')->andReturnSelf();
     Log::shouldReceive('error')->andReturnNull();
@@ -61,24 +52,22 @@ it('keeps the heartbeat alive by rescheduling even when the write throws', funct
         app(FleetMetricsRepository::class),
     );
 
-    Bus::assertDispatched(
-        ReportFleetMetricsJob::class,
-        fn (ReportFleetMetricsJob $job): bool => $job->hostname === 'iris' && $job->queue === 'iris',
-    );
+    Bus::assertNotDispatched(ReportFleetMetricsJob::class);
 });
 
-it('refuses to self-reschedule on the sync queue (no inline recursion)', function (): void {
+it('routes an explicit warmup seed onto the configured heartbeat queue', function (): void {
     Bus::fake();
-    config(['queue.default' => 'sync']);
+    config([
+        'kraite.fleet_metrics.connection' => 'redis',
+        'kraite.fleet_metrics.queue' => 'kraite-heartbeats',
+    ]);
 
-    $conn = Mockery::mock(Connection::class);
-    $conn->shouldReceive('setex')->once();
-    Redis::shouldReceive('connection')->with('fleet')->andReturn($conn);
+    ReportFleetMetricsJob::seed('eos');
 
-    (new ReportFleetMetricsJob('eos'))->handle(
-        app(FleetMetricsCollector::class),
-        app(FleetMetricsRepository::class),
+    Bus::assertDispatched(
+        ReportFleetMetricsJob::class,
+        fn (ReportFleetMetricsJob $job): bool => $job->hostname === 'eos'
+            && $job->connection === 'redis'
+            && $job->queue === 'kraite-heartbeats',
     );
-
-    Bus::assertNotDispatched(ReportFleetMetricsJob::class);
 });
