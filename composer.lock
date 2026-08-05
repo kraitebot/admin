@@ -256,8 +256,8 @@
                 "prism-php/prism": "^0.71 || ^0.99"
             },
             "require-dev": {
-                "orchestra/testbench": "^11.0",
-                "pestphp/pest": "^5.0"
+                "orchestra/testbench": "^10.0",
+                "pestphp/pest": "^3.0"
             },
             "type": "library",
             "extra": {
@@ -276,14 +276,6 @@
                 "psr-4": {
                     "BrunoCFalcao\\AiBridge\\Tests\\": "tests/"
                 }
-            },
-            "scripts": {
-                "test": [
-                    "./run-pest-tia.sh --filtered"
-                ],
-                "test:full": [
-                    "./run-pest-tia.sh --fresh"
-                ]
             },
             "license": [
                 "MIT"
@@ -410,7 +402,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/brunocfalcao/step-dispatcher",
-                "reference": "687b27fe9835ca97f37d3bb9ed0b25f9f271de45"
+                "reference": "f34faaeb27f53a035cef4ccbc1242c06aab5d530"
             },
             "require": {
                 "illuminate/console": "^11.0|^12.0|^13.0",
@@ -1606,7 +1598,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/kraitebot/core",
-                "reference": "6362ed1476f781b8f0ce223829dc87e016466c30"
+                "reference": "e3920051cb6d23aae55e6c9b1c6814b217869add"
             },
             "require": {
                 "angle/chrono": "^1.0",

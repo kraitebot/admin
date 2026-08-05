@@ -420,16 +420,16 @@
         },
         {
             "name": "brunocfalcao/step-dispatcher",
-            "version": "v1.20.2",
+            "version": "v1.20.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/brunocfalcao/step-dispatcher.git",
-                "reference": "38623ae47313a3b1d7e0afcb98cfb4fad946c409"
+                "reference": "f34faaeb27f53a035cef4ccbc1242c06aab5d530"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/brunocfalcao/step-dispatcher/zipball/38623ae47313a3b1d7e0afcb98cfb4fad946c409",
-                "reference": "38623ae47313a3b1d7e0afcb98cfb4fad946c409",
+                "url": "https://api.github.com/repos/brunocfalcao/step-dispatcher/zipball/f34faaeb27f53a035cef4ccbc1242c06aab5d530",
+                "reference": "f34faaeb27f53a035cef4ccbc1242c06aab5d530",
                 "shasum": ""
             },
             "require": {
@@ -476,10 +476,10 @@
             ],
             "description": "Step-based job execution system with state machines for reliable, sequential task processing",
             "support": {
-                "source": "https://github.com/brunocfalcao/step-dispatcher/tree/v1.20.2",
+                "source": "https://github.com/brunocfalcao/step-dispatcher/tree/v1.20.3",
                 "issues": "https://github.com/brunocfalcao/step-dispatcher/issues"
             },
-            "time": "2026-08-01T16:09:21+00:00"
+            "time": "2026-08-04T22:07:09+00:00"
         },
         {
             "name": "carbonphp/carbon-doctrine-types",
@@ -1623,16 +1623,16 @@
         },
         {
             "name": "kraitebot/core",
-            "version": "v1.101.0",
+            "version": "v1.102.2",
             "source": {
                 "type": "git",
                 "url": "https://github.com/kraitebot/core.git",
-                "reference": "5f6118567a3acf79c1790cf4d753c418350f95b4"
+                "reference": "e3920051cb6d23aae55e6c9b1c6814b217869add"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/kraitebot/core/zipball/5f6118567a3acf79c1790cf4d753c418350f95b4",
-                "reference": "5f6118567a3acf79c1790cf4d753c418350f95b4",
+                "url": "https://api.github.com/repos/kraitebot/core/zipball/e3920051cb6d23aae55e6c9b1c6814b217869add",
+                "reference": "e3920051cb6d23aae55e6c9b1c6814b217869add",
                 "shasum": ""
             },
             "require": {
@@ -1686,10 +1686,10 @@
                 "laravel"
             ],
             "support": {
-                "source": "https://github.com/kraitebot/core/tree/v1.101.0",
+                "source": "https://github.com/kraitebot/core/tree/v1.102.2",
                 "issues": "https://github.com/kraitebot/core/issues"
             },
-            "time": "2026-08-04T09:22:36+00:00"
+            "time": "2026-08-04T22:38:36+00:00"
         },
         {
             "name": "laravel-notification-channels/pushover",
