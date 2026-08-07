@@ -94,7 +94,32 @@ it('excludes a cancelled ladder order after its replacement is created', functio
         ->and($serialized['stop_loss_price'])->toBe('0.2')
         ->and($serialized['max_pain'])->toBe('151.79540000')
         ->and($serialized['max_pain_formatted'])->toBe('151.7954')
+        ->and($serialized['take_profit_distance_pct'])->toBe('3.04')
+        ->and($serialized['next_limit_distance_pct'])->toBe('6.05')
         ->and($serialized['track']['sl_pct'])->toBe(100.0);
+});
+
+it('calculates the remaining TP and limit moves in opposite directions for longs and shorts', function (): void {
+    $controller = new DashboardController;
+    $takeProfit = new ReflectionMethod(DashboardController::class, 'takeProfitDistancePercent');
+    $nextLimit = new ReflectionMethod(DashboardController::class, 'nextLimitDistancePercent');
+
+    expect($takeProfit->invoke($controller, '0.813246', '0.870134', 'LONG'))->toBe('7.00')
+        ->and($nextLimit->invoke($controller, '0.813246', '0.7933', 'LONG'))->toBe('2.45')
+        ->and($takeProfit->invoke($controller, '100', '93', 'SHORT'))->toBe('7.00')
+        ->and($nextLimit->invoke($controller, '100', '101.5', 'SHORT'))->toBe('1.50');
+});
+
+it('reports no remaining move after crossing a target and omits distances without usable prices', function (): void {
+    $controller = new DashboardController;
+    $takeProfit = new ReflectionMethod(DashboardController::class, 'takeProfitDistancePercent');
+    $nextLimit = new ReflectionMethod(DashboardController::class, 'nextLimitDistancePercent');
+
+    expect($takeProfit->invoke($controller, '0.88', '0.87', 'LONG'))->toBe('0.00')
+        ->and($nextLimit->invoke($controller, '0.79', '0.80', 'LONG'))->toBe('0.00')
+        ->and($takeProfit->invoke($controller, null, '0.87', 'LONG'))->toBeNull()
+        ->and($nextLimit->invoke($controller, '0', '0.80', 'SHORT'))->toBeNull()
+        ->and($takeProfit->invoke($controller, '0.80', '0.87', 'SIDEWAYS'))->toBeNull();
 });
 
 it('renders maximum pain between live price and unrealized pnl', function (): void {

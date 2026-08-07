@@ -1069,6 +1069,9 @@ class DashboardController extends Controller
             $nextLimit ?? $stopLoss,
             $currentPrice,
         );
+        $direction = strtoupper((string) $position->direction);
+        $takeProfitDistancePct = $this->takeProfitDistancePercent($currentPrice, $currentTp, $direction);
+        $nextLimitDistancePct = $this->nextLimitDistancePercent($currentPrice, $nextLimit, $direction);
 
         $quantity = (string) ($position->quantity ?? '0');
         $size = $this->computeSize($quantity, $currentPrice);
@@ -1096,7 +1099,7 @@ class DashboardController extends Controller
             'token' => $exchangeSymbol?->token ?? $symbol?->token ?? null,
             'token_name' => $symbol?->name ?? null,
             'token_image' => $symbol?->image_url ?? null,
-            'direction' => strtoupper((string) $position->direction),
+            'direction' => $direction,
             'leverage' => (int) $position->leverage,
             'opened_at' => optional($position->opened_at ?? $position->created_at)?->toIso8601String(),
             'age_human' => $this->humanAgo($position->opened_at ?? $position->created_at),
@@ -1120,7 +1123,9 @@ class DashboardController extends Controller
             'entry_price' => $fmtPrice($entryPrice),
             'first_profit_price' => $fmtPrice($firstProfit),
             'profit_price' => $fmtPrice($currentTp),
+            'take_profit_distance_pct' => $takeProfitDistancePct,
             'next_limit_price' => $fmtPrice($nextLimit),
+            'next_limit_distance_pct' => $nextLimitDistancePct,
             'last_limit_price' => $fmtPrice($lastLimit),
             'stop_loss_price' => $fmtPrice($stopLoss),
 
@@ -1460,5 +1465,43 @@ class DashboardController extends Controller
         }
 
         return number_format((float) bcmul($fraction, '100', 2), 1, '.', '');
+    }
+
+    private function takeProfitDistancePercent(?string $current, ?string $target, string $direction): ?string
+    {
+        return match ($direction) {
+            'LONG' => $this->directionalPriceDistancePercent($current, $target, true),
+            'SHORT' => $this->directionalPriceDistancePercent($current, $target, false),
+            default => null,
+        };
+    }
+
+    private function nextLimitDistancePercent(?string $current, ?string $target, string $direction): ?string
+    {
+        return match ($direction) {
+            'LONG' => $this->directionalPriceDistancePercent($current, $target, false),
+            'SHORT' => $this->directionalPriceDistancePercent($current, $target, true),
+            default => null,
+        };
+    }
+
+    private function directionalPriceDistancePercent(?string $current, ?string $target, bool $targetAbove): ?string
+    {
+        if ($current === null || $target === null || ! is_numeric($current) || ! is_numeric($target)
+            || bccomp($current, '0', 16) <= 0) {
+            return null;
+        }
+
+        $distance = $targetAbove
+            ? bcsub($target, $current, 16)
+            : bcsub($current, $target, 16);
+
+        if (bccomp($distance, '0', 16) <= 0) {
+            return '0.00';
+        }
+
+        $percentage = bcmul(bcdiv($distance, $current, 16), '100', 8);
+
+        return bcround($percentage, precision: 2);
     }
 }

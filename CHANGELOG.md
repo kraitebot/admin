@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.52.0] — 2026-08-08
+
+### Directional position target movement
+
+- [NEW] The mobile dashboard payload exposes exact LONG/SHORT percentages to
+  the take-profit and next-limit prices for compact position cards.
+- [PRESERVED] Existing exchange-precision price fields and dashboard metrics
+  remain unchanged.
+
 ## [0.51.1] — 2026-08-05
 
 ### Shared runtime dependency refresh
