@@ -90,16 +90,20 @@ function kpisForAccount(int $accountId): array
 
 it('totals the whole UTC day for a trader who never left the UTC basis', function (): void {
     [, $accountId] = seedBasisTrader(0);
+    $kpis = kpisForAccount($accountId);
 
-    expect(kpisForAccount($accountId)['pnl_today'])->toBe('40.00');
+    expect($kpis['pnl_today'])->toBe('40.00')
+        ->and($kpis['pnl_yesterday'])->toBeNull();
 });
 
 it('totals only the exchange day for a trader on the UTC+2 basis', function (): void {
     [, $accountId] = seedBasisTrader(120);
+    $kpis = kpisForAccount($accountId);
 
     // Their day rolled at 22:00 UTC, so only the 22:30 close counts — the
     // same span Binance is showing under "Today".
-    expect(kpisForAccount($accountId)['pnl_today'])->toBe('10.00');
+    expect($kpis['pnl_today'])->toBe('10.00')
+        ->and($kpis['pnl_yesterday'])->toBe('30.00');
 });
 
 it('serves the projections calendar on the trader day, not the UTC one', function (): void {

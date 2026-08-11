@@ -218,15 +218,19 @@ class DashboardController extends Controller
             ->orderBy('opened_at')
             ->get();
 
-        $candleOpensByExchangeSymbol = $this->loadCandleOpens(
-            $rawPositions->pluck('exchange_symbol_id')->filter()->unique()->all()
-        );
+        $exchangeSymbolIds = $rawPositions->pluck('exchange_symbol_id')->filter()->unique()->all();
+        $candleOpensByExchangeSymbol = $this->loadCandleOpens($exchangeSymbolIds);
+        $fourHourSparksByExchangeSymbol = $this->loadFourHourSparks($exchangeSymbolIds);
 
         // Sort by worst AlphaLimit first — high alpha_limit_pct = price
         // is closest to filling the next ladder rung, which is what the
         // operator most wants to see at the top of the grid.
         return $rawPositions
-            ->map(fn ($position) => $this->serializePosition($position, $candleOpensByExchangeSymbol))
+            ->map(fn ($position) => $this->serializePosition(
+                $position,
+                $candleOpensByExchangeSymbol,
+                $fourHourSparksByExchangeSymbol,
+            ))
             ->sortByDesc(fn (array $p) => (float) ($p['alpha_limit_pct'] ?? 0))
             ->values()
             ->all();
@@ -536,9 +540,14 @@ class DashboardController extends Controller
         // it does — a UTC+2 trader's day opened at 22:00 UTC yesterday.
         $basis = $financials->reportingDay();
         $todayWindow = Window::today($now, $basis);
+        $yesterdayWindow = Window::between(
+            $todayWindow->start->subDay(),
+            $todayWindow->end->subDay(),
+        );
         $monthWindow = Window::lastDays(30, $now, $basis);
 
         $pnlToday = $financials->realizedDelta($todayWindow);
+        $pnlYesterday = $financials->realizedDelta($yesterdayWindow);
         $pnl30d = $financials->realizedDelta($monthWindow);
         $roi30dPct = $financials->realizedRoiPct($monthWindow);
 
@@ -565,6 +574,7 @@ class DashboardController extends Controller
             'balance_spark' => $series,
             'pnl_today' => $pnlToday !== null ? number_format((float) $pnlToday, 2, '.', '') : null,
             'pnl_today_pct' => $pnlTodayPct,
+            'pnl_yesterday' => $pnlYesterday !== null ? bcround($pnlYesterday, precision: 2) : null,
             'pnl_30d' => $pnl30d !== null ? number_format((float) $pnl30d, 2, '.', '') : null,
             'pnl_30d_pct' => $roi30dPct !== null ? round($roi30dPct, 2) : null,
             'pnl_30d_spark' => $pnl30dSpark,
@@ -932,7 +942,7 @@ class DashboardController extends Controller
             'image' => $btc->image_url,
             'mark' => $markFormatted,
             'day_change_pct' => $this->btcTraderDayChangePct($exchangeSymbolId, $mark),
-            'spark_4h' => $this->btcFourHourSpark($exchangeSymbolId),
+            'spark_4h' => $this->loadFourHourSparks([$exchangeSymbolId])[$exchangeSymbolId] ?? [],
             'dots' => $this->buildTimeframeDots($mark, $opens),
         ];
     }
@@ -973,37 +983,56 @@ class DashboardController extends Controller
 
     /**
      * Seventeen 15-minute closes span exactly four hours from first to last
-     * point. The shock-breaker path already maintains this BTC series, so the
-     * mobile chart adds no exchange request or ingestion workload.
+     * point. Ingestion already refreshes these candles for active positions
+     * and BTC, so the mobile charts add no exchange request or ingestion work.
      *
-     * @return array<int, float>
+     * @param  array<int, int>  $exchangeSymbolIds
+     * @return array<int, array<int, float>>
      */
-    private function btcFourHourSpark(int $exchangeSymbolId): array
+    private function loadFourHourSparks(array $exchangeSymbolIds): array
     {
-        return DB::table('candles')
-            ->where('exchange_symbol_id', $exchangeSymbolId)
+        if ($exchangeSymbolIds === []) {
+            return [];
+        }
+
+        $ranked = DB::table('candles')
+            ->select('exchange_symbol_id', 'close', 'timestamp')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id ORDER BY timestamp DESC) AS rn')
+            ->whereIn('exchange_symbol_id', $exchangeSymbolIds)
             ->where('timeframe', '15m')
-            ->orderByDesc('timestamp')
-            ->limit(17)
-            ->pluck('close')
-            ->reverse()
-            ->filter(fn (mixed $close): bool => is_numeric($close))
-            ->map(fn (mixed $close): float => (float) $close)
-            ->values()
-            ->all();
+            ->whereNotNull('close');
+
+        $rows = DB::query()
+            ->fromSub($ranked, 'ranked_candles')
+            ->select('exchange_symbol_id', 'close', 'timestamp')
+            ->where('rn', '<=', 17)
+            ->orderBy('exchange_symbol_id')
+            ->orderBy('timestamp')
+            ->get();
+
+        $sparks = [];
+        foreach ($rows as $row) {
+            if (is_numeric($row->close)) {
+                $sparks[(int) $row->exchange_symbol_id][] = (float) $row->close;
+            }
+        }
+
+        return $sparks;
     }
 
     /**
-     * Shape a single Position for the tile renderer. Stubs the 24h
-     * variation + per-timeframe direction signals — both deferred to v2
-     * (candle-table lookups) but kept in the payload so the visual layer
-     * can render against real shapes today.
+     * Shape a single Position for the tile renderer, including its live
+     * price, lifecycle metrics, timeframe directions and four-hour trend.
      *
      * @param  Position  $position
      * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol  Keyed by exchange_symbol_id → [tf => current_candle_open]
+     * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol  Keyed by exchange_symbol_id → chronological 15m closes
      */
-    private function serializePosition($position, array $candleOpensByExchangeSymbol = []): array
-    {
+    private function serializePosition(
+        $position,
+        array $candleOpensByExchangeSymbol = [],
+        array $fourHourSparksByExchangeSymbol = [],
+    ): array {
         $exchangeSymbol = $position->exchangeSymbol;
         $symbol = $exchangeSymbol?->symbol;
 
@@ -1110,6 +1139,7 @@ class DashboardController extends Controller
                 $currentPrice,
                 $candleOpensByExchangeSymbol[$position->exchange_symbol_id] ?? [],
             ),
+            'spark_4h' => $fourHourSparksByExchangeSymbol[$position->exchange_symbol_id] ?? [],
 
             'side' => strtolower((string) $position->direction),
 

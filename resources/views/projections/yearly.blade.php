@@ -97,7 +97,7 @@
                     const reason = this.selected()?.reason;
                     if (reason === 'no_wallet') return 'No wallet history yet. Yearly planning starts after the first balance snapshot.';
                     if (reason === 'invalid_rate') return 'This scenario is outside a meaningful compounding range and cannot be projected.';
-                    return 'Not enough realized trading data this month to build a yearly outlook.';
+                    return 'No profitable trading day this month to build a yearly outlook.';
                 },
                 async load() {
                     this.loading = true;
@@ -131,7 +131,7 @@
                     <x-feathericon-trending-up class="w-[13px] h-[13px]" stroke-width="1.75"/>Performance
                 </div>
                 <h1 class="font-sans font-bold text-[28px] tracking-[-0.02em] text-fg-1 leading-[1.1] max-[640px]:text-[24px]">Yearly projections</h1>
-                <div class="text-[13px] text-fg-3 mt-1.5">A five-year portfolio outlook if the bot keeps compounding at its currently observed pace.</div>
+                <div class="text-[13px] text-fg-3 mt-1.5">A five-year portfolio outlook based on this month's profitable trading days.</div>
             </div>
 
             @unless($noPositions)
@@ -149,7 +149,7 @@
                         <x-feathericon-calendar class="w-6 h-6" stroke-width="1.75"/>
                     </div>
                     <h4 class="font-sans font-semibold text-[19px] text-fg-1 leading-[1.2] tracking-[-0.01em] mb-1.5">Nothing to project yet</h4>
-                    <p class="text-[13px] text-fg-3 max-w-[440px] m-0">The five-year outlook starts after the engine closes its first trade and establishes an observed daily return.</p>
+                    <p class="text-[13px] text-fg-3 max-w-[440px] m-0">The five-year outlook starts after the engine records its first profitable trading day.</p>
                 </div>
             </div>
         @else
@@ -197,7 +197,7 @@
                                 <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">Visible portfolio</span>
                             </div>
                             <div class="flex flex-col gap-1.5 py-4 px-5 border-b border-line-soft min-[720px]:border-b-0 min-[720px]:border-r">
-                                <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Observed days</span>
+                                <span class="font-mono text-[9.5px] font-medium tracking-[0.09em] uppercase text-fg-mute">Profitable days</span>
                                 <span class="font-mono text-[23px] font-semibold leading-none tabular-nums tracking-[-0.02em] text-fg-1" x-text="fetched.days_observed"></span>
                                 <span class="font-mono text-[9px] tracking-[0.05em] uppercase text-fg-mute">Current month</span>
                             </div>
@@ -228,7 +228,7 @@
                                     <x-feathericon-compass class="w-4 h-4 text-fg-3" stroke-width="1.75"/>
                                     <span>Five-year capital horizon</span>
                                     @php
-                                        $yearlyHelp = "Each milestone starts from today's combined wallet and compounds the selected daily rate through that year-end.\n\n**Pessimistic** uses the weakest observed trading day this month. **Neutral** is the midpoint between the weakest and strongest days. **Optimistic** uses the strongest day.\n\nThe model assumes the rate stays constant. Deposits, withdrawals, changing market conditions, and future strategy adjustments are not included.";
+                                        $yearlyHelp = "Each milestone starts from today's combined wallet and compounds the selected daily rate through that year-end.\n\n**Pessimistic** uses the weakest profitable trading day this month. **Neutral** is the midpoint between the weakest and strongest profitable days. **Optimistic** uses the strongest profitable day. Losing days remain in realized results but do not set future rates.\n\nThe model assumes the rate stays constant. Deposits, withdrawals, changing market conditions, and future strategy adjustments are not included.";
                                     @endphp
                                     <x-ui.help-dot title="Five-year capital horizon" :body="$yearlyHelp" tip="Projected portfolio value at each of the next five year-ends." />
                                 </div>
@@ -313,7 +313,7 @@
 
                     <div class="flex items-start gap-2.5 px-1">
                         <x-feathericon-info class="w-3.5 h-3.5 text-fg-mute flex-shrink-0 mt-0.5" stroke-width="1.75"/>
-                        <p class="m-0 text-[10.5px] leading-[1.5] text-fg-mute">Planning estimate only. It extends the current month's observed daily performance unchanged and does not guarantee future returns.</p>
+                        <p class="m-0 text-[10.5px] leading-[1.5] text-fg-mute">Planning estimate only. It extends the current month's profitable daily performance unchanged; losing days remain in realized results. Future returns are not guaranteed.</p>
                     </div>
                 </div>
             </template>

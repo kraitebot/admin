@@ -147,6 +147,80 @@ it('serves the month feed with realized actuals and observed scenarios', functio
         ->and($response->json('realized_roi_pct'))->toEqualWithDelta(1.0, 0.0001);
 });
 
+it('builds account and fleet projections only from profitable days while retaining losses in history', function (): void {
+    [$userId, $accountId] = seedProjectionAccount();
+
+    DB::table('positions')->insert([
+        [
+            'account_id' => $accountId,
+            'status' => 'closed',
+            'pnl' => -80,
+            'closed_at' => now()->subDays(2),
+            'created_at' => now()->subDays(2),
+            'updated_at' => now(),
+        ],
+        [
+            'account_id' => $accountId,
+            'status' => 'closed',
+            'pnl' => 0,
+            'closed_at' => now()->subDay(),
+            'created_at' => now()->subDay(),
+            'updated_at' => now(),
+        ],
+    ]);
+
+    $user = User::findOrFail($userId);
+
+    $month = $this->actingAs($user)
+        ->getJson('https://admin.kraite.test/projections/data?account_id='.$accountId.'&year='.now()->year.'&month='.now()->month)
+        ->assertSuccessful()
+        ->assertJsonPath('actuals.'.now()->subDays(2)->toDateString(), '-80.0000')
+        ->assertJsonPath('actuals.'.now()->subDay()->toDateString(), '0.0000')
+        ->assertJsonPath('scenarios.pessimistic_pct', '0.010000')
+        ->assertJsonPath('scenarios.neutral_pct', '0.010000')
+        ->assertJsonPath('scenarios.optimistic_pct', '0.010000')
+        ->assertJsonPath('scenarios.days_observed', 1)
+        ->assertJsonPath('scenarios.days_with_revenue', 1);
+
+    expect($month->json('realized_roi_pct'))->toEqualWithDelta(-7.08, 0.0001);
+
+    $this->actingAs($user)
+        ->getJson('https://admin.kraite.test/projections/yearly/data')
+        ->assertSuccessful()
+        ->assertJsonPath('days_observed', 1)
+        ->assertJsonPath('outlook.scenarios.pessimistic.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.neutral.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.optimistic.daily_pct', '0.01000000')
+        ->assertJsonPath('outlook.scenarios.neutral.available', true);
+});
+
+it('leaves projections unavailable when the month has no profitable day', function (): void {
+    [$userId, $accountId] = seedProjectionAccount();
+
+    DB::table('positions')
+        ->where('account_id', $accountId)
+        ->update(['pnl' => -10]);
+
+    $user = User::findOrFail($userId);
+
+    $this->actingAs($user)
+        ->getJson('https://admin.kraite.test/projections/data?account_id='.$accountId.'&year='.now()->year.'&month='.now()->month)
+        ->assertSuccessful()
+        ->assertJsonPath('actuals.'.now()->toDateString(), '-10.0000')
+        ->assertJsonPath('scenarios.pessimistic_pct', null)
+        ->assertJsonPath('scenarios.neutral_pct', null)
+        ->assertJsonPath('scenarios.optimistic_pct', null)
+        ->assertJsonPath('scenarios.days_observed', 0)
+        ->assertJsonPath('scenarios.days_with_revenue', 0);
+
+    $this->actingAs($user)
+        ->getJson('https://admin.kraite.test/projections/yearly/data')
+        ->assertSuccessful()
+        ->assertJsonPath('days_observed', 0)
+        ->assertJsonPath('outlook.scenarios.neutral.available', false)
+        ->assertJsonPath('outlook.scenarios.neutral.reason', 'no_observations');
+});
+
 it('automatically adjusts the investment basis for money movements not explained by trading pnl', function (): void {
     [$userId, $accountId] = seedProjectionAccount();
     $user = User::findOrFail($userId);

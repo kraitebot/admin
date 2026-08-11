@@ -138,6 +138,14 @@ it('returns owner-scoped calendar and exact five-year scenario projections', fun
     $selectedAccountId = createMobileProjectionAccount($owner, 'Primary', '1000', '1010', '10');
     createMobileProjectionAccount($owner, 'Secondary', '2000', '2020', '20');
     $foreignAccountId = createMobileProjectionAccount($intruder, 'Foreign', '9000', '9900', '900');
+    DB::table('positions')->insert([
+        'account_id' => $selectedAccountId,
+        'status' => 'closed',
+        'pnl' => -80,
+        'closed_at' => now()->subDay(),
+        'created_at' => now()->subDay(),
+        'updated_at' => now(),
+    ]);
     $positionsBefore = DB::table('positions')->orderBy('id')->get()->all();
     $balancesBefore = DB::table('account_balance_history')->orderBy('id')->get()->all();
 
@@ -150,12 +158,15 @@ it('returns owner-scoped calendar and exact five-year scenario projections', fun
         ->assertJsonCount(2, 'data.accounts')
         ->assertJsonPath('data.selected_account_id', $selectedAccountId)
         ->assertJsonPath('data.calendar.account_id', $selectedAccountId)
+        ->assertJsonPath('data.calendar.actuals.2026-07-23', '-80.0000')
         ->assertJsonPath('data.calendar.actuals.2026-07-24', '10.0000')
         ->assertJsonPath('data.calendar.current_wallet', '1010')
         ->assertJsonPath('data.calendar.month_start_wallet', '1000')
         ->assertJsonPath('data.calendar.scenarios.pessimistic_pct', '0.010000')
         ->assertJsonPath('data.calendar.scenarios.neutral_pct', '0.010000')
         ->assertJsonPath('data.calendar.scenarios.optimistic_pct', '0.010000')
+        ->assertJsonPath('data.calendar.scenarios.days_observed', 1)
+        ->assertJsonPath('data.calendar.scenarios.days_with_revenue', 1)
         ->assertJsonPath('data.yearly.account_count', 2)
         ->assertJsonPath('data.yearly.current_wallet', '3030.00000000')
         ->assertJsonPath('data.yearly.days_observed', 1)

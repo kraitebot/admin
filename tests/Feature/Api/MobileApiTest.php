@@ -49,6 +49,7 @@ afterEach(function (): void {
     Schema::dropIfExists('symbols');
     Schema::dropIfExists('market_regime_snapshots');
     Schema::dropIfExists('account_balance_history');
+    Schema::dropIfExists('orders');
     Schema::dropIfExists('positions');
     Schema::dropIfExists('accounts');
     Schema::dropIfExists('api_systems');
@@ -68,6 +69,7 @@ function prepareMobileDashboardDataSchema(): void
         $table->id();
         $table->unsignedBigInteger('symbol_id');
         $table->unsignedBigInteger('api_system_id');
+        $table->string('token')->nullable();
         $table->string('quote');
         $table->unsignedTinyInteger('price_precision')->default(8);
         $table->decimal('tick_size', 20, 8)->default(0);
@@ -95,9 +97,27 @@ function prepareMobileDashboardDataSchema(): void
         $table->unsignedBigInteger('account_id');
         $table->unsignedBigInteger('exchange_symbol_id')->nullable();
         $table->string('status');
+        $table->string('direction')->nullable();
+        $table->unsignedInteger('leverage')->nullable();
+        $table->unsignedInteger('total_limit_orders')->nullable();
+        $table->decimal('quantity', 24, 8)->nullable();
+        $table->decimal('opening_price', 24, 8)->nullable();
+        $table->decimal('first_profit_price', 24, 8)->nullable();
+        $table->boolean('was_waped')->default(false);
         $table->dateTime('opened_at')->nullable();
         $table->dateTime('closed_at')->nullable();
         $table->decimal('pnl', 18, 8)->nullable();
+        $table->timestamps();
+    });
+
+    Schema::create('orders', function (Blueprint $table): void {
+        $table->id();
+        $table->unsignedBigInteger('position_id');
+        $table->string('type');
+        $table->string('status')->nullable();
+        $table->string('exchange_order_id')->nullable();
+        $table->decimal('quantity', 24, 8)->nullable();
+        $table->decimal('price', 24, 8)->nullable();
         $table->timestamps();
     });
 
@@ -402,6 +422,113 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         ->and(DB::table('exchange_symbol_prices')
             ->where('exchange_symbol_id', $exchangeSymbolId)
             ->first())->toEqual($beforePrice);
+});
+
+it('returns the last 17 four-hour closes for each open position from one batched query', function (): void {
+    $now = CarbonImmutable::parse('2026-08-02 12:00:00');
+    $this->travelTo($now);
+    prepareMobileDashboardDataSchema();
+
+    $owner = User::factory()->create([
+        'name' => 'Sparkline dashboard owner',
+        'email' => 'sparkline-dashboard-owner@kraite.test',
+    ]);
+    $apiSystemId = DB::table('api_systems')->insertGetId([
+        'name' => 'Binance',
+        'canonical' => 'binance',
+    ]);
+    $accountId = DB::table('accounts')->insertGetId([
+        'user_id' => $owner->id,
+        'api_system_id' => $apiSystemId,
+        'name' => 'Main account',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $symbols = [];
+    foreach ([['BTC', 'Bitcoin', 68000], ['ETH', 'Ethereum', 3400]] as [$token, $name, $mark]) {
+        $symbolId = DB::table('symbols')->insertGetId([
+            'token' => $token,
+            'name' => $name,
+        ]);
+        $exchangeSymbolId = DB::table('exchange_symbols')->insertGetId([
+            'symbol_id' => $symbolId,
+            'api_system_id' => $apiSystemId,
+            'token' => $token,
+            'quote' => 'USDT',
+            'price_precision' => 2,
+            'tick_size' => '0.01',
+        ]);
+        DB::table('exchange_symbol_prices')->insert([
+            'exchange_symbol_id' => $exchangeSymbolId,
+            'mark_price' => (string) $mark,
+            'mark_price_synced_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+        $symbols[$token] = $exchangeSymbolId;
+
+        foreach (range(0, 17) as $index) {
+            DB::table('candles')->insert([
+                'exchange_symbol_id' => $exchangeSymbolId,
+                'timeframe' => '15m',
+                'open' => (string) ($mark + $index),
+                'close' => (string) ($mark + $index),
+                'timestamp' => $now->subMinutes((17 - $index) * 15)->timestamp,
+            ]);
+        }
+    }
+
+    $positionIds = [
+        'BTC' => DB::table('positions')->insertGetId([
+            'account_id' => $accountId,
+            'exchange_symbol_id' => $symbols['BTC'],
+            'status' => 'active',
+            'direction' => 'LONG',
+            'leverage' => 1,
+            'total_limit_orders' => 0,
+            'quantity' => '1',
+            'opening_price' => '68000',
+            'opened_at' => $now->subMinutes(20),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]),
+        'ETH' => DB::table('positions')->insertGetId([
+            'account_id' => $accountId,
+            'exchange_symbol_id' => $symbols['ETH'],
+            'status' => 'active',
+            'direction' => 'SHORT',
+            'leverage' => 1,
+            'total_limit_orders' => 0,
+            'quantity' => '1',
+            'opening_price' => '3400',
+            'opened_at' => $now->subMinutes(10),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]),
+    ];
+
+    $sparkQueries = 0;
+    $batchedSparkQueries = 0;
+    DB::listen(function ($query) use (&$sparkQueries, &$batchedSparkQueries): void {
+        if (str_contains(strtolower($query->sql), 'ranked_candles')) {
+            $sparkQueries++;
+            $batchedSparkQueries += str_contains(strtolower($query->sql), 'in (?, ?)') ? 1 : 0;
+        }
+    });
+
+    Sanctum::actingAs($owner, ['dashboard:read']);
+
+    $positions = $this->getJson('https://api.kraite.com/v1/dashboard?account_id='.$accountId)
+        ->assertOk()
+        ->json('data.dashboard.positions');
+
+    $byId = collect($positions)->keyBy('id');
+
+    expect($sparkQueries)->toBe(2)
+        ->and($batchedSparkQueries)->toBe(1)
+        ->and($byId[$positionIds['BTC']]['spark_4h'])->toBe(range(68001, 68017))
+        ->and($byId[$positionIds['ETH']]['spark_4h'])->toBe(range(3401, 3417));
 });
 
 it('returns the latest clean close for only the selected account', function (): void {

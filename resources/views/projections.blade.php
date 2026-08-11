@@ -178,7 +178,7 @@
 
                         if (rates.n < 1 || rate == null || !Number.isFinite(rate)) {
                             row.date = 'Not enough data';
-                            row.detail = 'No observed trading days this month';
+                            row.detail = 'No profitable trading days this month';
                             return row;
                         }
 
@@ -825,8 +825,8 @@
                             Projection compounds daily from today's wallet of <span class="font-mono text-fg-2" x-text="fFull(m.S0)"></span> at
                             <span class="font-mono" :style="`color: ${tone().css}`" x-text="fPct(m.rate * 100, 2) + '/day'"></span> — the
                             <span :style="`color: ${tone().css}; font-weight: 600`" x-text="tone().label.toLowerCase()"></span> daily rate, derived from
-                            <span class="font-mono text-fg-2" x-text="m.rates.n"></span> observed trading <span x-text="m.rates.n === 1 ? 'day' : 'days'"></span> this month.
-                            Observed range: <span class="font-mono text-pnldown" x-text="fPct(m.rates.pess * 100, 2)"></span> … <span class="font-mono text-pnlup" x-text="fPct(m.rates.opt * 100, 2)"></span> per day.
+                            <span class="font-mono text-fg-2" x-text="m.rates.n"></span> profitable trading <span x-text="m.rates.n === 1 ? 'day' : 'days'"></span> this month.
+                            Profitable range: <span class="font-mono text-pnlup" x-text="fPct(m.rates.pess * 100, 2)"></span> … <span class="font-mono text-pnlup" x-text="fPct(m.rates.opt * 100, 2)"></span> per day. Losing days remain in realized results but do not set future rates.
                         </p>
                         <p class="text-[12px] leading-[1.55] text-fg-3 m-0" x-show="m.type === 'past'" x-cloak>
                             <span class="font-mono text-fg-2" x-text="monthLabel()"></span> is realized history — actual revenue from closed positions. No projection is applied to past months.
