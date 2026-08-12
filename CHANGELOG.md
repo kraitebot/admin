@@ -2,6 +2,17 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.54.0] — 2026-08-12
+
+### Seventeen-point position sparklines
+
+- [CHANGED] Mobile dashboard BTC and open-position sparklines prefer 17
+  quarter-hour closes spanning four hours.
+- [PRESERVED] Symbols without a complete quarter-hour series fall back to the
+  finest complete configured engine timeframe.
+- [VERIFIED] Targeted Pest 5/TIA coverage passes the 17-point API and fallback
+  payload paths.
+
 ## [0.53.2] — 2026-08-12
 
 ### Security dependency refresh

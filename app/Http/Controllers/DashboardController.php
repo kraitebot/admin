@@ -982,9 +982,10 @@ class DashboardController extends Controller
     }
 
     /**
-     * Use the finest engine-active timeframe that can span four hours. Five
-     * hourly closes, for example, cover exactly four hours from first to last
-     * point without depending on candle intervals ingestion does not maintain.
+     * Prefer the dedicated 15-minute visual series: 17 closes cover exactly
+     * four hours from first to last point. Fall back per symbol to the finest
+     * engine-active timeframe with a complete four-hour span while ingestion
+     * warms the denser series.
      *
      * @param  array<int, int>  $exchangeSymbolIds
      * @return array<int, array<int, float>>
@@ -995,37 +996,57 @@ class DashboardController extends Controller
             return [];
         }
 
-        $timeframe = collect(Kraite::timeframes())
+        $timeframes = collect(['15m'])
+            ->merge(Kraite::timeframes())
             ->filter(fn ($candidate) => isset(self::TIMEFRAME_SECONDS[$candidate])
                 && self::TIMEFRAME_SECONDS[$candidate] <= 14_400)
             ->sortBy(fn ($candidate) => self::TIMEFRAME_SECONDS[$candidate])
-            ->first();
+            ->unique()
+            ->values();
 
-        if (! is_string($timeframe)) {
+        if ($timeframes->isEmpty()) {
             return [];
         }
 
-        $pointLimit = intdiv(14_400, self::TIMEFRAME_SECONDS[$timeframe]) + 1;
+        $pointLimits = $timeframes->mapWithKeys(fn (string $timeframe): array => [
+            $timeframe => intdiv(14_400, self::TIMEFRAME_SECONDS[$timeframe]) + 1,
+        ]);
+        $maxPointLimit = (int) $pointLimits->max();
 
         $ranked = DB::table('candles')
-            ->select('exchange_symbol_id', 'close', 'timestamp')
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id ORDER BY timestamp DESC) AS rn')
+            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id, timeframe ORDER BY timestamp DESC) AS rn')
             ->whereIn('exchange_symbol_id', $exchangeSymbolIds)
-            ->where('timeframe', $timeframe)
+            ->whereIn('timeframe', $timeframes)
             ->whereNotNull('close');
 
         $rows = DB::query()
             ->fromSub($ranked, 'ranked_candles')
-            ->select('exchange_symbol_id', 'close', 'timestamp')
-            ->where('rn', '<=', $pointLimit)
+            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
+            ->where('rn', '<=', $maxPointLimit)
             ->orderBy('exchange_symbol_id')
+            ->orderBy('timeframe')
             ->orderBy('timestamp')
             ->get();
 
-        $sparks = [];
+        $series = [];
         foreach ($rows as $row) {
             if (is_numeric($row->close)) {
-                $sparks[(int) $row->exchange_symbol_id][] = (float) $row->close;
+                $series[(int) $row->exchange_symbol_id][$row->timeframe][] = (float) $row->close;
+            }
+        }
+
+        $sparks = [];
+        foreach ($exchangeSymbolIds as $exchangeSymbolId) {
+            foreach ($timeframes as $timeframe) {
+                $pointLimit = (int) $pointLimits->get($timeframe);
+                $candidate = $series[(int) $exchangeSymbolId][$timeframe] ?? [];
+
+                if (count($candidate) >= $pointLimit) {
+                    $sparks[(int) $exchangeSymbolId] = array_slice($candidate, -$pointLimit);
+
+                    break;
+                }
             }
         }
 

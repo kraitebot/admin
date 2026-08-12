@@ -316,7 +316,7 @@ it('returns the bounded dashboard payload for an owned account', function (): vo
         ->assertJsonPath('data.dashboard.positions', []);
 });
 
-it('returns exact BTC price, trader-day change, four-hour closes, and four candle directions with the mobile dashboard', function (): void {
+it('returns exact BTC price, trader-day change, four-hour closes, and active candle directions with the mobile dashboard', function (): void {
     $now = CarbonImmutable::parse('2026-08-02 12:00:00');
     $this->travelTo($now);
     prepareMobileDashboardDataSchema();
@@ -331,7 +331,7 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         'canonical' => 'binance',
     ]);
     DB::table('kraite')->where('id', 1)->update([
-        'timeframes' => json_encode(['1h', '4h', '12h', '1d'], JSON_THROW_ON_ERROR),
+        'timeframes' => json_encode(['1h', '4h', '1d'], JSON_THROW_ON_ERROR),
     ]);
     $accountId = DB::table('accounts')->insertGetId([
         'user_id' => $owner->id,
@@ -377,6 +377,16 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         ]);
     }
 
+    foreach (range(0, 16) as $index) {
+        DB::table('candles')->insert([
+            'exchange_symbol_id' => $exchangeSymbolId,
+            'timeframe' => '15m',
+            'open' => (string) (68000 + $index),
+            'close' => (string) (68000 + $index),
+            'timestamp' => $now->subMinutes((16 - $index) * 15)->timestamp,
+        ]);
+    }
+
     foreach (range(0, 3) as $index) {
         DB::table('candles')->insert([
             'exchange_symbol_id' => $exchangeSymbolId,
@@ -404,15 +414,16 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         ->assertJsonPath('data.dashboard.btc.name', 'Bitcoin')
         ->assertJsonPath('data.dashboard.btc.mark', '68234.56')
         ->assertJsonPath('data.dashboard.btc.day_change_pct', '1.84')
-        ->assertJsonCount(5, 'data.dashboard.btc.spark_4h')
+        ->assertJsonCount(17, 'data.dashboard.btc.spark_4h')
         ->assertJsonPath('data.dashboard.btc.spark_4h.0', 68000)
-        ->assertJsonPath('data.dashboard.btc.spark_4h.4', 68234.567)
-        ->assertJsonCount(4, 'data.dashboard.btc.dots')
+        ->assertJsonPath('data.dashboard.btc.spark_4h.16', 68016)
+        ->assertJsonCount(3, 'data.dashboard.btc.dots')
         ->assertJsonPath('data.dashboard.btc.dots.0.timeframe', '1d')
         ->assertJsonPath('data.dashboard.btc.dots.0.direction', 'up')
-        ->assertJsonPath('data.dashboard.btc.dots.1.direction', 'down')
-        ->assertJsonPath('data.dashboard.btc.dots.2.direction', 'flat')
-        ->assertJsonPath('data.dashboard.btc.dots.3.direction', 'up');
+        ->assertJsonPath('data.dashboard.btc.dots.1.timeframe', '4h')
+        ->assertJsonPath('data.dashboard.btc.dots.1.direction', 'flat')
+        ->assertJsonPath('data.dashboard.btc.dots.2.timeframe', '1h')
+        ->assertJsonPath('data.dashboard.btc.dots.2.direction', 'up');
 
     expect(DB::table('candles')
         ->where('exchange_symbol_id', $exchangeSymbolId)
@@ -424,7 +435,7 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
             ->first())->toEqual($beforePrice);
 });
 
-it('returns five hourly closes spanning four hours for each open position from one batched query', function (): void {
+it('returns seventeen quarter-hour closes per position and falls back to five hourly closes from one batched query', function (): void {
     $now = CarbonImmutable::parse('2026-08-02 12:00:00');
     $this->travelTo($now);
     prepareMobileDashboardDataSchema();
@@ -480,6 +491,17 @@ it('returns five hourly closes spanning four hours for each open position from o
                 'timestamp' => $now->subHours(5 - $index)->timestamp,
             ]);
         }
+
+        $quarterHourPointCount = $token === 'BTC' ? 18 : 16;
+        foreach (range(0, $quarterHourPointCount - 1) as $index) {
+            DB::table('candles')->insert([
+                'exchange_symbol_id' => $exchangeSymbolId,
+                'timeframe' => '15m',
+                'open' => (string) ($mark + 100 + $index),
+                'close' => (string) ($mark + 100 + $index),
+                'timestamp' => $now->subMinutes(($quarterHourPointCount - 1 - $index) * 15)->timestamp,
+            ]);
+        }
     }
 
     $positionIds = [
@@ -530,7 +552,7 @@ it('returns five hourly closes spanning four hours for each open position from o
 
     expect($sparkQueries)->toBe(2)
         ->and($batchedSparkQueries)->toBe(1)
-        ->and($byId[$positionIds['BTC']]['spark_4h'])->toBe(range(68001, 68005))
+        ->and($byId[$positionIds['BTC']]['spark_4h'])->toBe(range(68101, 68117))
         ->and($byId[$positionIds['ETH']]['spark_4h'])->toBe(range(3401, 3405));
 });
 
