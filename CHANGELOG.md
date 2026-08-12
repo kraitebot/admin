@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.53.2] — 2026-08-12
+
+### Security dependency refresh
+
+- [SECURITY] Development and production dependency locks now pin
+  `league/commonmark` 2.10.0, resolving the advisories affecting 2.8.3.
+- [VERIFIED] Composer audit is clean for both lock graphs; the full Pest 5/TIA
+  suite passes with 412 tests and 1,909 assertions, and the production-only
+  install plus frontend build pass.
+
 ## [0.53.1] — 2026-08-12
 
 ### Shared runtime dependency refresh

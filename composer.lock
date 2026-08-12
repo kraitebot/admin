@@ -246,7 +246,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/brunocfalcao/ai-bridge",
-                "reference": "ad50a85ba03c8a946872c93f24926aca05e4a0bf"
+                "reference": "0bea62c1a3622092f45e84ce029d5db957dfe330"
             },
             "require": {
                 "laravel/ai": "^0.3",
@@ -256,8 +256,8 @@
                 "prism-php/prism": "^0.71 || ^0.99"
             },
             "require-dev": {
-                "orchestra/testbench": "^10.0",
-                "pestphp/pest": "^3.0"
+                "orchestra/testbench": "^11.0",
+                "pestphp/pest": "^5.0"
             },
             "type": "library",
             "extra": {
@@ -277,6 +277,14 @@
                     "BrunoCFalcao\\AiBridge\\Tests\\": "tests/"
                 }
             },
+            "scripts": {
+                "test": [
+                    "./run-pest-tia.sh --filtered"
+                ],
+                "test:full": [
+                    "./run-pest-tia.sh --fresh"
+                ]
+            },
             "license": [
                 "MIT"
             ],
@@ -288,16 +296,16 @@
         },
         {
             "name": "brunocfalcao/blade-feather-icons",
-            "version": "v6.0.1",
+            "version": "v6.0.3",
             "source": {
                 "type": "git",
                 "url": "https://github.com/brunocfalcao/blade-feather-icons.git",
-                "reference": "8a0bba330404f941213d98c11c7ae69946cb57e4"
+                "reference": "1141ce004f08b7cddb6e55f2e4dd34c8647d6c98"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/brunocfalcao/blade-feather-icons/zipball/8a0bba330404f941213d98c11c7ae69946cb57e4",
-                "reference": "8a0bba330404f941213d98c11c7ae69946cb57e4",
+                "url": "https://api.github.com/repos/brunocfalcao/blade-feather-icons/zipball/1141ce004f08b7cddb6e55f2e4dd34c8647d6c98",
+                "reference": "1141ce004f08b7cddb6e55f2e4dd34c8647d6c98",
                 "shasum": ""
             },
             "require": {
@@ -307,8 +315,8 @@
             },
             "require-dev": {
                 "friendsofphp/php-cs-fixer": "^3.0",
-                "orchestra/testbench": "^10.6",
-                "pestphp/pest": "^4.0"
+                "orchestra/testbench": "^11.0",
+                "pestphp/pest": "^5.0"
             },
             "type": "library",
             "extra": {
@@ -344,9 +352,9 @@
             ],
             "support": {
                 "issues": "https://github.com/brunocfalcao/blade-feather-icons/issues",
-                "source": "https://github.com/brunocfalcao/blade-feather-icons/tree/v6.0.1"
+                "source": "https://github.com/brunocfalcao/blade-feather-icons/tree/v6.0.3"
             },
-            "time": "2026-05-31T20:43:30+00:00"
+            "time": "2026-08-01T16:11:49+00:00"
         },
         {
             "name": "brunocfalcao/laravel-helpers",
@@ -1598,7 +1606,7 @@
             "dist": {
                 "type": "path",
                 "url": "../packages/kraitebot/core",
-                "reference": "e3920051cb6d23aae55e6c9b1c6814b217869add"
+                "reference": "9749f407be17160e9bf1c6cf03b81610a70a3879"
             },
             "require": {
                 "angle/chrono": "^1.0",
@@ -2546,16 +2554,16 @@
         },
         {
             "name": "league/commonmark",
-            "version": "2.8.3",
+            "version": "2.10.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/thephpleague/commonmark.git",
-                "reference": "1902f60f984235023acbe03db6ad614a37b3c3e7"
+                "reference": "d2d1aa8b35e072966c89bc0c66cf926e56767dc4"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/thephpleague/commonmark/zipball/1902f60f984235023acbe03db6ad614a37b3c3e7",
-                "reference": "1902f60f984235023acbe03db6ad614a37b3c3e7",
+                "url": "https://api.github.com/repos/thephpleague/commonmark/zipball/d2d1aa8b35e072966c89bc0c66cf926e56767dc4",
+                "reference": "d2d1aa8b35e072966c89bc0c66cf926e56767dc4",
                 "shasum": ""
             },
             "require": {
@@ -2592,7 +2600,7 @@
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "2.9-dev"
+                    "dev-main": "2.11-dev"
                 }
             },
             "autoload": {
@@ -2649,7 +2657,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-07-12T15:29:16+00:00"
+            "time": "2026-08-11T16:06:25+00:00"
         },
         {
             "name": "league/config",
