@@ -377,13 +377,13 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         ]);
     }
 
-    foreach (range(0, 16) as $index) {
+    foreach (range(0, 3) as $index) {
         DB::table('candles')->insert([
             'exchange_symbol_id' => $exchangeSymbolId,
-            'timeframe' => '15m',
+            'timeframe' => '1h',
             'open' => (string) (68000 + $index),
             'close' => (string) (68000 + $index),
-            'timestamp' => $now->subMinutes((16 - $index) * 15)->timestamp,
+            'timestamp' => $now->subHours(4 - $index)->timestamp,
         ]);
     }
 
@@ -404,9 +404,9 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
         ->assertJsonPath('data.dashboard.btc.name', 'Bitcoin')
         ->assertJsonPath('data.dashboard.btc.mark', '68234.56')
         ->assertJsonPath('data.dashboard.btc.day_change_pct', '1.84')
-        ->assertJsonCount(17, 'data.dashboard.btc.spark_4h')
+        ->assertJsonCount(5, 'data.dashboard.btc.spark_4h')
         ->assertJsonPath('data.dashboard.btc.spark_4h.0', 68000)
-        ->assertJsonPath('data.dashboard.btc.spark_4h.16', 68016)
+        ->assertJsonPath('data.dashboard.btc.spark_4h.4', 68234.567)
         ->assertJsonCount(4, 'data.dashboard.btc.dots')
         ->assertJsonPath('data.dashboard.btc.dots.0.timeframe', '1d')
         ->assertJsonPath('data.dashboard.btc.dots.0.direction', 'up')
@@ -424,7 +424,7 @@ it('returns exact BTC price, trader-day change, four-hour closes, and four candl
             ->first())->toEqual($beforePrice);
 });
 
-it('returns the last 17 four-hour closes for each open position from one batched query', function (): void {
+it('returns five hourly closes spanning four hours for each open position from one batched query', function (): void {
     $now = CarbonImmutable::parse('2026-08-02 12:00:00');
     $this->travelTo($now);
     prepareMobileDashboardDataSchema();
@@ -436,6 +436,9 @@ it('returns the last 17 four-hour closes for each open position from one batched
     $apiSystemId = DB::table('api_systems')->insertGetId([
         'name' => 'Binance',
         'canonical' => 'binance',
+    ]);
+    DB::table('kraite')->where('id', 1)->update([
+        'timeframes' => json_encode(['1h', '4h', '1d'], JSON_THROW_ON_ERROR),
     ]);
     $accountId = DB::table('accounts')->insertGetId([
         'user_id' => $owner->id,
@@ -468,13 +471,13 @@ it('returns the last 17 four-hour closes for each open position from one batched
         ]);
         $symbols[$token] = $exchangeSymbolId;
 
-        foreach (range(0, 17) as $index) {
+        foreach (range(0, 5) as $index) {
             DB::table('candles')->insert([
                 'exchange_symbol_id' => $exchangeSymbolId,
-                'timeframe' => '15m',
+                'timeframe' => '1h',
                 'open' => (string) ($mark + $index),
                 'close' => (string) ($mark + $index),
-                'timestamp' => $now->subMinutes((17 - $index) * 15)->timestamp,
+                'timestamp' => $now->subHours(5 - $index)->timestamp,
             ]);
         }
     }
@@ -527,8 +530,8 @@ it('returns the last 17 four-hour closes for each open position from one batched
 
     expect($sparkQueries)->toBe(2)
         ->and($batchedSparkQueries)->toBe(1)
-        ->and($byId[$positionIds['BTC']]['spark_4h'])->toBe(range(68001, 68017))
-        ->and($byId[$positionIds['ETH']]['spark_4h'])->toBe(range(3401, 3417));
+        ->and($byId[$positionIds['BTC']]['spark_4h'])->toBe(range(68001, 68005))
+        ->and($byId[$positionIds['ETH']]['spark_4h'])->toBe(range(3401, 3405));
 });
 
 it('returns the latest clean close for only the selected account', function (): void {

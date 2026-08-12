@@ -982,9 +982,9 @@ class DashboardController extends Controller
     }
 
     /**
-     * Seventeen 15-minute closes span exactly four hours from first to last
-     * point. Ingestion already refreshes these candles for active positions
-     * and BTC, so the mobile charts add no exchange request or ingestion work.
+     * Use the finest engine-active timeframe that can span four hours. Five
+     * hourly closes, for example, cover exactly four hours from first to last
+     * point without depending on candle intervals ingestion does not maintain.
      *
      * @param  array<int, int>  $exchangeSymbolIds
      * @return array<int, array<int, float>>
@@ -995,17 +995,29 @@ class DashboardController extends Controller
             return [];
         }
 
+        $timeframe = collect(Kraite::timeframes())
+            ->filter(fn ($candidate) => isset(self::TIMEFRAME_SECONDS[$candidate])
+                && self::TIMEFRAME_SECONDS[$candidate] <= 14_400)
+            ->sortBy(fn ($candidate) => self::TIMEFRAME_SECONDS[$candidate])
+            ->first();
+
+        if (! is_string($timeframe)) {
+            return [];
+        }
+
+        $pointLimit = intdiv(14_400, self::TIMEFRAME_SECONDS[$timeframe]) + 1;
+
         $ranked = DB::table('candles')
             ->select('exchange_symbol_id', 'close', 'timestamp')
             ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id ORDER BY timestamp DESC) AS rn')
             ->whereIn('exchange_symbol_id', $exchangeSymbolIds)
-            ->where('timeframe', '15m')
+            ->where('timeframe', $timeframe)
             ->whereNotNull('close');
 
         $rows = DB::query()
             ->fromSub($ranked, 'ranked_candles')
             ->select('exchange_symbol_id', 'close', 'timestamp')
-            ->where('rn', '<=', 17)
+            ->where('rn', '<=', $pointLimit)
             ->orderBy('exchange_symbol_id')
             ->orderBy('timestamp')
             ->get();
@@ -1026,7 +1038,7 @@ class DashboardController extends Controller
      *
      * @param  Position  $position
      * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol  Keyed by exchange_symbol_id → [tf => current_candle_open]
-     * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol  Keyed by exchange_symbol_id → chronological 15m closes
+     * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol  Keyed by exchange_symbol_id → chronological closes spanning four hours
      */
     private function serializePosition(
         $position,
