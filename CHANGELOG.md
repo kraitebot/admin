@@ -2,6 +2,16 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.53.1] — 2026-08-12
+
+### Shared runtime dependency refresh
+
+- [DEPENDENCY] Production now ships `kraitebot/core` 1.105.0 and Step
+  Dispatcher 1.20.3 with the existing Laravel runtime dependency set.
+- [VERIFIED] The full Pest 5/TIA suite passes: 412 tests and 1,909
+  assertions, with a clean production-only Composer install and frontend
+  build.
+
 ## [0.52.1] — 2026-08-09
 
 ### Shared runtime dependency refresh
