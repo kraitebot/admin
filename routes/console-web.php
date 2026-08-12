@@ -2,8 +2,6 @@
 
 use App\Http\Controllers\BscsController;
 use App\Http\Controllers\System\BacktrackingController;
-use App\Http\Controllers\System\BillingCoinsController as SystemBillingCoinsController;
-use App\Http\Controllers\System\BillingPlansController as SystemBillingPlansController;
 use App\Http\Controllers\System\CommandsController;
 use App\Http\Controllers\System\DashboardController as SystemDashboardController;
 use App\Http\Controllers\System\EngineController;
@@ -14,7 +12,6 @@ use App\Http\Controllers\System\SettingsController;
 use App\Http\Controllers\System\SqlQueryController;
 use App\Http\Controllers\System\StepDispatcherController;
 use App\Http\Controllers\System\UiComponentsController;
-use App\Http\Controllers\System\UsersController as SystemUsersController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -57,7 +54,6 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::post('/engine/failures/resolve', [EngineController::class, 'resolve'])->name('system.engine.resolve');
     Route::post('/engine/failures/resolve-all', [EngineController::class, 'resolveAll'])->name('system.engine.resolve-all');
     Route::get('/infra', [InfraController::class, 'index'])->name('system.infra');
-    Route::view('/exchanges', 'system.exchanges')->name('system.exchanges');
     Route::view('/revenue', 'system.revenue')->name('system.revenue');
     Route::get('/settings', [SettingsController::class, 'index'])->name('system.settings');
     Route::patch('/settings', [SettingsController::class, 'update'])->name('system.settings.update');
@@ -128,30 +124,6 @@ Route::domain(config('domains.admin'))->middleware(['auth', 'admin'])->prefix('s
     Route::put('/lifecycle/{scenario}/frames/{frame}/events', [LifecycleController::class, 'saveFrameEvents'])->name('system.lifecycle.frame.events');
     Route::post('/lifecycle/{scenario}/branch', [LifecycleController::class, 'branch'])->name('system.lifecycle.branch');
     Route::delete('/lifecycle/{scenario}', [LifecycleController::class, 'destroy'])->name('system.lifecycle.destroy');
-
-    // Users admin — list every user, view billing state, apply manual
-    // wallet credits/debits via the wallet_transactions ledger,
-    // change a user's subscription tier.
-    Route::get('/users/{user?}', [SystemUsersController::class, 'index'])->name('system.users');
-    Route::post('/users/{user}/credit', [SystemUsersController::class, 'adjustCredit'])->name('system.users.credit');
-    Route::post('/users/{user}/subscription', [SystemUsersController::class, 'changeSubscription'])->name('system.users.subscription');
-    Route::post('/users/{user}/active-account', [SystemUsersController::class, 'changeActiveAccount'])->name('system.users.active-account');
-    Route::post('/users/{user}/start-trial', [SystemUsersController::class, 'startTrial'])->name('system.users.start-trial');
-    Route::post('/users/{user}/trial-days', [SystemUsersController::class, 'changeTrialDays'])->name('system.users.trial-days');
-    Route::post('/users/{user}/password-reset', [SystemUsersController::class, 'sendPasswordResetLink'])->name('system.users.password-reset');
-
-    // Billing plan management — sysadmin CRUD over subscription tiers.
-    Route::get('/billing/plans', [SystemBillingPlansController::class, 'index'])->name('system.billing.plans');
-    Route::post('/billing/plans', [SystemBillingPlansController::class, 'store'])->name('system.billing.plans.store');
-    Route::post('/billing/plans/{subscription}', [SystemBillingPlansController::class, 'update'])->name('system.billing.plans.update');
-    Route::post('/billing/plans/{subscription}/delete', [SystemBillingPlansController::class, 'destroy'])->name('system.billing.plans.delete');
-
-    // Top-up coin curated list + engine knobs.
-    Route::get('/billing/coins', [SystemBillingCoinsController::class, 'index'])->name('system.billing.coins');
-    Route::post('/billing/coins', [SystemBillingCoinsController::class, 'store'])->name('system.billing.coins.store');
-    Route::post('/billing/coins/engine', [SystemBillingCoinsController::class, 'updateEngine'])->name('system.billing.coins.engine');
-    Route::post('/billing/coins/{coin}', [SystemBillingCoinsController::class, 'update'])->name('system.billing.coins.update');
-    Route::post('/billing/coins/{coin}/delete', [SystemBillingCoinsController::class, 'destroy'])->name('system.billing.coins.delete');
 
     // UI Components showcase — dev-only surface, never reachable in prod.
     if (! app()->isProduction()) {

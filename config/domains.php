@@ -11,8 +11,8 @@ declare(strict_types=1);
 |
 |  - trader  → the client product: dashboard, positions, projections,
 |              BSCS, accounts, billing (routes/web.php).
-|  - sysadmin → `/system/*`: system dashboard, users, commands, step
-|              dispatcher, backtesting, billing management, SQL
+|  - sysadmin → `/system/*`: system dashboard, commands, step
+|              dispatcher, backtesting, settings, SQL
 |              (routes/console-web.php, `is_admin`-gated).
 |  - mobile API → `api.kraite.com/v1/*`: first-party, read-only trader
 |                 endpoints authenticated with scoped Sanctum tokens.

@@ -15,9 +15,7 @@
             ['id' => 'engine',      'label' => 'Engine',     'route' => 'system.engine',       'params' => [],          'icon' => 'cpu'],
             ['id' => 'backtesting', 'label' => 'Backtest',   'route' => 'system.backtesting',  'params' => [],          'icon' => 'bar-chart-2'],
             ['id' => 'infra',      'label' => 'Infra',      'route' => 'system.infra',      'params' => [],          'icon' => 'server'],
-            ['id' => 'exchanges',  'label' => 'Exchanges',  'route' => 'system.exchanges',  'params' => [],          'icon' => 'shuffle'],
             ['id' => 'sql',        'label' => 'SQL',        'route' => 'system.sql-query',  'params' => [],          'icon' => 'database'],
-            ['id' => 'billing',    'label' => 'Billing',    'route' => 'system.users',      'params' => [],          'icon' => 'dollar-sign'],
             ['id' => 'settings',   'label' => 'Settings',   'route' => 'system.settings',   'params' => [],          'icon' => 'sliders'],
         ]
         : [

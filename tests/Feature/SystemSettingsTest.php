@@ -23,6 +23,12 @@ it('shows database-backed runtime controls and read-only engine state to admins'
         ->assertSee('Runtime settings')
         ->assertSee('Master trading')
         ->assertSee('BSCS score')
+        ->assertSee('role="switch"', false)
+        ->assertSee('@click="enabled = ! enabled"', false)
+        ->assertSee('1 hour 55 minutes — default')
+        ->assertSee('Use configured default — 4 hours')
+        ->assertDontSee('name="bscs_freshness_max_seconds" type="number"', false)
+        ->assertDontSee('name="bscs_cooldown_hours" type="number"', false)
         ->assertSee('0 purges immediately')
         ->assertSee(route('system.settings.update'), false);
 });
@@ -98,6 +104,28 @@ it('persists every editable runtime setting including explicit false values', fu
         ->and(Kraite::correlationType())->toBe('spearman');
 });
 
+it('persists the enabled new-position switch value', function (): void {
+    $admin = settingsAdmin();
+
+    expect(Kraite::findOrFail(1)->allow_opening_positions)->toBeFalse();
+
+    $this->actingAs($admin)
+        ->patch(route('system.settings.update'), [
+            'allow_opening_positions' => 1,
+            'can_trade' => 'inherit',
+            'notifications_enabled' => 'inherit',
+            'td_correlation_type' => 'inherit',
+            'corr_enabled' => 'inherit',
+            'elast_enabled' => 'inherit',
+            'trail_retention_hours' => null,
+            'bscs_freshness_max_seconds' => 6900,
+            'bscs_cooldown_hours' => 4,
+        ])
+        ->assertSessionHasNoErrors();
+
+    expect(Kraite::findOrFail(1)->allow_opening_positions)->toBeTrue();
+});
+
 it('preserves inherited defaults as null overrides', function (): void {
     $admin = settingsAdmin();
 
@@ -111,7 +139,7 @@ it('preserves inherited defaults as null overrides', function (): void {
             'elast_enabled' => 'inherit',
             'trail_retention_hours' => null,
             'bscs_freshness_max_seconds' => 6900,
-            'bscs_cooldown_hours' => null,
+            'bscs_cooldown_hours' => 'inherit',
         ])
         ->assertSessionHasNoErrors();
 
@@ -140,8 +168,8 @@ it('rejects invalid runtime settings without changing the singleton', function (
             'corr_enabled' => 'on',
             'elast_enabled' => 1,
             'trail_retention_hours' => -1,
-            'bscs_freshness_max_seconds' => -1,
-            'bscs_cooldown_hours' => 0,
+            'bscs_freshness_max_seconds' => 7000,
+            'bscs_cooldown_hours' => 3,
         ])
         ->assertRedirect(route('system.settings'))
         ->assertInvalid([
@@ -189,7 +217,7 @@ it('audits a sanitized before and after snapshot with the admin actor', function
             'corr_enabled' => 1,
             'elast_enabled' => 0,
             'trail_retention_hours' => 24,
-            'bscs_freshness_max_seconds' => 7000,
+            'bscs_freshness_max_seconds' => 7200,
         ])
         ->assertSessionHasNoErrors();
 

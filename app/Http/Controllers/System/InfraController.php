@@ -11,11 +11,10 @@ use Kraite\Core\Models\Server;
 class InfraController extends Controller
 {
     /**
-     * Infrastructure surface — the SERVER layer beneath the fleet. Exchange
-     * connectivity lives on its own `system.exchanges` page, so this page is
-     * scoped to hosts: the egress-IP allowlist (server-rendered from the real
-     * roster) plus live node reachability + control-plane vitals (both polled
-     * client-side from the existing dashboard JSON feeds).
+     * Infrastructure surface — the server layer beneath the fleet: the
+     * egress-IP allowlist (server-rendered from the real roster) plus live node
+     * reachability and control-plane vitals (both polled client-side from the
+     * existing dashboard JSON feeds).
      */
     public function index(): View
     {

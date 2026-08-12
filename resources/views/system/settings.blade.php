@@ -1,12 +1,35 @@
 @php
     $input = 'w-full h-[42px] rounded-control border border-line bg-input px-3.5 font-mono text-[13px] tabular-nums text-fg-1 outline-none transition-[border-color,box-shadow] duration-fast focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_18%,transparent)]';
-    $select = $input.' appearance-none cursor-pointer pr-10';
     $nullableBoolean = static fn (?bool $value): string => $value === null ? 'inherit' : ($value ? '1' : '0');
     $canTradeValue = old('can_trade', $nullableBoolean($engine->can_trade));
     $notificationsValue = old('notifications_enabled', $nullableBoolean($engine->notifications_enabled));
     $correlationEnabledValue = old('corr_enabled', $nullableBoolean($engine->corr_enabled));
     $elasticityEnabledValue = old('elast_enabled', $nullableBoolean($engine->elast_enabled));
     $correlationTypeValue = old('td_correlation_type', $engine->td_correlation_type ?? 'inherit');
+    $freshnessValue = old('bscs_freshness_max_seconds', $engine->bscs_freshness_max_seconds);
+    $cooldownValue = old('bscs_cooldown_hours', $engine->bscs_cooldown_hours ?? 'inherit');
+    $freshnessOptions = [
+        '900' => '15 minutes',
+        '1800' => '30 minutes',
+        '3600' => '1 hour',
+        '5400' => '1 hour 30 minutes',
+        '6900' => '1 hour 55 minutes — default',
+        '7200' => '2 hours',
+        '10800' => '3 hours',
+        '21600' => '6 hours',
+    ];
+    $cooldownOptions = [
+        'inherit' => "Use configured default — {$effective['bscs_cooldown_hours']} hours",
+        '1' => '1 hour',
+        '2' => '2 hours',
+        '4' => '4 hours',
+        '6' => '6 hours',
+        '12' => '12 hours',
+        '24' => '1 day',
+        '48' => '2 days',
+        '72' => '3 days',
+        '168' => '7 days',
+    ];
     $cooldownActive = $engine->bscs_cooldown_until?->isFuture() ?? false;
 @endphp
 
@@ -58,30 +81,26 @@
                     label="Allow opening positions"
                     for="allow_opening_positions"
                     help="The operator gate for every account. Turning it off leaves existing positions running.">
-                    <input type="hidden" name="allow_opening_positions" value="0">
-                    <label class="h-[42px] rounded-control border border-line bg-input px-3.5 flex items-center justify-between gap-4 cursor-pointer">
-                        <span class="font-sans text-[13px] text-fg-2">New position cycles</span>
-                        <span class="relative inline-flex items-center">
-                            <input id="allow_opening_positions" type="checkbox" name="allow_opening_positions" value="1"
-                                   class="peer sr-only" @checked((bool) old('allow_opening_positions', $engine->allow_opening_positions))>
-                            <span class="h-[24px] w-[44px] rounded-full bg-surface-3 ring-1 ring-inset ring-line-strong transition-colors peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent"></span>
-                            <span class="absolute left-1 h-4 w-4 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></span>
-                        </span>
-                    </label>
+                    <div x-data="{ enabled: @js((bool) old('allow_opening_positions', $engine->allow_opening_positions)) }">
+                        <input type="hidden" name="allow_opening_positions" :value="enabled ? '1' : '0'">
+                        <button id="allow_opening_positions" type="button" role="switch" :aria-checked="enabled"
+                                @click="enabled = ! enabled"
+                                class="w-full h-[42px] appearance-none rounded-control border border-line bg-input px-3.5 flex items-center justify-between gap-4 cursor-pointer focus:outline-none focus:border-accent focus:shadow-[0_0_0_3px_color-mix(in_srgb,var(--accent)_18%,transparent)]">
+                            <span class="font-sans text-[13px] text-fg-2" x-text="enabled ? 'New position cycles enabled' : 'New position cycles disabled'"></span>
+                            <span class="relative h-[24px] w-[44px] flex-shrink-0 rounded-full ring-1 ring-inset ring-line-strong transition-colors"
+                                  :class="enabled ? 'bg-accent' : 'bg-surface-3'">
+                                <span class="absolute left-1 top-1 h-4 w-4 rounded-full bg-white shadow transition-transform"
+                                      :style="enabled ? 'transform: translateX(20px)' : 'transform: translateX(0)'"></span>
+                            </span>
+                        </button>
+                    </div>
                 </x-form.field>
 
                 <x-form.field
                     label="Master trading"
                     for="can_trade"
                     help="Emergency fleet-wide stop for new opens. Existing positions continue managing and closing.">
-                    <div class="relative">
-                        <select id="can_trade" name="can_trade" class="{{ $select }}">
-                            <option value="inherit" @selected($canTradeValue === 'inherit')>Use safe default — enabled</option>
-                            <option value="1" @selected((string) $canTradeValue === '1')>Enabled</option>
-                            <option value="0" @selected((string) $canTradeValue === '0')>Suspended</option>
-                        </select>
-                        <x-feathericon-chevron-down class="pointer-events-none absolute right-3.5 top-1/2 w-4 h-4 -translate-y-1/2 text-fg-mute" stroke-width="1.75"/>
-                    </div>
+                    <x-form.select id="can_trade" name="can_trade" :value="$canTradeValue" :options="['inherit' => 'Use safe default — enabled', '1' => 'Enabled', '0' => 'Suspended']"/>
                 </x-form.field>
             </x-form.group>
 
@@ -90,14 +109,7 @@
                     label="Notification delivery"
                     for="notifications_enabled"
                     help="Global delivery switch before each user's own channel preferences are applied.">
-                    <div class="relative">
-                        <select id="notifications_enabled" name="notifications_enabled" class="{{ $select }}">
-                            <option value="inherit" @selected($notificationsValue === 'inherit')>Use configured default — {{ $effective['notifications_enabled'] ? 'enabled' : 'disabled' }}</option>
-                            <option value="1" @selected((string) $notificationsValue === '1')>Enabled</option>
-                            <option value="0" @selected((string) $notificationsValue === '0')>Disabled</option>
-                        </select>
-                        <x-feathericon-chevron-down class="pointer-events-none absolute right-3.5 top-1/2 w-4 h-4 -translate-y-1/2 text-fg-mute" stroke-width="1.75"/>
-                    </div>
+                    <x-form.select id="notifications_enabled" name="notifications_enabled" :value="$notificationsValue" :options="['inherit' => 'Use configured default — '.($effective['notifications_enabled'] ? 'enabled' : 'disabled'), '1' => 'Enabled', '0' => 'Disabled']"/>
                 </x-form.field>
 
                 <div class="rounded-control border border-line-soft bg-surface-2 px-4 py-3 flex gap-3">
@@ -111,43 +123,21 @@
                     label="Correlation series"
                     for="td_correlation_type"
                     help="The BTC relationship series token discovery uses when ranking candidates.">
-                    <div class="relative">
-                        <select id="td_correlation_type" name="td_correlation_type" class="{{ $select }}">
-                            <option value="inherit" @selected($correlationTypeValue === 'inherit')>Use configured default — {{ $effective['td_correlation_type'] }}</option>
-                            @foreach(['rolling', 'pearson', 'spearman'] as $type)
-                                <option value="{{ $type }}" @selected($correlationTypeValue === $type)>{{ ucfirst($type) }}</option>
-                            @endforeach
-                        </select>
-                        <x-feathericon-chevron-down class="pointer-events-none absolute right-3.5 top-1/2 w-4 h-4 -translate-y-1/2 text-fg-mute" stroke-width="1.75"/>
-                    </div>
+                    <x-form.select id="td_correlation_type" name="td_correlation_type" :value="$correlationTypeValue" :options="['inherit' => 'Use configured default — '.$effective['td_correlation_type'], 'rolling' => 'Rolling', 'pearson' => 'Pearson', 'spearman' => 'Spearman']"/>
                 </x-form.field>
 
                 <x-form.field
                     label="Correlation computation"
                     for="corr_enabled"
                     help="Controls whether the BTC-correlation pipeline produces fresh values.">
-                    <div class="relative">
-                        <select id="corr_enabled" name="corr_enabled" class="{{ $select }}">
-                            <option value="inherit" @selected($correlationEnabledValue === 'inherit')>Use configured default — {{ $effective['corr_enabled'] ? 'enabled' : 'disabled' }}</option>
-                            <option value="1" @selected((string) $correlationEnabledValue === '1')>Enabled</option>
-                            <option value="0" @selected((string) $correlationEnabledValue === '0')>Disabled</option>
-                        </select>
-                        <x-feathericon-chevron-down class="pointer-events-none absolute right-3.5 top-1/2 w-4 h-4 -translate-y-1/2 text-fg-mute" stroke-width="1.75"/>
-                    </div>
+                    <x-form.select id="corr_enabled" name="corr_enabled" :value="$correlationEnabledValue" :options="['inherit' => 'Use configured default — '.($effective['corr_enabled'] ? 'enabled' : 'disabled'), '1' => 'Enabled', '0' => 'Disabled']"/>
                 </x-form.field>
 
                 <x-form.field
                     label="Elasticity computation"
                     for="elast_enabled"
                     help="Controls whether the BTC-elasticity pipeline produces fresh values.">
-                    <div class="relative">
-                        <select id="elast_enabled" name="elast_enabled" class="{{ $select }}">
-                            <option value="inherit" @selected($elasticityEnabledValue === 'inherit')>Use configured default — {{ $effective['elast_enabled'] ? 'enabled' : 'disabled' }}</option>
-                            <option value="1" @selected((string) $elasticityEnabledValue === '1')>Enabled</option>
-                            <option value="0" @selected((string) $elasticityEnabledValue === '0')>Disabled</option>
-                        </select>
-                        <x-feathericon-chevron-down class="pointer-events-none absolute right-3.5 top-1/2 w-4 h-4 -translate-y-1/2 text-fg-mute" stroke-width="1.75"/>
-                    </div>
+                    <x-form.select id="elast_enabled" name="elast_enabled" :value="$elasticityEnabledValue" :options="['inherit' => 'Use configured default — '.($effective['elast_enabled'] ? 'enabled' : 'disabled'), '1' => 'Enabled', '0' => 'Disabled']"/>
                 </x-form.field>
             </x-form.group>
 
@@ -156,16 +146,13 @@
                     label="Freshness window"
                     for="bscs_freshness_max_seconds"
                     help="Maximum age, in seconds, before BSCS data is treated as stale.">
-                    <input id="bscs_freshness_max_seconds" name="bscs_freshness_max_seconds" type="number" min="0" step="1"
-                           value="{{ old('bscs_freshness_max_seconds', $engine->bscs_freshness_max_seconds) }}" class="{{ $input }}" required>
+                    <x-form.select id="bscs_freshness_max_seconds" name="bscs_freshness_max_seconds" :value="$freshnessValue" :options="$freshnessOptions"/>
                 </x-form.field>
                 <x-form.field
                     label="Cooldown window"
                     for="bscs_cooldown_hours"
                     help="Hours new openings stay paused after a critical score. Blank inherits {{ $effective['bscs_cooldown_hours'] }}h; the window re-arms while the score stays critical.">
-                    <input id="bscs_cooldown_hours" name="bscs_cooldown_hours" type="number" min="1" max="168" step="1"
-                           value="{{ old('bscs_cooldown_hours', $engine->bscs_cooldown_hours) }}" placeholder="Inherit {{ $effective['bscs_cooldown_hours'] }}"
-                           class="{{ $input }}">
+                    <x-form.select id="bscs_cooldown_hours" name="bscs_cooldown_hours" :value="$cooldownValue" :options="$cooldownOptions"/>
                 </x-form.field>
             </x-form.group>
 

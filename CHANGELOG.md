@@ -2,6 +2,17 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.55.0] — 2026-08-12
+
+### Focused sysadmin console and runtime settings
+
+- [REMOVED] Sysadmin billing, exchange, and companion user-management
+  surfaces, including their routes, navigation, views, controllers, and tests.
+- [CHANGED] Runtime settings use the shared styled dropdowns, with a working
+  New Position Cycles switch and curated human-readable BSCS windows.
+- [VERIFIED] Targeted Pest 5/TIA coverage, Pint, and the production asset build
+  pass.
+
 ## [0.54.0] — 2026-08-12
 
 ### Seventeen-point position sparklines

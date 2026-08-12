@@ -82,8 +82,9 @@ it('omits redundant and retired links from sysadmin navigation', function (): vo
 
     expect($xpath->query('//*[@data-id="dispatch"]')->length)->toBe(0)
         ->and($xpath->query('//*[@data-id="revenue"]')->length)->toBe(0)
-        ->and($xpath->query('//*[@data-id="engine"]')->length)->toBe(2)
-        ->and($xpath->query('//*[@data-id="billing"]')->length)->toBe(2);
+        ->and($xpath->query('//*[@data-id="billing"]')->length)->toBe(0)
+        ->and($xpath->query('//*[@data-id="exchanges"]')->length)->toBe(0)
+        ->and($xpath->query('//*[@data-id="engine"]')->length)->toBe(2);
 });
 
 it('sends sysadmin logins to the system dashboard', function (): void {
