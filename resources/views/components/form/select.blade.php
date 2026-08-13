@@ -22,8 +22,9 @@
 ])
 @php
     $valueColor = $dir === 'long' ? 'var(--pnl-up-fg)' : ($dir === 'short' ? 'var(--pnl-down-fg)' : 'var(--fg-1)');
+    $optionsAreList = array_is_list($options);
     $normalizedOptions = collect($options)
-        ->mapWithKeys(static fn (mixed $label, int|string $optionValue): array => is_int($optionValue)
+        ->mapWithKeys(static fn (mixed $label, int|string $optionValue): array => $optionsAreList
             ? [(string) $label => (string) $label]
             : [(string) $optionValue => (string) $label])
         ->all();
@@ -65,13 +66,13 @@
         @foreach($normalizedOptions as $optionValue => $optionLabel)
             <button type="button"
                     role="option"
-                    @click="{{ $selection }} = @js($optionValue); open = false"
-                    :aria-selected="{{ $selection }} === @js($optionValue)"
-                    :class="{{ $selection }} === @js($optionValue) ? 'bg-hover' : ''"
+                    @click="{{ $selection }} = @js((string) $optionValue); open = false"
+                    :aria-selected="{{ $selection }} === @js((string) $optionValue)"
+                    :class="{{ $selection }} === @js((string) $optionValue) ? 'bg-hover' : ''"
                     class="appearance-none cursor-pointer text-left flex items-center justify-between gap-3 bg-transparent border-0 rounded-[7px] py-2 px-2.5 transition-colors duration-fast ease-out hover:bg-hover">
                 <span class="font-mono text-[13px] font-semibold tabular-nums"
-                      @if($dir) style="color: {{ $valueColor }};" @else :class="{{ $selection }} === @js($optionValue) ? 'text-fg-1' : 'text-fg-2'" @endif>{{ $prefix }}{{ $optionLabel }}</span>
-                <span x-show="{{ $selection }} === @js($optionValue)" class="text-accent"><x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/></span>
+                      @if($dir) style="color: {{ $valueColor }};" @else :class="{{ $selection }} === @js((string) $optionValue) ? 'text-fg-1' : 'text-fg-2'" @endif>{{ $prefix }}{{ $optionLabel }}</span>
+                <span x-show="{{ $selection }} === @js((string) $optionValue)" class="text-accent"><x-feathericon-check class="w-[15px] h-[15px]" stroke-width="2"/></span>
             </button>
         @endforeach
     </div>

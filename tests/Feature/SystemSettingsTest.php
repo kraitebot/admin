@@ -33,6 +33,27 @@ it('shows database-backed runtime controls and read-only engine state to admins'
         ->assertSee(route('system.settings.update'), false);
 });
 
+it('renders labels without replacing numeric option values in the shared dropdown', function (): void {
+    $numericOptions = $this->blade(
+        '<x-form.select name="cooldown" value="4" :options="$options" />',
+        ['options' => [4 => '4 hours', 6 => '6 hours']],
+    );
+
+    $numericOptions
+        ->assertSee('\\u00224\\u0022:\\u00224 hours\\u0022', false)
+        ->assertSee('@click="selected = \'4\'; open = false"', false)
+        ->assertDontSee('@click="selected = \'4 hours\'; open = false"', false);
+
+    $plainList = $this->blade(
+        '<x-form.select model="quote" :options="$options" />',
+        ['options' => ['USDT', 'USDC']],
+    );
+
+    $plainList
+        ->assertSee('@click="quote = \'USDT\'; open = false"', false)
+        ->assertSee('@click="quote = \'USDC\'; open = false"', false);
+});
+
 it('prevents guests and traders from changing runtime settings', function (): void {
     $before = Kraite::findOrFail(1)->getRawOriginal();
     $payload = [

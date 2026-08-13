@@ -2,6 +2,15 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.55.1] — 2026-08-13
+
+### Runtime settings dropdown values
+
+- [FIXED] Runtime Settings dropdowns preserve numeric database values while
+  displaying curated labels; sequential list options remain value-based.
+- [VERIFIED] Targeted Pest 5 coverage, Pint, Blade caching, and the production
+  asset build pass.
+
 ## [0.55.0] — 2026-08-12
 
 ### Focused sysadmin console and runtime settings
