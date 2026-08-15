@@ -155,6 +155,18 @@ function prepareCoreBillingSchema(): void
         });
     }
 
+    if (! Schema::hasTable('payment_receipts')) {
+        Schema::create('payment_receipts', function (Blueprint $table): void {
+            $table->id();
+            $table->unsignedBigInteger('payment_id');
+            $table->string('gateway_payment_id')->unique();
+            $table->string('parent_gateway_payment_id')->nullable()->index();
+            $table->decimal('credited_amount', 14, 4)->default(0);
+            $table->timestamps();
+            $table->index(['payment_id', 'created_at']);
+        });
+    }
+
     if (! Schema::hasTable('top_up_coins')) {
         Schema::create('top_up_coins', function (Blueprint $table): void {
             $table->id();

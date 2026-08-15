@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Illuminate\Testing\TestResponse;
 use Kraite\Core\Models\Kraite;
 use Kraite\Core\Models\Payment;
+use Kraite\Core\Models\PaymentReceipt;
 use Kraite\Core\Models\Subscription;
 use Kraite\Core\Models\User;
 use Kraite\Core\Models\WalletTransaction;
@@ -119,6 +120,132 @@ it('credits only the positive delta across partial and final payment webhooks', 
     expect($payment->fresh()->status)->toBe(Payment::STATUS_FINISHED);
     expect(WalletTransaction::where('user_id', $user->id)->orderBy('id')->pluck('amount_usdt')->map(fn ($amount): float => (float) $amount)->all())
         ->toBe([25.0, 15.0, 35.0]);
+});
+
+it('normalizes numeric gateway payment ids from the documented webhook shape', function (): void {
+    $user = webhookBillingUser();
+    $payment = webhookPayment($user);
+
+    postNowPaymentsWebhook([
+        'payment_id' => 123456789,
+        'order_id' => $payment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_currency' => 'usdttrc20',
+        'outcome_amount' => 25,
+    ])->assertNoContent();
+
+    expect($payment->fresh()->nowpayments_payment_id)->toBe('123456789')
+        ->and((float) $user->fresh()->wallet_balance_usdt)->toBe(25.0);
+});
+
+it('credits each linked repeated deposit exactly once and tracks its own cumulative delta', function (): void {
+    $user = webhookBillingUser();
+    $payment = webhookPayment($user);
+
+    postNowPaymentsWebhook([
+        'payment_id' => 111111111,
+        'order_id' => $payment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_currency' => 'usdttrc20',
+        'outcome_amount' => 25,
+    ])->assertNoContent();
+
+    $childPayload = [
+        'payment_id' => 222222222,
+        'parent_payment_id' => 111111111,
+        'order_id' => $payment->order_id,
+        'outcome_currency' => 'usdttrc20',
+    ];
+
+    postNowPaymentsWebhook($childPayload + [
+        'payment_status' => Payment::STATUS_PARTIALLY_PAID,
+        'outcome_amount' => 10,
+    ])->assertNoContent();
+
+    postNowPaymentsWebhook($childPayload + [
+        'payment_status' => Payment::STATUS_PARTIALLY_PAID,
+        'outcome_amount' => 10,
+    ])->assertNoContent();
+
+    postNowPaymentsWebhook($childPayload + [
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 14,
+    ])->assertNoContent();
+
+    expect((float) $user->fresh()->wallet_balance_usdt)->toBe(39.0)
+        ->and((float) $payment->fresh()->credited_amount)->toBe(39.0)
+        ->and(WalletTransaction::where('user_id', $user->id)->orderBy('id')->pluck('amount_usdt')->map(fn ($amount): float => (float) $amount)->all())
+        ->toBe([25.0, 10.0, 4.0]);
+});
+
+it('does not credit an unrelated child payment or a webhook without a payment id', function (): void {
+    $user = webhookBillingUser();
+    $payment = webhookPayment($user);
+
+    postNowPaymentsWebhook([
+        'payment_id' => 'original-payment',
+        'order_id' => $payment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 20,
+    ])->assertNoContent();
+
+    postNowPaymentsWebhook([
+        'payment_id' => 'foreign-child',
+        'parent_payment_id' => 'different-parent',
+        'order_id' => $payment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 100,
+    ])->assertNoContent();
+
+    postNowPaymentsWebhook([
+        'order_id' => $payment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 100,
+    ])->assertNoContent();
+
+    expect((float) $user->fresh()->wallet_balance_usdt)->toBe(20.0)
+        ->and((float) $payment->fresh()->credited_amount)->toBe(20.0)
+        ->and(WalletTransaction::where('user_id', $user->id)->count())->toBe(1);
+});
+
+it('does not attach a repeated deposit to an invoice that does not own its parent payment', function (): void {
+    $firstUser = webhookBillingUser();
+    $firstPayment = webhookPayment($firstUser);
+    $secondUser = webhookBillingUser();
+    $secondPayment = webhookPayment($secondUser);
+
+    postNowPaymentsWebhook([
+        'payment_id' => 'parent-owned-by-first-invoice',
+        'order_id' => $firstPayment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 20,
+    ])->assertNoContent();
+
+    expect((float) $firstUser->fresh()->wallet_balance_usdt)->toBe(20.0)
+        ->and((float) $secondUser->fresh()->wallet_balance_usdt)->toBe(0.0)
+        ->and((float) $secondPayment->fresh()->credited_amount)->toBe(0.0)
+        ->and($secondPayment->fresh()->nowpayments_payment_id)->toBeNull()
+        ->and(PaymentReceipt::query()->where('payment_id', $secondPayment->id)->exists())->toBeFalse();
+
+    postNowPaymentsWebhook([
+        'payment_id' => 'child-targeting-second-invoice',
+        'parent_payment_id' => 'parent-owned-by-first-invoice',
+        'order_id' => $secondPayment->order_id,
+        'payment_status' => Payment::STATUS_FINISHED,
+        'outcome_amount' => 100,
+    ])->assertNoContent();
+
+    expect((float) $firstUser->fresh()->wallet_balance_usdt)->toBe(20.0)
+        ->and((float) $secondUser->fresh()->wallet_balance_usdt)->toBe(0.0)
+        ->and((float) $secondPayment->fresh()->credited_amount)->toBe(0.0)
+        ->and($secondPayment->fresh()->nowpayments_payment_id)->toBeNull()
+        ->and(PaymentReceipt::query()
+            ->where('payment_id', $firstPayment->id)
+            ->where('gateway_payment_id', 'parent-owned-by-first-invoice')
+            ->count())->toBe(1)
+        ->and(PaymentReceipt::query()->where('payment_id', $secondPayment->id)->exists())->toBeFalse()
+        ->and(WalletTransaction::query()->where('user_id', $firstUser->id)->count())->toBe(1)
+        ->and(WalletTransaction::query()->where('user_id', $secondUser->id)->exists())->toBeFalse();
 });
 
 it('starts a full calendar-month cycle when a top-up recovers closing mode', function (): void {

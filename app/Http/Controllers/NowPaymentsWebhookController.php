@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Kraite\Core\Models\Payment;
+use Kraite\Core\Models\PaymentReceipt;
 use Kraite\Core\Models\User;
 use Kraite\Core\Models\WalletTransaction;
 use Kraite\Core\Support\Billing\Wallet;
@@ -32,13 +33,16 @@ final class NowPaymentsWebhookController extends Controller
     {
         $payload = $request->all();
 
-        $paymentId = $payload['payment_id'] ?? null;
+        $paymentId = $this->gatewayPaymentId($payload['payment_id'] ?? null);
+        $parentPaymentId = $this->gatewayPaymentId($payload['parent_payment_id'] ?? null);
         $orderId = $payload['order_id'] ?? null;
         $status = $payload['payment_status'] ?? null;
 
-        if (! is_string($orderId) || ! is_string($status)) {
+        if ($paymentId === null || ! is_string($orderId) || ! is_string($status)) {
             Log::warning('[NOWPayments] missing required fields in webhook', [
-                'payload' => $payload,
+                'payment_id' => $paymentId,
+                'order_id' => is_scalar($orderId) ? (string) $orderId : null,
+                'payment_status' => is_scalar($status) ? (string) $status : null,
             ]);
 
             return response()->noContent();
@@ -55,7 +59,7 @@ final class NowPaymentsWebhookController extends Controller
             return response()->noContent();
         }
 
-        $this->applyWebhook($payment, $payload, $paymentId, $status);
+        $this->applyWebhook($payment, $payload, $paymentId, $parentPaymentId, $status);
 
         return response()->noContent();
     }
@@ -69,7 +73,8 @@ final class NowPaymentsWebhookController extends Controller
     private function applyWebhook(
         Payment $payment,
         array $payload,
-        mixed $paymentId,
+        string $paymentId,
+        ?string $parentPaymentId,
         string $incomingStatus,
     ): void {
         $renewalRan = false;
@@ -80,6 +85,7 @@ final class NowPaymentsWebhookController extends Controller
             $payment,
             $payload,
             $paymentId,
+            $parentPaymentId,
             $incomingStatus,
             &$renewalRan,
             &$credited,
@@ -91,28 +97,74 @@ final class NowPaymentsWebhookController extends Controller
                 return;
             }
 
-            if (
-                is_string($paymentId)
-                && $locked->nowpayments_payment_id !== null
-                && ! hash_equals($locked->nowpayments_payment_id, $paymentId)
-            ) {
-                Log::warning('[NOWPayments] payment_id does not match the existing order', [
-                    'payment_id' => $locked->id,
-                    'expected_nowpayments_payment_id' => $locked->nowpayments_payment_id,
-                    'received_nowpayments_payment_id' => $paymentId,
+            $parentOwnerPaymentId = $parentPaymentId === null
+                ? null
+                : PaymentReceipt::query()
+                    ->where('gateway_payment_id', $parentPaymentId)
+                    ->value('payment_id')
+                    ?? Payment::query()
+                        ->where('nowpayments_payment_id', $parentPaymentId)
+                        ->value('id');
+
+            if ($parentOwnerPaymentId !== null && (int) $parentOwnerPaymentId !== (int) $locked->id) {
+                Log::warning('[NOWPayments] parent_payment_id belongs to another order', [
+                    'payment_id' => $paymentId,
+                    'parent_payment_id' => $parentPaymentId,
+                    'expected_order_payment_id' => $locked->id,
+                    'actual_order_payment_id' => $parentOwnerPaymentId,
                 ]);
 
                 return;
+            }
+
+            $originalPaymentId = $locked->nowpayments_payment_id;
+
+            if ($originalPaymentId === null) {
+                $originalPaymentId = $parentPaymentId ?? $paymentId;
+                $locked->nowpayments_payment_id = $originalPaymentId;
+            }
+
+            $isOriginalPayment = hash_equals($originalPaymentId, $paymentId);
+            $isLinkedDeposit = $parentPaymentId !== null
+                && hash_equals($originalPaymentId, $parentPaymentId);
+
+            if (! $isOriginalPayment && ! $isLinkedDeposit) {
+                Log::warning('[NOWPayments] payment_id does not match the existing order', [
+                    'payment_id' => $locked->id,
+                    'expected_nowpayments_payment_id' => $originalPaymentId,
+                    'received_nowpayments_payment_id' => $paymentId,
+                    'received_parent_payment_id' => $parentPaymentId,
+                ]);
+
+                return;
+            }
+
+            $receipt = PaymentReceipt::query()->firstOrNew([
+                'gateway_payment_id' => $paymentId,
+            ]);
+
+            if ($receipt->exists && (int) $receipt->payment_id !== (int) $locked->id) {
+                Log::warning('[NOWPayments] payment_id already belongs to another order', [
+                    'payment_id' => $paymentId,
+                    'expected_order_payment_id' => $locked->id,
+                    'actual_order_payment_id' => $receipt->payment_id,
+                ]);
+
+                return;
+            }
+
+            if (! $receipt->exists) {
+                $receipt->payment_id = $locked->id;
+                $receipt->parent_gateway_payment_id = $parentPaymentId;
+                $receipt->credited_amount = $isOriginalPayment
+                    ? (string) ($locked->credited_amount ?? '0')
+                    : '0';
             }
 
             $locked->raw_payload = $payload;
 
             if ($this->statusRank($incomingStatus) >= $this->statusRank($locked->status)) {
                 $locked->status = $incomingStatus;
-            }
-
-            if (is_string($paymentId)) {
-                $locked->nowpayments_payment_id = $paymentId;
             }
 
             if (isset($payload['pay_currency']) && is_string($payload['pay_currency'])) {
@@ -140,21 +192,27 @@ final class NowPaymentsWebhookController extends Controller
             }
 
             $locked->save();
+            $receipt->save();
 
             if (! in_array($incomingStatus, Payment::CREDITABLE_STATUSES, true)) {
                 return;
             }
 
-            if ($locked->outcome_amount === null && $incomingStatus === Payment::STATUS_PARTIALLY_PAID) {
-                Log::warning('[NOWPayments] partially-paid webhook omitted outcome_amount', [
+            $incomingOutcome = isset($payload['outcome_amount']) && is_numeric($payload['outcome_amount'])
+                ? (string) $payload['outcome_amount']
+                : null;
+
+            if ($incomingOutcome === null && ($incomingStatus === Payment::STATUS_PARTIALLY_PAID || $isLinkedDeposit)) {
+                Log::warning('[NOWPayments] creditable webhook omitted outcome_amount', [
                     'payment_id' => $locked->id,
+                    'gateway_payment_id' => $paymentId,
                 ]);
 
                 return;
             }
 
-            $cumulativeOutcome = (string) ($locked->outcome_amount ?? $locked->price_amount);
-            $alreadyCredited = (string) ($locked->credited_amount ?? '0');
+            $cumulativeOutcome = $incomingOutcome ?? (string) $locked->price_amount;
+            $alreadyCredited = (string) $receipt->credited_amount;
             $creditDelta = Math::sub($cumulativeOutcome, $alreadyCredited);
 
             if (Math::lte($creditDelta, '0')) {
@@ -175,7 +233,8 @@ final class NowPaymentsWebhookController extends Controller
                 ),
                 meta: [
                     'payment_id' => $locked->id,
-                    'nowpayments_payment_id' => $locked->nowpayments_payment_id,
+                    'nowpayments_payment_id' => $paymentId,
+                    'parent_payment_id' => $parentPaymentId,
                     'pay_currency' => $locked->pay_currency,
                     'pay_amount' => $locked->pay_amount,
                     'status' => $locked->status,
@@ -184,7 +243,11 @@ final class NowPaymentsWebhookController extends Controller
                 ],
             );
 
-            $locked->credited_amount = $cumulativeOutcome;
+            $receipt->credited_amount = $cumulativeOutcome;
+            $receipt->save();
+
+            $locked->credited_amount = Math::add((string) ($locked->credited_amount ?? '0'), $creditDelta);
+            $locked->outcome_amount = $locked->credited_amount;
             $locked->credited_at = now();
             $locked->save();
 
@@ -233,6 +296,17 @@ final class NowPaymentsWebhookController extends Controller
             Payment::STATUS_REFUNDED => 110,
             default => 0,
         };
+    }
+
+    private function gatewayPaymentId(mixed $value): ?string
+    {
+        if (! is_string($value) && ! is_int($value)) {
+            return null;
+        }
+
+        $paymentId = trim((string) $value);
+
+        return $paymentId !== '' && strlen($paymentId) <= 255 ? $paymentId : null;
     }
 
     private function notifyTopupConfirmed(

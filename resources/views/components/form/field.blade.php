@@ -26,6 +26,6 @@
             <x-feathericon-alert-triangle class="w-3 h-3" stroke-width="1.75"/>{{ $error }}
         </div>
     @elseif($help)
-        <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5">{!! $help !!}</div>
+        <div class="text-[11.5px] leading-[1.45] text-fg-mute mt-1.5">{{ $help }}</div>
     @endif
 </div>
