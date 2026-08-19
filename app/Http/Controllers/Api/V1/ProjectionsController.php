@@ -148,6 +148,7 @@ class ProjectionsController extends Controller
                 currentWallet: $currentWallet,
                 scenarios: $scenarios,
                 now: $now,
+                years: 7,
             ),
         ];
     }

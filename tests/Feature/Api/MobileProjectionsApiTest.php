@@ -126,7 +126,7 @@ it('requires the read ability and validates projection input', function (): void
         ->assertJsonValidationErrors('month');
 });
 
-it('returns owner-scoped calendar and exact five-year scenario projections', function (): void {
+it('returns owner-scoped calendar and exact seven-year scenario projections', function (): void {
     $owner = User::factory()->create([
         'name' => 'Projection portfolio owner',
         'email' => 'projection-owner@kraite.test',
@@ -170,11 +170,12 @@ it('returns owner-scoped calendar and exact five-year scenario projections', fun
         ->assertJsonPath('data.yearly.account_count', 2)
         ->assertJsonPath('data.yearly.current_wallet', '3030.00000000')
         ->assertJsonPath('data.yearly.days_observed', 1)
-        ->assertJsonPath('data.yearly.outlook.years', 5)
+        ->assertJsonPath('data.yearly.outlook.years', 7)
+        ->assertJsonCount(7, 'data.yearly.outlook.scenarios.neutral.milestones')
         ->assertJsonPath('data.yearly.outlook.scenarios.neutral.available', true)
         ->assertJsonPath('data.yearly.outlook.scenarios.neutral.daily_pct', '0.01000000')
         ->assertJsonPath('data.yearly.outlook.scenarios.neutral.milestones.0.end_date', '2026-12-31')
-        ->assertJsonPath('data.yearly.outlook.scenarios.neutral.milestones.4.end_date', '2030-12-31');
+        ->assertJsonPath('data.yearly.outlook.scenarios.neutral.milestones.6.end_date', '2032-12-31');
 
     expect($response->json('data.accounts.*.id'))
         ->not->toContain($foreignAccountId)
