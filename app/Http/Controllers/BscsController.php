@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers;
 
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -39,23 +40,7 @@ final class BscsController extends Controller
         // string the operator submitted.
         $payload['override_reason'] = Kraite::query()->value('bscs_override_reason');
 
-        $timeline = MarketRegimeSnapshot::query()
-            ->orderByDesc('computed_at')
-            ->limit(self::TIMELINE_HOURS)
-            ->get([
-                'computed_at',
-                'bscs_score',
-                'bscs_band',
-                'vol_expansion_value', 'vol_expansion_fired',
-                'range_blowout_value', 'range_blowout_fired',
-                'corr_regime_value', 'corr_regime_fired',
-                'rejection_pct_value', 'rejection_pct_fired',
-                'fut_vol_value', 'fut_vol_fired',
-            ])
-            ->reverse()
-            ->values();
-
-        $payload['timeline'] = $timeline->map(fn ($s) => [
+        $payload['timeline'] = $this->timeline()->map(fn (MarketRegimeSnapshot $s): array => [
             't' => $s->computed_at?->toIso8601String(),
             'score' => (int) $s->bscs_score,
             'band' => $s->bscs_band,
@@ -125,5 +110,23 @@ final class BscsController extends Controller
         }
 
         return response()->json(['ok' => true]);
+    }
+
+    /** @return Collection<int, MarketRegimeSnapshot> */
+    private function timeline(): Collection
+    {
+        return MarketRegimeSnapshot::query()
+            ->orderByDesc('computed_at')
+            ->limit(self::TIMELINE_HOURS)
+            ->get([
+                'computed_at', 'bscs_score', 'bscs_band',
+                'vol_expansion_value', 'vol_expansion_fired',
+                'range_blowout_value', 'range_blowout_fired',
+                'corr_regime_value', 'corr_regime_fired',
+                'rejection_pct_value', 'rejection_pct_fired',
+                'fut_vol_value', 'fut_vol_fired',
+            ])
+            ->reverse()
+            ->values();
     }
 }

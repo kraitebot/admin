@@ -2,6 +2,14 @@
 
 All notable changes to the admin.kraite.com project.
 
+## [0.56.0] — 2026-09-28
+
+### PHP quality gate and package releases
+
+- [ADDED] Run PHP Insights, PHPMD complexity, and PHPStan with reviewed baselines in CI, so new architecture and complexity findings fail the gate.
+- [IMPROVED] Simplify controllers, requests, and services across accounts, positions, backtracking, projections, and system tools while preserving their responses and authorization checks.
+- [CHANGED] Refresh the development and production dependency graphs for Core 1.108.0, AI Bridge 1.4.3, Step Dispatcher 1.20.5, and the current published helper and icon releases. The production lock contains runtime packages only.
+
 ## [0.55.1] — 2026-08-13
 
 ### Runtime settings dropdown values

@@ -12,7 +12,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Kraite\Core\Support\Financial\ReportingDay;
 
-class ProfileController extends Controller
+final class ProfileController extends Controller
 {
     /**
      * Display the user's profile form.

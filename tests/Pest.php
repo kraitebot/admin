@@ -56,6 +56,13 @@ function something()
 
 function prepareCoreBillingSchema(): void
 {
+    prepareCoreBillingUserSchema();
+    prepareCoreBillingReferenceSchema();
+    prepareCoreBillingLedgerSchema();
+}
+
+function prepareCoreBillingUserSchema(): void
+{
     Schema::table('users', function (Blueprint $table): void {
         foreach ([
             'uuid' => fn () => $table->char('uuid', 36)->nullable()->unique(),
@@ -74,7 +81,10 @@ function prepareCoreBillingSchema(): void
             }
         }
     });
+}
 
+function prepareCoreBillingReferenceSchema(): void
+{
     if (! Schema::hasColumn('kraite', 'nowpayments_api_key')) {
         Schema::table('kraite', function (Blueprint $table): void {
             $table->longText('nowpayments_api_key')->nullable();
@@ -121,7 +131,10 @@ function prepareCoreBillingSchema(): void
             $table->softDeletes();
         });
     }
+}
 
+function prepareCoreBillingLedgerSchema(): void
+{
     if (! Schema::hasTable('wallet_transactions')) {
         Schema::create('wallet_transactions', function (Blueprint $table): void {
             $table->id();

@@ -16,7 +16,7 @@ use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\FleetFinancials;
 use Kraite\Core\Support\Financial\Window;
 
-class ProjectionsController extends Controller
+final class ProjectionsController extends Controller
 {
     public function index(): View
     {
@@ -68,52 +68,11 @@ class ProjectionsController extends Controller
             'month' => ['required', 'integer', 'min:1', 'max:12'],
         ]);
 
-        $account = Account::query()
-            ->where('id', $request->input('account_id'))
-            ->where('user_id', Auth::id())
-            ->firstOrFail();
-
-        $year = (int) $request->input('year');
-        $month = (int) $request->input('month');
-
-        $now = CarbonImmutable::now();
-        $financials = new AccountFinancials($account);
-
-        // Calendar days, the month's edges and "today" all follow the day
-        // basis the trader's exchange uses, so a close at 22:30 UTC lands on
-        // the same square here as it does on their exchange statement.
-        $dayBasis = $financials->reportingDay();
-        // Midday, not midnight: a trader west of UTC would see 00:00 on the
-        // 1st shifted back into the previous month, and the whole calendar
-        // would silently render the wrong month.
-        $monthAnchor = CarbonImmutable::create($year, $month, 1, 12);
-        $monthWindow = Window::thisMonth($monthAnchor, $dayBasis);
-        $currentMonthWindow = Window::thisMonth($now, $dayBasis);
-
-        $investmentBasis = $financials->investmentBasis();
-
-        return response()->json([
-            'account_id' => $account->id,
-            'year' => $year,
-            'month' => $month,
-            'actuals' => $this->normalizeRevenues($financials->dailyRevenues($monthWindow)),
-            'current_wallet' => $investmentBasis['current_wallet'],
-            'month_start_wallet' => $financials->startWallet($monthWindow),
-            'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
-            'scenarios' => $this->normalizeScenarios($financials->scenarios($currentMonthWindow)),
-            'investment_basis' => [
-                'amount' => $this->normalizeMoney($investmentBasis['amount']),
-                'known_realized_pnl' => $this->normalizeMoney($investmentBasis['known_realized_pnl']),
-                'tracking_started_at' => $investmentBasis['tracking_started_at'],
-                'tracking_ended_at' => $investmentBasis['tracking_ended_at'],
-                'closed_positions' => $investmentBasis['closed_positions'],
-                'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
-                'is_complete' => $investmentBasis['is_complete'],
-            ],
-            'today' => $dayBasis->dateOf($now),
-            'utc_offset_minutes' => $dayBasis->offsetMinutes,
-            'day_basis_label' => $dayBasis->label(),
-        ]);
+        return $this->calendarResponse(
+            $this->accountFor($request),
+            (int) $request->input('year'),
+            (int) $request->input('month'),
+        );
     }
 
     public function yearly(): View
@@ -121,16 +80,6 @@ class ProjectionsController extends Controller
         return view('projections.yearly', [
             'noPositions' => $this->hasNoPositions(),
         ]);
-    }
-
-    private function hasNoPositions(): bool
-    {
-        return rescue(fn (): bool => ! Position::query()
-            ->whereIn(
-                'account_id',
-                Account::where('user_id', Auth::id())->select('id'),
-            )
-            ->exists(), false);
     }
 
     public function yearlyData(YearlyProjectionPlanner $planner): JsonResponse
@@ -158,6 +107,74 @@ class ProjectionsController extends Controller
                 now: $now,
             ),
         ]);
+    }
+
+    private function accountFor(Request $request): Account
+    {
+        return Account::query()
+            ->where('id', $request->input('account_id'))
+            ->where('user_id', Auth::id())
+            ->firstOrFail();
+    }
+
+    private function calendarResponse(Account $account, int $year, int $month): JsonResponse
+    {
+        $now = CarbonImmutable::now();
+        $financials = new AccountFinancials($account);
+
+        // Calendar days, the month's edges and "today" all follow the day
+        // basis the trader's exchange uses, so a close at 22:30 UTC lands on
+        // the same square here as it does on their exchange statement.
+        $dayBasis = $financials->reportingDay();
+        // Midday, not midnight: a trader west of UTC would see 00:00 on the
+        // 1st shifted back into the previous month, and the whole calendar
+        // would silently render the wrong month.
+        $monthWindow = Window::thisMonth(CarbonImmutable::create($year, $month, 1, 12), $dayBasis);
+        $currentMonthWindow = Window::thisMonth($now, $dayBasis);
+
+        $investmentBasis = $financials->investmentBasis();
+
+        return response()->json([
+            'account_id' => $account->id,
+            'year' => $year,
+            'month' => $month,
+            'actuals' => $this->normalizeRevenues($financials->dailyRevenues($monthWindow)),
+            'current_wallet' => $investmentBasis['current_wallet'],
+            'month_start_wallet' => $financials->startWallet($monthWindow),
+            'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
+            'scenarios' => $this->normalizeScenarios($financials->scenarios($currentMonthWindow)),
+            'investment_basis' => $this->investmentBasisPayload($investmentBasis),
+            'today' => $dayBasis->dateOf($now),
+            'utc_offset_minutes' => $dayBasis->offsetMinutes,
+            'day_basis_label' => $dayBasis->label(),
+        ]);
+    }
+
+    /**
+     * @param  array{amount: ?string, current_wallet: ?string, known_realized_pnl: string, tracking_started_at: ?string, tracking_ended_at: ?string, closed_positions: int, missing_pnl_positions: int, is_complete: bool}  $basis
+     * @return array{amount: ?string, known_realized_pnl: ?string, tracking_started_at: ?string, tracking_ended_at: ?string, closed_positions: int, missing_pnl_positions: int, is_complete: bool}
+     */
+    private function investmentBasisPayload(array $basis): array
+    {
+        return [
+            'amount' => $this->normalizeMoney($basis['amount']),
+            'known_realized_pnl' => $this->normalizeMoney($basis['known_realized_pnl']),
+            'tracking_started_at' => $basis['tracking_started_at'],
+            'tracking_ended_at' => $basis['tracking_ended_at'],
+            'closed_positions' => $basis['closed_positions'],
+            'missing_pnl_positions' => $basis['missing_pnl_positions'],
+            'is_complete' => $basis['is_complete'],
+        ];
+    }
+
+    private function hasNoPositions(): bool
+    {
+        return rescue(fn (): bool => ! Position::query()
+            ->whereIn(
+                'account_id',
+                Account::where('user_id', Auth::id())->select('id'),
+            )
+            ->exists(), false);
     }
 
     /**

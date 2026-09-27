@@ -23,14 +23,19 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "larastan/larastan": "3.12.2",
         "laravel/boost": "^2.4",
         "laravel/breeze": "^2.4",
         "laravel/pail": "^1.2.5",
         "laravel/pint": "^1.27",
         "mockery/mockery": "^1.6",
         "nunomaduro/collision": "^8.9.5",
+        "nunomaduro/phpinsights": "2.15.0",
         "pestphp/pest": "^5.0",
         "pestphp/pest-plugin-laravel": "^5.0",
+        "pestphp/pest-plugin-phpstan": "5.2.1",
+        "phpmd/phpmd": "3.x-dev#7e875c94bc8db9ffd55e6615e88a76fdb2ff8068",
+        "phpstan/phpstan": "2.2.16",
         "phpunit/phpunit": "^13.2"
     },
     "autoload": {
@@ -68,6 +73,7 @@
             "@php artisan config:clear --ansi",
             "@test:tia:fresh"
         ],
+        "quality:php": "@php scripts/php-quality-gate.php",
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
             "@php artisan package:discover --ansi"
@@ -87,6 +93,9 @@
             "Illuminate\\Foundation\\ComposerScripts::prePackageUninstall"
         ]
     },
+    "scripts-descriptions": {
+        "quality:php": "Run PHP Insights, PHPMD complexity, and Larastan with project baselines."
+    },
     "extra": {
         "laravel": {
             "dont-discover": []
@@ -98,7 +107,8 @@
         "sort-packages": true,
         "allow-plugins": {
             "pestphp/pest-plugin": true,
-            "php-http/discovery": true
+            "php-http/discovery": true,
+            "dealerdirect/phpcodesniffer-composer-installer": true
         }
     },
     "minimum-stability": "dev",

@@ -7,56 +7,24 @@ use App\Http\Requests\Auth\LoginRequest;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Route as RoutingRoute;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\View;
+use stdClass;
 
-class AuthenticatedSessionController extends Controller
+final class AuthenticatedSessionController extends Controller
 {
     public function create(): View
     {
-        $devUsers = collect();
-        $devQuickPickPassword = null;
-
-        if (app()->isLocal()) {
-            $configuredPassword = config('auth.local_quick_pick_password');
-
-            if (is_string($configuredPassword) && $configuredPassword !== '') {
-                $devQuickPickPassword = $configuredPassword;
-                $users = DB::table('users')
-                    ->orderByDesc('is_admin')
-                    ->orderBy('name')
-                    ->get(['id', 'name', 'email', 'is_admin']);
-
-                $accountsByUser = DB::table('accounts')
-                    ->join('api_systems', 'api_systems.id', '=', 'accounts.api_system_id')
-                    ->select('accounts.user_id', 'accounts.name as account_name', 'api_systems.name as exchange')
-                    ->orderBy('api_systems.name')
-                    ->get()
-                    ->groupBy('user_id');
-
-                $devUsers = $users->map(function ($user) use ($accountsByUser) {
-                    $accounts = $accountsByUser->get($user->id, collect());
-
-                    $subtitle = match (true) {
-                        $accounts->isEmpty() && (bool) $user->is_admin => 'Sysadmin',
-                        $accounts->isEmpty() => 'No accounts',
-                        default => $accounts->map(fn ($a) => "{$a->exchange} · {$a->account_name}")->implode(' · '),
-                    };
-
-                    return [
-                        'name' => $user->name,
-                        'email' => $user->email,
-                        'is_admin' => (bool) $user->is_admin,
-                        'subtitle' => $subtitle,
-                    ];
-                });
-            }
-        }
+        $configuredPassword = app()->isLocal() ? config('auth.local_quick_pick_password') : null;
+        $devQuickPickPassword = is_string($configuredPassword) && $configuredPassword !== ''
+            ? $configuredPassword
+            : null;
 
         return view('auth.login', [
-            'devUsers' => $devUsers,
+            'devUsers' => $devQuickPickPassword === null ? collect() : $this->quickPickUsers(),
             'devQuickPickPassword' => $devQuickPickPassword,
         ]);
     }
@@ -92,6 +60,57 @@ class AuthenticatedSessionController extends Controller
     }
 
     /**
+     * Destroy an authenticated session.
+     */
+    public function destroy(Request $request): RedirectResponse
+    {
+        Auth::guard('web')->logout();
+
+        $request->session()->invalidate();
+
+        $request->session()->regenerateToken();
+
+        return redirect('/');
+    }
+
+    /** @return Collection<int, array{name: string, email: string, is_admin: bool, subtitle: string}> */
+    private function quickPickUsers(): Collection
+    {
+        $accountsByUser = $this->quickPickAccountsByUser();
+
+        return DB::table('users')
+            ->orderByDesc('is_admin')
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'is_admin'])
+            ->map(function (stdClass $user) use ($accountsByUser): array {
+                $accounts = $accountsByUser->get($user->id, collect());
+                $subtitle = match (true) {
+                    $accounts->isEmpty() && (bool) $user->is_admin => 'Sysadmin',
+                    $accounts->isEmpty() => 'No accounts',
+                    default => $accounts->map(fn (stdClass $account): string => "{$account->exchange} · {$account->account_name}")->implode(' · '),
+                };
+
+                return [
+                    'name' => (string) $user->name,
+                    'email' => (string) $user->email,
+                    'is_admin' => (bool) $user->is_admin,
+                    'subtitle' => $subtitle,
+                ];
+            });
+    }
+
+    /** @return Collection<int|string, Collection<int, stdClass>> */
+    private function quickPickAccountsByUser(): Collection
+    {
+        return DB::table('accounts')
+            ->join('api_systems', 'api_systems.id', '=', 'accounts.api_system_id')
+            ->select('accounts.user_id', 'accounts.name as account_name', 'api_systems.name as exchange')
+            ->orderBy('api_systems.name')
+            ->get()
+            ->groupBy('user_id');
+    }
+
+    /**
      * Whether the page waiting behind this login belongs to the other role.
      * Resolved from route middleware so future role-specific routes are
      * covered without maintaining a path list.
@@ -116,21 +135,12 @@ class AuthenticatedSessionController extends Controller
             return in_array($incompatibleMiddleware, $match->gatherMiddleware(), true);
         }
 
-        return ! $isAdmin
-            && str_starts_with((string) parse_url($intended, PHP_URL_PATH), '/system');
+        return $this->fallbackRequiresDifferentRole($intended, $isAdmin);
     }
 
-    /**
-     * Destroy an authenticated session.
-     */
-    public function destroy(Request $request): RedirectResponse
+    private function fallbackRequiresDifferentRole(string $intended, bool $isAdmin): bool
     {
-        Auth::guard('web')->logout();
-
-        $request->session()->invalidate();
-
-        $request->session()->regenerateToken();
-
-        return redirect('/');
+        return ! $isAdmin
+            && str_starts_with((string) parse_url($intended, PHP_URL_PATH), '/system');
     }
 }

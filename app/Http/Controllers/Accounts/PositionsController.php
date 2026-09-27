@@ -5,15 +5,25 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Accounts;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ApiSnapshot;
+use Kraite\Core\Models\Order;
 use Kraite\Core\Models\Position;
 
-class PositionsController extends Controller
+/**
+ * @phpstan-type ScalarValue int|float|string|bool|null
+ * @phpstan-type PositionData array<string, ScalarValue>
+ * @phpstan-type RawExchangeData array<string, ScalarValue>
+ * @phpstan-type PairOrderData array<string, ScalarValue|PositionData|RawExchangeData|array<int, string>>
+ */
+final class PositionsController extends Controller
 {
     private const POSITION_DRIFT_FIELDS = ['quantity', 'entry_price', 'leverage', 'margin', 'margin_mode'];
 
@@ -123,60 +133,41 @@ class PositionsController extends Controller
 
     public function history(Request $request): JsonResponse
     {
+        $account = $this->historyAccount($request);
+
+        return $this->historyResponse($this->historyPaginator($account, $request));
+    }
+
+    private function historyAccount(Request $request): Account
+    {
         $request->validate([
             'account_id' => ['required', 'integer'],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:5', 'max:100'],
         ]);
 
-        $account = Account::query()
+        return Account::query()
             ->where('id', $request->input('account_id'))
             ->where('user_id', Auth::id())
             ->firstOrFail();
-        $perPage = (int) $request->input('per_page', 25);
-        $page = (int) $request->input('page', 1);
+    }
 
-        $paginator = $account->positions()
+    /** @return LengthAwarePaginator<int, Position> */
+    private function historyPaginator(Account $account, Request $request): LengthAwarePaginator
+    {
+        return $account->positions()
             ->with([
                 'exchangeSymbol',
                 'orders' => fn ($q) => $q->orderBy('id'),
             ])
             ->orderByDesc('created_at')
-            ->paginate($perPage, ['*'], 'page', $page);
+            ->paginate((int) $request->input('per_page', 25), ['*'], 'page', (int) $request->input('page', 1));
+    }
 
-        $positions = collect($paginator->items())->map(function ($p) {
-            $entryPrice = $this->entryPrice($p);
-            [$pnl, $pnlKind] = $this->computePnl($p, $entryPrice);
-
-            return [
-                'id' => $p->id,
-                'symbol' => $p->parsed_trading_pair ?? $p->exchangeSymbol?->symbol ?? 'Unknown',
-                'direction' => $p->direction,
-                'status' => $p->status,
-                'quantity' => (string) $p->quantity,
-                'opening_price' => $this->displayEntryPrice($entryPrice),
-                'closing_price' => (string) ($p->closing_price ?? ''),
-                'mark_price' => $p->exchangeSymbol?->mark_price !== null ? (string) $p->exchangeSymbol->mark_price : null,
-                'leverage' => (string) $p->leverage,
-                'margin' => (string) $p->margin,
-                'pnl' => $pnl,
-                'pnl_kind' => $pnlKind,
-                'created_at' => optional($p->created_at)->format('Y-m-d H:i:s'),
-                'closed_at' => optional($p->closed_at ?? null)->format('Y-m-d H:i:s'),
-                'order_count' => $p->orders->count(),
-                'orders' => $p->orders->map(fn ($o) => [
-                    'id' => $o->id,
-                    'type' => strtoupper((string) $o->type),
-                    'side' => strtoupper((string) $o->side),
-                    'status' => strtoupper((string) $o->status),
-                    'quantity' => (string) $o->quantity,
-                    'price' => (string) $o->price,
-                    'client_order_id' => $o->client_order_id,
-                    'exchange_order_id' => $o->exchange_order_id,
-                ])->all(),
-                'pnl_projections' => $this->computePnlProjections($p),
-            ];
-        })->all();
+    /** @param LengthAwarePaginator<int, Position> $paginator */
+    private function historyResponse(LengthAwarePaginator $paginator): JsonResponse
+    {
+        $positions = collect($paginator->items())->map(fn ($p): array => $this->historyPositionRow($p))->all();
 
         return response()->json([
             'positions' => $positions,
@@ -187,72 +178,170 @@ class PositionsController extends Controller
         ]);
     }
 
-    public function index()
+    /** @return array<string, mixed> */
+    private function historyPositionRow(mixed $position): array
     {
-        $accountModels = Account::with('apiSystem', 'user')
+        $entryPrice = $this->entryPrice($position);
+        [$pnl, $pnlKind] = $this->computePnl($position, $entryPrice);
+
+        return [
+            ...$this->historyPositionFields($position, $entryPrice, $pnl, $pnlKind),
+            'orders' => $this->historyOrderRows($position),
+            'pnl_projections' => $this->computePnlProjections($position),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function historyPositionFields(mixed $position, ?string $entryPrice, ?string $pnl, string $pnlKind): array
+    {
+        return [
+            'id' => $position->id,
+            'symbol' => $position->parsed_trading_pair ?? $position->exchangeSymbol?->symbol ?? 'Unknown',
+            'direction' => $position->direction,
+            'status' => $position->status,
+            'quantity' => (string) $position->quantity,
+            'opening_price' => $this->displayEntryPrice($entryPrice),
+            'closing_price' => (string) ($position->closing_price ?? ''),
+            'mark_price' => $position->exchangeSymbol?->mark_price !== null ? (string) $position->exchangeSymbol->mark_price : null,
+            'leverage' => (string) $position->leverage,
+            'margin' => (string) $position->margin,
+            'pnl' => $pnl,
+            'pnl_kind' => $pnlKind,
+            'created_at' => optional($position->created_at)->format('Y-m-d H:i:s'),
+            'closed_at' => optional($position->closed_at ?? null)->format('Y-m-d H:i:s'),
+            'order_count' => $position->orders->count(),
+        ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function historyOrderRows(mixed $position): array
+    {
+        return $position->orders->map(fn ($order): array => [
+            'id' => $order->id,
+            'type' => strtoupper((string) $order->type),
+            'side' => strtoupper((string) $order->side),
+            'status' => strtoupper((string) $order->status),
+            'quantity' => (string) $order->quantity,
+            'price' => (string) $order->price,
+            'client_order_id' => $order->client_order_id,
+            'exchange_order_id' => $order->exchange_order_id,
+        ])->all();
+    }
+
+    public function index(): View
+    {
+        return view('accounts.positions', $this->indexViewData($this->indexAccountModels()));
+    }
+
+    /** @return EloquentCollection<int, Account> */
+    private function indexAccountModels(): EloquentCollection
+    {
+        return Account::with('apiSystem', 'user')
             ->where('user_id', Auth::id())
             ->orderBy('user_id')
             ->orderBy('name')
             ->get();
+    }
 
-        $accounts = $accountModels->map(fn (Account $account) => [
-            'id' => $account->id,
-            'name' => $account->name,
-            'exchange' => $account->apiSystem?->name ?? 'Unknown',
-            'exchange_canonical' => $account->apiSystem?->canonical,
-            'exchange_logo' => $this->exchangeLogoUrl($account->apiSystem?->canonical),
-            'user' => $account->user?->name ?? 'Unknown',
-            'can_trade' => (bool) $account->can_trade,
-        ]);
-
-        // REAL DATA (DB) for both tables across the user's accounts. The
-        // open table's Liq price + the DB-vs-exchange reconcile sub-row come
-        // from the live exchange (data()) and are NOT wired into this SSR
-        // render yet — Liq shows "—" and the reconcile row is omitted.
+    /**
+     * @param  EloquentCollection<int, Account>  $accountModels
+     * @return array<string, mixed>
+     */
+    private function indexViewData(EloquentCollection $accountModels): array
+    {
         $accountIds = $accountModels->pluck('id')->all();
-        $with = ['exchangeSymbol.symbol', 'account.apiSystem', 'orders' => fn ($q) => $q->orderBy('id')];
+        [$positions, $closed, $details, $noPositions] = $this->indexPositionData($accountIds);
 
-        $openModels = Position::query()
+        return [
+            'accounts' => $accountModels->map(fn (Account $account): array => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'exchange' => $account->apiSystem?->name ?? 'Unknown',
+                'exchange_canonical' => $account->apiSystem?->canonical,
+                'exchange_logo' => $this->exchangeLogoUrl($account->apiSystem?->canonical),
+                'user' => $account->user?->name ?? 'Unknown',
+                'can_trade' => (bool) $account->can_trade,
+            ]),
+            'positions' => $positions,
+            'closed' => $closed,
+            'details' => $details,
+            'noPositions' => $noPositions,
+        ];
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: array<int, array<string, mixed>>, 3: bool}
+     */
+    private function indexPositionData(array $accountIds): array
+    {
+        $openModels = $this->openPositionModels($accountIds);
+        $closedModels = $this->closedPositionModels($accountIds);
+
+        return [
+            $openModels->map(fn ($p): array => $this->mapOpenRow($p))->all(),
+            $closedModels->map(fn ($p): array => $this->mapClosedRow($p))->all(),
+            $this->positionDetails($openModels, $closedModels),
+            ! Position::query()->whereIn('account_id', $accountIds)->exists(),
+        ];
+    }
+
+    /** @return array<int|string, mixed> */
+    private function positionRelations(): array
+    {
+        return ['exchangeSymbol.symbol', 'account.apiSystem', 'orders' => fn ($query) => $query->orderBy('id')];
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return EloquentCollection<int, Position>
+     */
+    private function openPositionModels(array $accountIds): EloquentCollection
+    {
+        return Position::query()
             ->whereIn('account_id', $accountIds)
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->select('positions.*')
             ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago')
-            ->with($with)
+            ->with($this->positionRelations())
             ->orderByDesc('opened_at')
             ->get();
+    }
 
-        $closedModels = Position::query()
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return EloquentCollection<int, Position>
+     */
+    private function closedPositionModels(array $accountIds): EloquentCollection
+    {
+        return Position::query()
             ->whereIn('account_id', $accountIds)
             ->where('status', 'closed')
             ->select('positions.*')
             ->selectRaw('TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), COALESCE(closed_at, NOW())) as held_seconds')
             ->selectRaw('TIMESTAMPDIFF(SECOND, closed_at, NOW()) as closed_seconds_ago')
-            ->with($with)
+            ->with($this->positionRelations())
             ->orderByDesc('closed_at')
             ->limit(50)
             ->get();
+    }
 
-        $positions = $openModels->map(fn ($p) => $this->mapOpenRow($p))->all();
-        $closed = $closedModels->map(fn ($p) => $this->mapClosedRow($p))->all();
-        $noPositions = ! Position::query()
-            ->whereIn('account_id', $accountIds)
-            ->exists();
-
+    /**
+     * @param  EloquentCollection<int, Position>  $openModels
+     * @param  EloquentCollection<int, Position>  $closedModels
+     * @return array<int, array<string, mixed>>
+     */
+    private function positionDetails(EloquentCollection $openModels, EloquentCollection $closedModels): array
+    {
         $details = [];
-        foreach ($openModels as $p) {
-            $details[$p->id] = $this->mapDetail($p, false);
+        foreach ($openModels as $position) {
+            $details[$position->id] = $this->mapDetail($position, false);
         }
-        foreach ($closedModels as $p) {
-            $details[$p->id] = $this->mapDetail($p, true);
+        foreach ($closedModels as $position) {
+            $details[$position->id] = $this->mapDetail($position, true);
         }
 
-        return view('accounts.positions', [
-            'accounts' => $accounts,
-            'positions' => $positions,
-            'closed' => $closed,
-            'details' => $details,
-            'noPositions' => $noPositions,
-        ]);
+        return $details;
     }
 
     /** Trailing-zero-trimmed numeric string for display. */
@@ -289,40 +378,89 @@ class PositionsController extends Controller
      */
     private function mapOpenRow($p): array
     {
-        $entryPrice = $this->entryPrice($p);
-        [$pnl] = $this->computePnl($p, $entryPrice);
-        $pnlF = $pnl !== null ? (float) $pnl : 0.0;
-        $marginF = (float) ($p->margin ?? 0);
-        $qtyF = (float) ($p->quantity ?? 0);
-        $mark = $p->exchangeSymbol?->mark_price;
-        $markF = ($mark !== null && (string) $mark !== '') ? (float) $mark : (float) $entryPrice;
-        $notional = $qtyF * $markF;
-        $limits = $p->orders->where('type', 'LIMIT');
-        $total = max(1, (int) ($p->total_limit_orders ?? $limits->count()));
-        $filled = $limits->where('status', 'FILLED')->count();
-        $statusLower = strtolower((string) $p->status);
+        $metrics = $this->openRowMetrics($p);
+
+        return array_merge(
+            $this->openRowIdentity($p, $metrics),
+            $this->openRowValues($p, $metrics),
+        );
+    }
+
+    /** @return array<string, mixed> */
+    private function openRowMetrics(mixed $position): array
+    {
+        $entryPrice = $this->entryPrice($position);
+        [$pnl] = $this->computePnl($position, $entryPrice);
+        $limits = $position->orders->where('type', 'LIMIT');
 
         return [
-            'rowId' => $p->id,
-            'sym' => $p->exchangeSymbol?->symbol?->token ?? $p->parsed_trading_pair ?? '—',
-            'market' => $p->parsed_trading_pair ?? ($p->exchangeSymbol?->symbol ?? '—'),
-            'name' => $p->exchangeSymbol?->symbol?->name ?? '',
-            'icon' => $p->exchangeSymbol?->symbol?->image_url,
-            'side' => strtolower((string) $p->direction),
-            'lev' => ((int) $p->leverage).'×',
-            'status' => $statusLower === 'waping' ? 'waped' : ($statusLower === 'opening' ? 'opening' : null),
-            'filled' => $filled.' / '.$total,
-            'open' => $this->fmtNum($this->displayEntryPrice($entryPrice)),
-            'tp' => $this->fmtNum($p->orders->firstWhere('type', 'PROFIT-LIMIT')?->price ?? $p->first_profit_price),
-            'mark' => ($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—',
-            'liq' => '—',
-            'pnl' => round($pnlF, 2),
-            'size' => $this->fmtNum($p->quantity),
-            'notional' => (int) round($notional),
-            'margin' => (int) round($marginF),
-            'roe' => $marginF > 0 ? round($pnlF / $marginF * 100, 2) : 0.0,
-            'ageH' => round(((int) ($p->opened_seconds_ago ?? 0)) / 3600, 2),
+            'entryPrice' => $entryPrice,
+            'pnl' => $pnl !== null ? (float) $pnl : 0.0,
+            'margin' => (float) ($position->margin ?? 0),
+            'mark' => $position->exchangeSymbol?->mark_price,
+            'notional' => (float) ($position->quantity ?? 0) * $this->markForNotional($position->exchangeSymbol?->mark_price, $entryPrice),
+            'total' => max(1, (int) ($position->total_limit_orders ?? $limits->count())),
+            'filled' => $limits->where('status', 'FILLED')->count(),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metrics
+     * @return array<string, mixed>
+     */
+    private function openRowIdentity(mixed $position, array $metrics): array
+    {
+        return [
+            'rowId' => $position->id,
+            'sym' => $position->exchangeSymbol?->symbol?->token ?? $position->parsed_trading_pair ?? '—',
+            'market' => $position->parsed_trading_pair ?? ($position->exchangeSymbol?->symbol ?? '—'),
+            'name' => $position->exchangeSymbol?->symbol?->name ?? '',
+            'icon' => $position->exchangeSymbol?->symbol?->image_url,
+            'side' => strtolower((string) $position->direction),
+            'lev' => ((int) $position->leverage).'×',
+            'status' => $this->openRowStatus(strtolower((string) $position->status)),
+            'filled' => $metrics['filled'].' / '.$metrics['total'],
+            'open' => $this->fmtNum($this->displayEntryPrice($metrics['entryPrice'])),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $metrics
+     * @return array<string, mixed>
+     */
+    private function openRowValues(mixed $position, array $metrics): array
+    {
+        return [
+            'tp' => $this->fmtNum($position->orders->firstWhere('type', 'PROFIT-LIMIT')?->price ?? $position->first_profit_price),
+            'mark' => $this->displayMark($metrics['mark']),
+            'liq' => '—',
+            'pnl' => round($metrics['pnl'], 2),
+            'size' => $this->fmtNum($position->quantity),
+            'notional' => (int) round($metrics['notional']),
+            'margin' => (int) round($metrics['margin']),
+            'roe' => $this->returnOnEquity($metrics['pnl'], $metrics['margin']),
+            'ageH' => round(((int) ($position->opened_seconds_ago ?? 0)) / 3600, 2),
+        ];
+    }
+
+    private function markForNotional(mixed $mark, ?string $entryPrice): float
+    {
+        return $mark !== null && (string) $mark !== '' ? (float) $mark : (float) $entryPrice;
+    }
+
+    private function openRowStatus(string $status): ?string
+    {
+        return $status === 'waping' ? 'waped' : ($status === 'opening' ? 'opening' : null);
+    }
+
+    private function displayMark(mixed $mark): string
+    {
+        return $mark !== null && (string) $mark !== '' ? $this->fmtNum($mark) : '—';
+    }
+
+    private function returnOnEquity(float $pnl, float $margin): float
+    {
+        return $margin > 0 ? round($pnl / $margin * 100, 2) : 0.0;
     }
 
     /**
@@ -385,19 +523,17 @@ class PositionsController extends Controller
     {
         $entryPrice = $this->entryPrice($p);
         [$pnl] = $this->computePnl($p, $entryPrice);
-        $mark = $p->exchangeSymbol?->mark_price;
 
-        $orders = $p->orders->map(fn ($o) => [
-            'id' => $o->id,
-            'type' => strtoupper((string) $o->type),
-            'side' => strtoupper((string) $o->side),
-            'status' => strtoupper((string) $o->status),
-            'qty' => $this->fmtNum($o->quantity),
-            'price' => $this->fmtNum($o->price),
-            'opened' => optional($o->opened_at ?? $o->created_at)?->timestamp,
-            'filled' => optional($o->filled_at)?->timestamp,
-        ])->all();
+        return [
+            ...$this->detailLifecycle($p, $closed),
+            ...$this->detailMetrics($p, $closed, $entryPrice, $pnl),
+            'orders' => $this->detailOrderRows($p),
+        ];
+    }
 
+    /** @return array<string, mixed> */
+    private function detailLifecycle(mixed $p, bool $closed): array
+    {
         $heldSeconds = $closed ? (int) ($p->held_seconds ?? 0) : (int) ($p->opened_seconds_ago ?? 0);
 
         return [
@@ -408,200 +544,269 @@ class PositionsController extends Controller
             'openedAt' => optional($p->opened_at ?? $p->created_at)?->timestamp,
             'closedAt' => $closed ? optional($p->closed_at)?->timestamp : null,
             'duration' => $this->humanAge($heldSeconds),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function detailMetrics(mixed $p, bool $closed, ?string $entryPrice, ?string $pnl): array
+    {
+        return [
             'leverage' => ((int) $p->leverage).'×',
             'margin' => (int) round((float) ($p->margin ?? 0)),
             'qty' => $this->fmtNum($p->quantity),
             'total' => max(1, (int) ($p->total_limit_orders ?? $p->orders->where('type', 'LIMIT')->count())),
             'openPrice' => $this->fmtNum($this->displayEntryPrice($entryPrice)),
-            'markPrice' => $closed ? $this->fmtNum($p->closing_price) : (($mark !== null && (string) $mark !== '') ? $this->fmtNum($mark) : '—'),
+            'markPrice' => $this->detailMarkPrice($p, $closed),
             'pnl' => $pnl !== null ? round((float) $pnl, 2) : 0.0,
             'tpPct' => $p->profit_percentage !== null ? (float) $p->profit_percentage : 0.0,
             'slPct' => $p->stop_market_percentage !== null ? (float) $p->stop_market_percentage : 0.0,
             'firstProfit' => $this->fmtNum($p->first_profit_price),
             'tf' => $p->indicators_timeframe ?? '—',
-            'orders' => $orders,
         ];
+    }
+
+    private function detailMarkPrice(mixed $position, bool $closed): string
+    {
+        if ($closed) {
+            return $this->fmtNum($position->closing_price);
+        }
+
+        return $this->displayMark($position->exchangeSymbol?->mark_price);
+    }
+
+    /** @return array<int, array<string, int|string|null>> */
+    private function detailOrderRows(mixed $position): array
+    {
+        return $position->orders->map(fn ($order): array => [
+            'id' => $order->id,
+            'type' => strtoupper((string) $order->type),
+            'side' => strtoupper((string) $order->side),
+            'status' => strtoupper((string) $order->status),
+            'qty' => $this->fmtNum($order->quantity),
+            'price' => $this->fmtNum($order->price),
+            'opened' => optional($order->opened_at ?? $order->created_at)?->timestamp,
+            'filled' => optional($order->filled_at)?->timestamp,
+        ])->all();
     }
 
     public function data(Request $request): JsonResponse
     {
-        $request->validate([
-            'account_id' => ['required', 'integer'],
-        ]);
+        $account = $this->comparisonAccount($request);
+        $dbPositions = $this->comparisonPositions($account);
+        [$pairs, $orphanOrders, $exchangeAsOfSeconds, $snapshotsPresent] = $this->comparisonData($account, $dbPositions);
 
-        $account = Account::with(['apiSystem'])
+        return response()->json([
+            'account' => $this->comparisonAccountPayload($account),
+            'pairs' => $pairs,
+            'orphan_orders' => $orphanOrders,
+            'exchange_as_of_seconds' => $exchangeAsOfSeconds,
+            'exchange_snapshots_missing' => ! $snapshotsPresent,
+        ]);
+    }
+
+    /**
+     * @param  EloquentCollection<int, Position>  $dbPositions
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, array<string, mixed>>, 2: int|null, 3: bool}
+     */
+    private function comparisonData(Account $account, EloquentCollection $dbPositions): array
+    {
+        [$exchangePositions, $exchangeOrders, $asOfSeconds, $snapshotsPresent, $oldestAt, $ordersAt] = $this->exchangeStateFromSnapshots($account);
+        $tokenInfoBySymbol = $this->tokenInfoBySymbol($dbPositions);
+        [$pairs, $matched] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, [], $tokenInfoBySymbol);
+        $pairs = $this->applySnapshotFreshness($pairs, $dbPositions, $snapshotsPresent, $oldestAt, $ordersAt);
+        $pairs = collect($pairs)->sortBy(fn (array $pair) => $pair['db']['opened_seconds_ago'] ?? PHP_INT_MAX)->values()->all();
+
+        return [$pairs, $this->buildOrphanOrders($exchangeOrders, $matched), $asOfSeconds, $snapshotsPresent];
+    }
+
+    /** @return array{id: int, name: string, exchange: string, can_trade: bool} */
+    private function comparisonAccountPayload(Account $account): array
+    {
+        return [
+            'id' => $account->id,
+            'name' => $account->name,
+            'exchange' => $account->apiSystem?->name ?? 'Unknown',
+            'can_trade' => (bool) $account->can_trade,
+        ];
+    }
+
+    private function comparisonAccount(Request $request): Account
+    {
+        $request->validate(['account_id' => ['required', 'integer']]);
+
+        return Account::with(['apiSystem'])
             ->where('id', $request->input('account_id'))
             ->where('user_id', Auth::id())
             ->firstOrFail();
+    }
 
-        // Age computed DB-side (opened_at vs NOW()). The connection is pinned
-        // to UTC and engine timestamps are true UTC, so the diff is correct.
-        $dbPositions = $account->positions()
+    /** @return EloquentCollection<int, Position> */
+    private function comparisonPositions(Account $account): EloquentCollection
+    {
+        // Age is computed against the database clock in the connection's UTC frame.
+        return $account->positions()
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->select('positions.*')
             ->selectRaw(DB::connection()->getDriverName() === 'mysql'
                 ? 'TIMESTAMPDIFF(SECOND, COALESCE(opened_at, created_at), NOW()) as opened_seconds_ago'
-                // SQLite (test suite) can't parse the MySQL form at all.
                 : "CAST(strftime('%s','now') - strftime('%s', COALESCE(opened_at, created_at)) AS INTEGER) as opened_seconds_ago")
             ->with([
                 'exchangeSymbol.symbol',
-                'orders' => fn ($q) => $q->whereIn('status', self::COMPARATOR_ORDER_STATUSES),
+                'orders' => fn ($query) => $query->whereIn('status', self::COMPARATOR_ORDER_STATUSES),
             ])
             ->get();
+    }
 
-        // Exchange truth comes from the ENGINE'S snapshots, written by the
-        // whitelisted trading fleet on every lifecycle pass. The web box
-        // deliberately has no exchange egress — its IP is outside the
-        // allowlist, so a direct call from here can only ever 401 with
-        // -2015 (exactly what previously made this page mislabel every
-        // position "out of sync"). Symbol configs (leverage/marginType)
-        // have no snapshot source yet; the comparator already treats a
-        // missing exchange-side value as "no signal", never drift.
-        [$exchangePositions, $exchangeOrders, $exchangeAsOfSeconds, $snapshotsPresent, $snapshotOldestAt, $ordersSnapshotAt] =
-            $this->exchangeStateFromSnapshots($account);
-        $symbolConfigs = [];
-
-        // Pre-build a per-pair token info map (icon + display token) from
-        // the eager-loaded ExchangeSymbol→Symbol chain on the DB positions.
-        // Pairs that exist only on the exchange side (no DB row) fall back
-        // to no-icon — that's a rare drift state and the missing icon is
-        // an acceptable signal that the position isn't tracked here.
+    /**
+     * @param  EloquentCollection<int, Position>  $dbPositions
+     * @return array<string, array{token: string|null, token_image: string|null}>
+     */
+    private function tokenInfoBySymbol(EloquentCollection $dbPositions): array
+    {
         $tokenInfoBySymbol = [];
-        foreach ($dbPositions as $p) {
-            $pair = $p->parsed_trading_pair ?? $p->exchangeSymbol?->symbol;
-            if ($pair && $p->exchangeSymbol?->symbol) {
-                $sym = $p->exchangeSymbol->symbol;
+        foreach ($dbPositions as $position) {
+            $pair = $position->parsed_trading_pair ?? $position->exchangeSymbol?->symbol;
+            if ($pair && $position->exchangeSymbol?->symbol) {
+                $symbol = $position->exchangeSymbol->symbol;
                 $tokenInfoBySymbol[$pair] = [
-                    'token' => $sym->token ?? null,
-                    'token_image' => $sym->image_url ?? null,
+                    'token' => $symbol->token ?? null,
+                    'token_image' => $symbol->image_url ?? null,
                 ];
             }
         }
 
-        [$pairs, $matchedExchangeOrderIds] = $this->buildPairs($account, $dbPositions, $exchangePositions, $exchangeOrders, $symbolConfigs, $tokenInfoBySymbol);
-        $orphanOrders = $this->buildOrphanOrders($exchangeOrders, $matchedExchangeOrderIds);
+        return $tokenInfoBySymbol;
+    }
 
-        // No snapshots at all (brand-new account, or the engine has never
-        // run for it): an empty exchange side proves nothing. Every pair
-        // reads UNVERIFIED — never fake "db_only" drift.
+    /**
+     * @param  array<int, array<string, mixed>>  $pairs
+     * @param  EloquentCollection<int, Position>  $dbPositions
+     * @return array<int, array<string, mixed>>
+     */
+    private function applySnapshotFreshness(array $pairs, EloquentCollection $dbPositions, bool $snapshotsPresent, ?string $snapshotOldestAt, ?string $ordersSnapshotAt): array
+    {
         if (! $snapshotsPresent) {
-            $pairs = array_map(function (array $p): array {
-                $p['status'] = self::PAIR_STATUS_UNVERIFIED;
-                $p['position_drift_fields'] = [];
-                $p['orders'] = array_map(
-                    fn (array $o): array => array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]),
-                    $p['orders'],
-                );
-                $p['order_counts'] = $this->countStatuses($p['orders']);
-
-                return $p;
-            }, $pairs);
+            return array_map(fn (array $pair): array => $this->unverifiedPair($pair), $pairs);
         }
 
-        // Snapshot race on freshly-opened positions: a snapshot written
-        // BEFORE (or moments after) a position opened cannot contain that
-        // position or its rungs — absence proves nothing, only presence-
-        // with-different-values does. Both timestamps are written by the
-        // same trading apps, so comparing them raw is timezone-safe (no
-        // NOW() involved — the DB clock runs in a different frame than the
-        // writers'). Matched-row FIELD drift is real proof and stays.
-        if ($snapshotsPresent && $snapshotOldestAt !== null) {
-            $pairs = array_map(function (array $p) use ($dbPositions, $snapshotOldestAt): array {
-                $dbId = $p['db']['id'] ?? null;
-                $openedAt = $dbId !== null
-                    ? (string) optional($dbPositions->firstWhere('id', $dbId))->getRawOriginal('opened_at')
-                    : '';
-
-                if ($openedAt === '' || strtotime($openedAt) < strtotime($snapshotOldestAt) - 60) {
-                    return $p; // position predates the snapshot — absence is real evidence
-                }
-
-                $p['orders'] = array_map(
-                    fn (array $o): array => $o['status'] === self::PAIR_STATUS_DB_ONLY
-                        ? array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []])
-                        : $o,
-                    $p['orders'],
-                );
-                $p['order_counts'] = $this->countStatuses($p['orders']);
-
-                if ($p['status'] === self::PAIR_STATUS_DB_ONLY) {
-                    $p['status'] = self::PAIR_STATUS_UNVERIFIED;
-                } elseif ($p['status'] === self::PAIR_STATUS_DRIFT) {
-                    $provenOrderDrift = collect($p['orders'])->contains(
-                        fn (array $o): bool => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
-                    );
-                    if (! $provenOrderDrift && empty($p['position_drift_fields'])) {
-                        $p['status'] = self::PAIR_STATUS_SYNCED;
-                    }
-                }
-
-                return $p;
-            }, $pairs);
+        if ($snapshotOldestAt !== null) {
+            $pairs = array_map(
+                fn (array $pair): array => $this->protectRecentPositionPair($pair, $dbPositions, $snapshotOldestAt),
+                $pairs,
+            );
         }
 
-        // Stale-snapshot guard on MATCHED orders. An order re-placed AFTER the
-        // exchange order snapshot was captured — e.g. a take-profit re-priced by
-        // a WAP fill — shows as field-drift against the old picture, but the
-        // snapshot is simply too stale to prove it. When the DB order's last
-        // change is newer than the exchange-order snapshot, downgrade its drift
-        // to 'unverified' (same "only alarm on what we can prove" rule as the
-        // position-level guards above). Same-writer stamps, compared raw.
-        if ($snapshotsPresent && $ordersSnapshotAt !== null) {
+        if ($ordersSnapshotAt !== null) {
             $ordersSnapTs = strtotime($ordersSnapshotAt);
-            $pairs = array_map(function (array $p) use ($ordersSnapTs): array {
-                $changed = false;
-                $p['orders'] = array_map(function (array $o) use ($ordersSnapTs, &$changed): array {
-                    $upd = $o['db']['updated_at'] ?? null;
-                    if ($o['status'] === self::PAIR_STATUS_DRIFT
-                        && $upd !== null && $upd !== ''
-                        && strtotime($upd) > $ordersSnapTs + 60) {
-                        $changed = true;
-
-                        return array_merge($o, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]);
-                    }
-
-                    return $o;
-                }, $p['orders']);
-
-                if (! $changed) {
-                    return $p;
-                }
-
-                $p['order_counts'] = $this->countStatuses($p['orders']);
-                if ($p['status'] === self::PAIR_STATUS_DRIFT) {
-                    $provenOrderDrift = collect($p['orders'])->contains(
-                        fn (array $o): bool => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
-                    );
-                    if (! $provenOrderDrift && empty($p['position_drift_fields'])) {
-                        $p['status'] = self::PAIR_STATUS_SYNCED;
-                    }
-                }
-
-                return $p;
-            }, $pairs);
+            $pairs = array_map(
+                fn (array $pair): array => $this->protectRecentOrderPair($pair, $ordersSnapTs),
+                $pairs,
+            );
         }
 
-        // Sort open positions newest → oldest by DB opened_at. Pairs without a
-        // DB side (exchange-only) lack an age; push them to the bottom.
-        $pairs = collect($pairs)
-            ->sortBy(fn (array $p) => $p['db']['opened_seconds_ago'] ?? PHP_INT_MAX)
-            ->values()
-            ->all();
+        return $pairs;
+    }
 
-        return response()->json([
-            'account' => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'exchange' => $account->apiSystem?->name ?? 'Unknown',
-                'can_trade' => (bool) $account->can_trade,
-            ],
-            'pairs' => $pairs,
-            'orphan_orders' => $orphanOrders,
-            // Age of the exchange picture (oldest of the snapshots used),
-            // computed on the DB clock — session-tz writes vs UTC reads.
-            'exchange_as_of_seconds' => $exchangeAsOfSeconds,
-            'exchange_snapshots_missing' => ! $snapshotsPresent,
-        ]);
+    /**
+     * @param  array<string, mixed>  $pair
+     * @return array<string, mixed>
+     */
+    private function unverifiedPair(array $pair): array
+    {
+        $pair['status'] = self::PAIR_STATUS_UNVERIFIED;
+        $pair['position_drift_fields'] = [];
+        $pair['orders'] = array_map(
+            fn (array $order): array => array_merge($order, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]),
+            $pair['orders'],
+        );
+        $pair['order_counts'] = $this->countStatuses($pair['orders']);
+
+        return $pair;
+    }
+
+    /**
+     * A position newer than the snapshot cannot be proven absent from the exchange.
+     *
+     * @param  array<string, mixed>  $pair
+     * @param  EloquentCollection<int, Position>  $dbPositions
+     * @return array<string, mixed>
+     */
+    private function protectRecentPositionPair(array $pair, EloquentCollection $dbPositions, string $snapshotOldestAt): array
+    {
+        $dbId = $pair['db']['id'] ?? null;
+        if (! $this->openedAfterSnapshot($dbId, $dbPositions, $snapshotOldestAt)) {
+            return $pair;
+        }
+
+        $pair['orders'] = array_map(
+            fn (array $order): array => $order['status'] === self::PAIR_STATUS_DB_ONLY
+                ? array_merge($order, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []])
+                : $order,
+            $pair['orders'],
+        );
+        $pair['order_counts'] = $this->countStatuses($pair['orders']);
+
+        if ($pair['status'] === self::PAIR_STATUS_DB_ONLY) {
+            $pair['status'] = self::PAIR_STATUS_UNVERIFIED;
+        } else {
+            $pair = $this->restorePairStatusIfDriftCleared($pair);
+        }
+
+        return $pair;
+    }
+
+    /** @param EloquentCollection<int, Position> $dbPositions */
+    private function openedAfterSnapshot(mixed $dbId, EloquentCollection $dbPositions, string $snapshotOldestAt): bool
+    {
+        $openedAt = $dbId !== null
+            ? (string) optional($dbPositions->firstWhere('id', $dbId))->getRawOriginal('opened_at')
+            : '';
+
+        return $openedAt !== '' && strtotime($openedAt) >= strtotime($snapshotOldestAt) - 60;
+    }
+
+    /**
+     * @param  array<string, mixed>  $pair
+     * @return array<string, mixed>
+     */
+    private function protectRecentOrderPair(array $pair, int|false $ordersSnapTs): array
+    {
+        $changed = false;
+        $pair['orders'] = array_map(function (array $order) use ($ordersSnapTs, &$changed): array {
+            $updatedAt = $order['db']['updated_at'] ?? null;
+            if ($order['status'] === self::PAIR_STATUS_DRIFT
+                && $updatedAt !== null && $updatedAt !== ''
+                && strtotime($updatedAt) > $ordersSnapTs + 60) {
+                $changed = true;
+
+                return array_merge($order, ['status' => self::PAIR_STATUS_UNVERIFIED, 'drift_fields' => []]);
+            }
+
+            return $order;
+        }, $pair['orders']);
+
+        if (! $changed) {
+            return $pair;
+        }
+
+        $pair['order_counts'] = $this->countStatuses($pair['orders']);
+
+        return $this->restorePairStatusIfDriftCleared($pair);
+    }
+
+    /**
+     * @param  array<string, mixed>  $pair
+     * @return array<string, mixed>
+     */
+    private function restorePairStatusIfDriftCleared(array $pair): array
+    {
+        if ($pair['status'] === self::PAIR_STATUS_DRIFT
+            && ! $this->hasOrderDrift($pair['orders'])
+            && empty($pair['position_drift_fields'])) {
+            $pair['status'] = self::PAIR_STATUS_SYNCED;
+        }
+
+        return $pair;
     }
 
     /**
@@ -620,260 +825,653 @@ class PositionsController extends Controller
         $this->algoSnapshotPresent = is_array($algoOrders);
         $snapshotsPresent = is_array($positions) || is_array($openOrders);
 
-        $exchangePositions = collect(is_array($positions) ? array_values($positions) : [])
+        $exchangePositions = collect($this->snapshotRows($positions))
             ->filter(fn ($pos) => abs((float) ($pos['positionAmt'] ?? $pos['size'] ?? $pos['contracts'] ?? 0)) > 0)
             ->values()
             ->all();
 
-        $exchangeOrders = is_array($openOrders) ? array_values($openOrders) : [];
-        if (is_array($algoOrders)) {
-            $exchangeOrders = array_merge($exchangeOrders, array_values($algoOrders));
-        }
+        $exchangeOrders = array_merge($this->snapshotRows($openOrders), $this->snapshotRows($algoOrders));
 
-        $age = null;
-        $oldestAt = null;
-        $ordersSnapshotAt = null;
-        if ($snapshotsPresent) {
-            // Oldest of the snapshots used — raw, for same-frame comparison
-            // against positions.opened_at (both written by the trading apps).
-            $oldestAt = $account->apiSnapshots()
-                ->whereIn('canonical', ['account-positions', 'account-open-orders'])
-                ->min('updated_at');
-            $oldestAt = $oldestAt !== null ? (string) $oldestAt : null;
-
-            $age = rescue(fn () => $account->apiSnapshots()
-                ->whereIn('canonical', ['account-positions', 'account-open-orders'])
-                ->selectRaw(DB::connection()->getDriverName() === 'mysql'
-                    ? 'MAX(TIMESTAMPDIFF(SECOND, updated_at, NOW())) as age'
-                    : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
-                ->value('age'), null, false);
-            $age = $age !== null ? (int) $age : null;
-
-            // Freshness of the exchange ORDER picture specifically (open + algo
-            // orders) — used below to ignore field-drift on an order that was
-            // re-placed AFTER this snapshot was taken.
-            $ordersSnapshotAt = $account->apiSnapshots()
-                ->whereIn('canonical', ['account-open-orders', 'account-algo-orders'])
-                ->min('updated_at');
-            $ordersSnapshotAt = $ordersSnapshotAt !== null ? (string) $ordersSnapshotAt : null;
-        }
+        [$age, $oldestAt, $ordersSnapshotAt] = $snapshotsPresent
+            ? $this->snapshotFreshness($account)
+            : [null, null, null];
 
         return [$exchangePositions, $exchangeOrders, $age, $snapshotsPresent, $oldestAt, $ordersSnapshotAt];
     }
 
-    private function buildPairs(Account $account, $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
+    /** @return array<int, mixed> */
+    private function snapshotRows(mixed $snapshot): array
     {
-        $accountMarginMode = strtoupper((string) ($account->margin_mode ?? ''));
+        return is_array($snapshot) ? array_values($snapshot) : [];
+    }
 
-        $exchByKey = [];
-        foreach ($exchangePositions as $pos) {
-            $symbol = $pos['symbol'] ?? null;
-            if (! $symbol) {
-                continue;
-            }
-            $direction = $this->normalizeDirection($pos);
-            $exchByKey[$symbol.'|'.$direction] = $pos;
-        }
+    /** @return array{0: int|null, 1: string|null, 2: string|null} */
+    private function snapshotFreshness(Account $account): array
+    {
+        // Oldest of the snapshots used — raw, for same-frame comparison
+        // against positions.opened_at (both written by the trading apps).
+        $oldestAt = $account->apiSnapshots()
+            ->whereIn('canonical', ['account-positions', 'account-open-orders'])
+            ->min('updated_at');
+        $oldestAt = $oldestAt !== null ? (string) $oldestAt : null;
 
-        $exchOrdersByCid = [];
-        $exchOrdersByXid = [];
-        foreach ($exchangeOrders as $idx => $order) {
-            $cid = $order['clientOrderId'] ?? $order['orderLinkId'] ?? $order['clientAlgoId'] ?? null;
-            $xid = $order['orderId'] ?? $order['id'] ?? $order['algoId'] ?? null;
-            if ($cid !== null && $cid !== '') {
-                $exchOrdersByCid[(string) $cid] = $idx;
-            }
-            if ($xid !== null && $xid !== '') {
-                $exchOrdersByXid[(string) $xid] = $idx;
-            }
-        }
+        $age = rescue(fn () => $account->apiSnapshots()
+            ->whereIn('canonical', ['account-positions', 'account-open-orders'])
+            ->selectRaw(DB::connection()->getDriverName() === 'mysql'
+                ? 'MAX(TIMESTAMPDIFF(SECOND, updated_at, NOW())) as age'
+                : "MAX(CAST(strftime('%s','now') - strftime('%s', updated_at) AS INTEGER)) as age")
+            ->value('age'), null, false);
+        $age = $age !== null ? (int) $age : null;
 
+        // Freshness of the exchange ORDER picture specifically (open + algo
+        // orders) — used below to ignore field-drift on an order that was
+        // re-placed AFTER this snapshot was taken.
+        $ordersSnapshotAt = $account->apiSnapshots()
+            ->whereIn('canonical', ['account-open-orders', 'account-algo-orders'])
+            ->min('updated_at');
+        $ordersSnapshotAt = $ordersSnapshotAt !== null ? (string) $ordersSnapshotAt : null;
+
+        return [$age, $oldestAt, $ordersSnapshotAt];
+    }
+
+    /**
+     * @param  EloquentCollection<int, Position>  $dbPositions
+     * @param  array<int, RawExchangeData>  $exchangePositions
+     * @param  array<int, RawExchangeData>  $exchangeOrders
+     * @param  array<string, array<string, mixed>>  $symbolConfigs
+     * @param  array<string, array{token: string|null, token_image: string|null}>  $tokenInfoBySymbol
+     * @return array{0: array<int, array<string, mixed>>, 1: array<int, bool>}
+     */
+    private function buildPairs(Account $account, EloquentCollection $dbPositions, array $exchangePositions, array $exchangeOrders, array $symbolConfigs = [], array $tokenInfoBySymbol = []): array
+    {
+        [$exchangeOrdersByClientId, $exchangeOrdersByExchangeId] = $this->exchangeOrderIndices($exchangeOrders);
+        $context = [
+            'account_margin_mode' => strtoupper((string) ($account->margin_mode ?? '')),
+            'exchange_orders' => $exchangeOrders,
+            'exchange_orders_by_client_id' => $exchangeOrdersByClientId,
+            'exchange_orders_by_exchange_id' => $exchangeOrdersByExchangeId,
+            'symbol_configs' => $symbolConfigs,
+            'token_info_by_symbol' => $tokenInfoBySymbol,
+        ];
+        $exchangeByKey = $this->exchangePositionsByKey($exchangePositions);
         $matched = [];
-        $pairs = [];
         $seenKeys = [];
+        $pairs = $this->buildDatabasePairs($dbPositions, $exchangeByKey, $context, $matched, $seenKeys);
+        $pairs = array_merge($pairs, $this->buildExchangeOnlyPairs($exchangeByKey, $context, $matched, $seenKeys));
 
+        return [$pairs, $matched];
+    }
+
+    /**
+     * @param  iterable<int, Position>  $dbPositions
+     * @param  array<string, RawExchangeData>  $exchangeByKey
+     * @param  array<string, mixed>  $context
+     * @param  array<int, bool>  $matched
+     * @param  array<string, bool>  $seenKeys
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildDatabasePairs(iterable $dbPositions, array $exchangeByKey, array $context, array &$matched, array &$seenKeys): array
+    {
+        $pairs = [];
         foreach ($dbPositions as $dbPos) {
-            $symbol = $dbPos->parsed_trading_pair ?? $dbPos->exchangeSymbol?->symbol;
+            $symbol = $dbPos->parsed_trading_pair ?? data_get($dbPos->exchangeSymbol, 'symbol');
             if (! $symbol) {
                 continue;
             }
             $direction = $dbPos->direction;
             $key = $symbol.'|'.$direction;
             $seenKeys[$key] = true;
-
-            $exchPos = $exchByKey[$key] ?? null;
-            $pairs[] = $this->buildPair($symbol, $direction, $dbPos, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null, $tokenInfoBySymbol[$symbol] ?? []);
+            $pairs[] = $this->buildPair($symbol, $direction, $dbPos, $exchangeByKey[$key] ?? null, $context, $matched);
         }
 
-        foreach ($exchByKey as $key => $exchPos) {
+        return $pairs;
+    }
+
+    /**
+     * @param  array<string, RawExchangeData>  $exchangeByKey
+     * @param  array<string, mixed>  $context
+     * @param  array<int, bool>  $matched
+     * @param  array<string, bool>  $seenKeys
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildExchangeOnlyPairs(array $exchangeByKey, array $context, array &$matched, array $seenKeys): array
+    {
+        $pairs = [];
+        foreach ($exchangeByKey as $key => $exchangePosition) {
             if (isset($seenKeys[$key])) {
                 continue;
             }
             [$symbol, $direction] = explode('|', $key, 2);
-            $pairs[] = $this->buildPair($symbol, $direction, null, $exchPos, $accountMarginMode, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matched, $symbolConfigs[$symbol] ?? null, $tokenInfoBySymbol[$symbol] ?? []);
+            $pairs[] = $this->buildPair($symbol, $direction, null, $exchangePosition, $context, $matched);
         }
 
-        return [$pairs, $matched];
+        return $pairs;
     }
 
-    private function buildPair(
-        string $symbol,
-        string $direction,
-        $dbPos,
-        ?array $exchPos,
-        string $accountMarginMode,
-        array $exchangeOrders,
-        array $exchOrdersByCid,
-        array $exchOrdersByXid,
-        array &$matchedExchangeOrderIndices,
-        ?array $symbolConfig = null,
-        array $tokenInfo = [],
-    ): array {
-        $dbPosData = $dbPos ? $this->dbPositionData($dbPos, $accountMarginMode) : null;
-        $exchPosData = $exchPos ? $this->exchangePositionData($exchPos, $symbolConfig) : null;
-
-        // Replace the stored opening_price snapshot with the weighted average
-        // of every FILLED entry-side order. Binance reports the running avg
-        // on the live position; the DB's opening_price only reflects the
-        // first fill and drifts apart as limit ladders fill. Compare apples
-        // to apples by computing the equivalent on our side.
-        if ($dbPosData && $dbPos) {
-            $avg = $this->computeWeightedAvgEntry($dbPos, $direction);
-            if ($avg !== null) {
-                $dbPosData['entry_price'] = $avg;
-            }
-        }
-
-        // Sync analysis only runs on 'active' positions. Transient states
-        // (opening, syncing, waping, closing, cancelling, new) mean the DB
-        // is intentionally mid-flight and will produce false drift alarms.
-        $dbIsActive = $dbPosData !== null && ($dbPosData['status'] ?? null) === 'active';
-
-        $positionDriftFields = [];
-        if ($dbPosData && $exchPosData && $dbIsActive) {
-            foreach (self::POSITION_DRIFT_FIELDS as $field) {
-                if (! $this->valuesEqual($field, $dbPosData[$field] ?? null, $exchPosData[$field] ?? null)) {
-                    $positionDriftFields[] = $field;
-                }
-            }
-        }
-
-        // Pair orders inside this (symbol, direction)
-        $orders = [];
-        $dbOrderIds = [];
-        if ($dbPos) {
-            foreach ($dbPos->orders as $dbOrder) {
-                $dbOrderIds[$dbOrder->id] = true;
-                $cid = $dbOrder->client_order_id;
-                $xid = $dbOrder->exchange_order_id;
-
-                $exchIdx = null;
-                if ($cid && isset($exchOrdersByCid[(string) $cid])) {
-                    $exchIdx = $exchOrdersByCid[(string) $cid];
-                } elseif ($xid && isset($exchOrdersByXid[(string) $xid])) {
-                    $exchIdx = $exchOrdersByXid[(string) $xid];
-                }
-
-                $exchOrder = $exchIdx !== null ? $exchangeOrders[$exchIdx] : null;
-                if ($exchIdx !== null) {
-                    $matchedExchangeOrderIndices[$exchIdx] = true;
-                }
-
-                $dbOrderData = $this->dbOrderData($dbOrder);
-                $exchOrderData = $exchOrder ? $this->exchangeOrderData($exchOrder) : null;
-
-                $orders[] = $this->buildOrderPair($dbOrderData, $exchOrderData);
-            }
-        }
-
-        // Exchange orders that belong to this pair but weren't matched via DB ids
-        foreach ($exchangeOrders as $idx => $exchOrder) {
-            if (isset($matchedExchangeOrderIndices[$idx])) {
-                continue;
-            }
-            $exchSymbol = $exchOrder['symbol'] ?? null;
-            if ($exchSymbol !== $symbol) {
-                continue;
-            }
-            $exchDirection = $this->inferOrderDirection($exchOrder);
-            if ($exchDirection !== null && $exchDirection !== $direction) {
-                continue;
-            }
-            // If exchange order has no positionSide, only attach when we have a DB position to anchor the direction
-            if ($exchDirection === null && $dbPos === null) {
-                continue;
-            }
-            $matchedExchangeOrderIndices[$idx] = true;
-            $orders[] = $this->buildOrderPair(null, $this->exchangeOrderData($exchOrder));
-        }
-
-        // Suppress per-order drift flags while the DB position is mid-flight
-        // (step-dispatcher is writing). Otherwise we flag transient churn
-        // as drift and alarm-fatigue the operator.
-        if ($dbPosData && ! $dbIsActive) {
-            foreach ($orders as &$o) {
-                $o['status'] = self::PAIR_STATUS_SYNCED;
-                $o['drift_fields'] = [];
-            }
-            unset($o);
-        }
-
-        // Unverified rows (no snapshot source to check against) never
-        // count as drift — the comparator only alarms on what it can prove.
-        $anyOrderDrift = collect($orders)->contains(
-            fn ($o) => ! in_array($o['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<int, bool>  $matched
+     * @return array<string, mixed>
+     */
+    private function buildPair(string $symbol, string $direction, mixed $dbPos, ?array $exchPos, array $context, array &$matched): array
+    {
+        $position = $this->buildPairPositionSnapshot(
+            $dbPos,
+            $exchPos,
+            $context['account_margin_mode'],
+            $context['symbol_configs'][$symbol] ?? null,
+            $direction,
         );
-        $positionDrift = ! empty($positionDriftFields);
+        $orders = $this->buildPairOrders(
+            $dbPos,
+            $symbol,
+            $direction,
+            $context['exchange_orders'],
+            $context['exchange_orders_by_client_id'],
+            $context['exchange_orders_by_exchange_id'],
+            $matched,
+        );
+        $orders = $this->suppressTransientOrderDrift($orders, $this->isTransientPosition($position['db'], $position['is_active']));
 
-        if ($dbPosData && ! $dbIsActive) {
-            $status = self::PAIR_STATUS_TRANSIENT;
-        } elseif ($dbPosData && ! $exchPosData) {
-            $status = self::PAIR_STATUS_DB_ONLY;
-        } elseif (! $dbPosData && $exchPosData) {
-            $status = self::PAIR_STATUS_EXCHANGE_ONLY;
-        } elseif ($positionDrift || $anyOrderDrift) {
-            $status = self::PAIR_STATUS_DRIFT;
-        } else {
-            $status = self::PAIR_STATUS_SYNCED;
-        }
+        return $this->buildPairPayload($symbol, $direction, $dbPos, $context, $position, $orders);
+    }
+
+    /**
+     * @param  array<string, mixed>  $context
+     * @param  array<string, mixed>  $position
+     * @param  array<int, PairOrderData>  $orders
+     * @return array<string, mixed>
+     */
+    private function buildPairPayload(string $symbol, string $direction, mixed $dbPos, array $context, array $position, array $orders): array
+    {
+        $status = $this->resolvePairStatus(
+            $position['db'],
+            $position['exchange'],
+            $position['is_active'],
+            $this->hasPairDrift($position['drift_fields'], $this->hasOrderDrift($orders)),
+        );
 
         return [
             'symbol' => $symbol,
-            'token' => $tokenInfo['token'] ?? null,
-            'token_image' => $tokenInfo['token_image'] ?? null,
+            'token' => $context['token_info_by_symbol'][$symbol]['token'] ?? null,
+            'token_image' => $context['token_info_by_symbol'][$symbol]['token_image'] ?? null,
             'direction' => $direction,
             'status' => $status,
-            'db' => $dbPosData,
-            'exchange' => $exchPosData,
-            'position_drift_fields' => $positionDriftFields,
+            'db' => $position['db'],
+            'exchange' => $position['exchange'],
+            'position_drift_fields' => $position['drift_fields'],
             'orders' => $orders,
             'order_counts' => $this->countStatuses($orders),
             'pnl_projections' => $this->computePnlProjections($dbPos),
         ];
     }
 
+    /** @param array<int, array<string, mixed>> $exchangePositions
+     * @return array<string, array<string, mixed>>
+     */
+    private function exchangePositionsByKey(array $exchangePositions): array
+    {
+        $byKey = [];
+        foreach ($exchangePositions as $position) {
+            $symbol = $position['symbol'] ?? null;
+            if (! $symbol) {
+                continue;
+            }
+
+            $byKey[$symbol.'|'.$this->normalizeDirection($position)] = $position;
+        }
+
+        return $byKey;
+    }
+
+    /** @param array<int, array<string, mixed>> $exchangeOrders
+     * @return array{0: array<string, int>, 1: array<string, int>}
+     */
+    private function exchangeOrderIndices(array $exchangeOrders): array
+    {
+        $byClientId = [];
+        $byExchangeId = [];
+        foreach ($exchangeOrders as $index => $order) {
+            $clientId = $order['clientOrderId'] ?? $order['orderLinkId'] ?? $order['clientAlgoId'] ?? null;
+            $exchangeId = $order['orderId'] ?? $order['id'] ?? $order['algoId'] ?? null;
+            $this->indexExchangeOrder($byClientId, $clientId, $index);
+            $this->indexExchangeOrder($byExchangeId, $exchangeId, $index);
+        }
+
+        return [$byClientId, $byExchangeId];
+    }
+
+    /** @param array<string, int> $indices */
+    private function indexExchangeOrder(array &$indices, mixed $id, int $index): void
+    {
+        if ($id !== null && $id !== '') {
+            $indices[(string) $id] = $index;
+        }
+    }
+
+    /**
+     * @param  RawExchangeData|null  $exchPos
+     * @param  RawExchangeData|null  $symbolConfig
+     * @return array{db: PositionData|null, exchange: PositionData|null, is_active: bool, drift_fields: array<int, string>}
+     */
+    private function buildPairPositionSnapshot(
+        ?Position $dbPos,
+        ?array $exchPos,
+        string $accountMarginMode,
+        ?array $symbolConfig,
+        string $direction,
+    ): array {
+        $dbPosData = $dbPos ? $this->dbPositionData($dbPos, $accountMarginMode) : null;
+        $dbPosData = $this->weightedPairPositionData($dbPosData, $dbPos, $direction);
+        $exchPosData = $exchPos ? $this->exchangePositionData($exchPos, $symbolConfig) : null;
+        $dbIsActive = $this->isActivePairPosition($dbPosData);
+
+        return [
+            'db' => $dbPosData,
+            'exchange' => $exchPosData,
+            'is_active' => $dbIsActive,
+            'drift_fields' => $this->findPositionDriftFields($dbPosData, $exchPosData, $dbIsActive),
+        ];
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @return PositionData|null
+     */
+    private function weightedPairPositionData(?array $dbPosData, ?Position $dbPos, string $direction): ?array
+    {
+        if ($dbPosData === null || $dbPos === null) {
+            return $dbPosData;
+        }
+
+        $avg = $this->computeWeightedAvgEntry($dbPos, $direction);
+        if ($avg !== null) {
+            $dbPosData['entry_price'] = $avg;
+        }
+
+        return $dbPosData;
+    }
+
+    /** @param PositionData|null $dbPosData */
+    private function isActivePairPosition(?array $dbPosData): bool
+    {
+        return $dbPosData !== null && ($dbPosData['status'] ?? null) === 'active';
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @param  PositionData|null  $exchPosData
+     * @return array<int, string>
+     */
+    private function findPositionDriftFields(?array $dbPosData, ?array $exchPosData, bool $dbIsActive): array
+    {
+        if (! $this->canComparePairPositions($dbPosData, $exchPosData, $dbIsActive)) {
+            return [];
+        }
+
+        $positionDriftFields = [];
+        foreach (self::POSITION_DRIFT_FIELDS as $field) {
+            if (! $this->valuesEqual($field, $dbPosData[$field] ?? null, $exchPosData[$field] ?? null)) {
+                $positionDriftFields[] = $field;
+            }
+        }
+
+        return $positionDriftFields;
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @param  PositionData|null  $exchPosData
+     */
+    private function canComparePairPositions(?array $dbPosData, ?array $exchPosData, bool $dbIsActive): bool
+    {
+        return $dbPosData !== null && $exchPosData !== null && $dbIsActive;
+    }
+
+    /**
+     * @param  array<int, RawExchangeData>  $exchangeOrders
+     * @param  array<string, int>  $exchOrdersByCid
+     * @param  array<string, int>  $exchOrdersByXid
+     * @param  array<int, bool>  $matchedExchangeOrderIndices
+     * @return array<int, PairOrderData>
+     */
+    private function buildPairOrders(
+        ?Position $dbPos,
+        string $symbol,
+        string $direction,
+        array $exchangeOrders,
+        array $exchOrdersByCid,
+        array $exchOrdersByXid,
+        array &$matchedExchangeOrderIndices,
+    ): array {
+        $orders = $this->buildDatabaseOrderPairs($dbPos, $exchangeOrders, $exchOrdersByCid, $exchOrdersByXid, $matchedExchangeOrderIndices);
+
+        return $this->appendUnmatchedExchangeOrderPairs(
+            $orders,
+            $symbol,
+            $direction,
+            $dbPos !== null,
+            $exchangeOrders,
+            $matchedExchangeOrderIndices,
+        );
+    }
+
+    /**
+     * @param  array<int, RawExchangeData>  $exchangeOrders
+     * @param  array<string, int>  $exchOrdersByCid
+     * @param  array<string, int>  $exchOrdersByXid
+     * @param  array<int, bool>  $matchedExchangeOrderIndices
+     * @return array<int, PairOrderData>
+     */
+    private function buildDatabaseOrderPairs(
+        ?Position $dbPos,
+        array $exchangeOrders,
+        array $exchOrdersByCid,
+        array $exchOrdersByXid,
+        array &$matchedExchangeOrderIndices,
+    ): array {
+        if ($dbPos === null) {
+            return [];
+        }
+
+        $orders = [];
+        foreach ($dbPos->orders as $dbOrder) {
+            $orders[] = $this->buildDatabaseOrderPair(
+                $dbOrder,
+                $exchangeOrders,
+                $exchOrdersByCid,
+                $exchOrdersByXid,
+                $matchedExchangeOrderIndices,
+            );
+        }
+
+        return $orders;
+    }
+
+    /**
+     * @param  array<int, RawExchangeData>  $exchangeOrders
+     * @param  array<string, int>  $exchOrdersByCid
+     * @param  array<string, int>  $exchOrdersByXid
+     * @param  array<int, bool>  $matchedExchangeOrderIndices
+     * @return PairOrderData
+     */
+    private function buildDatabaseOrderPair(
+        Order $dbOrder,
+        array $exchangeOrders,
+        array $exchOrdersByCid,
+        array $exchOrdersByXid,
+        array &$matchedExchangeOrderIndices,
+    ): array {
+        $exchIdx = $this->findExchangeOrderIndex($dbOrder, $exchOrdersByCid, $exchOrdersByXid);
+        $exchOrder = $exchIdx !== null ? $exchangeOrders[$exchIdx] : null;
+        if ($exchIdx !== null) {
+            $matchedExchangeOrderIndices[$exchIdx] = true;
+        }
+
+        return $this->buildOrderPair(
+            $this->dbOrderData($dbOrder),
+            $exchOrder ? $this->exchangeOrderData($exchOrder) : null,
+        );
+    }
+
+    /**
+     * @param  array<string, int>  $exchOrdersByCid
+     * @param  array<string, int>  $exchOrdersByXid
+     */
+    private function findExchangeOrderIndex(Order $dbOrder, array $exchOrdersByCid, array $exchOrdersByXid): ?int
+    {
+        $cid = $dbOrder->client_order_id;
+        if ($cid && isset($exchOrdersByCid[(string) $cid])) {
+            return $exchOrdersByCid[(string) $cid];
+        }
+
+        $xid = $dbOrder->exchange_order_id;
+        if ($xid && isset($exchOrdersByXid[(string) $xid])) {
+            return $exchOrdersByXid[(string) $xid];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  array<int, PairOrderData>  $orders
+     * @param  array<int, RawExchangeData>  $exchangeOrders
+     * @param  array<int, bool>  $matchedExchangeOrderIndices
+     * @return array<int, PairOrderData>
+     */
+    private function appendUnmatchedExchangeOrderPairs(
+        array $orders,
+        string $symbol,
+        string $direction,
+        bool $hasDbPosition,
+        array $exchangeOrders,
+        array &$matchedExchangeOrderIndices,
+    ): array {
+        foreach ($exchangeOrders as $idx => $exchOrder) {
+            if (isset($matchedExchangeOrderIndices[$idx])) {
+                continue;
+            }
+            if (! $this->isExchangeOrderForPair($exchOrder, $symbol, $direction, $hasDbPosition)) {
+                continue;
+            }
+
+            $matchedExchangeOrderIndices[$idx] = true;
+            $orders[] = $this->buildOrderPair(null, $this->exchangeOrderData($exchOrder));
+        }
+
+        return $orders;
+    }
+
+    /** @param RawExchangeData $exchOrder */
+    private function isExchangeOrderForPair(array $exchOrder, string $symbol, string $direction, bool $hasDbPosition): bool
+    {
+        if (($exchOrder['symbol'] ?? null) !== $symbol) {
+            return false;
+        }
+
+        $exchDirection = $this->inferOrderDirection($exchOrder);
+        if ($exchDirection !== null) {
+            return $exchDirection === $direction;
+        }
+
+        return $hasDbPosition;
+    }
+
+    /**
+     * @param  array<int, PairOrderData>  $orders
+     * @return array<int, PairOrderData>
+     */
+    private function suppressTransientOrderDrift(array $orders, bool $isTransient): array
+    {
+        if (! $isTransient) {
+            return $orders;
+        }
+
+        foreach ($orders as &$order) {
+            $order['status'] = self::PAIR_STATUS_SYNCED;
+            $order['drift_fields'] = [];
+        }
+        unset($order);
+
+        return $orders;
+    }
+
+    /** @param PositionData|null $dbPosData */
+    private function isTransientPosition(?array $dbPosData, bool $dbIsActive): bool
+    {
+        return $dbPosData !== null && ! $dbIsActive;
+    }
+
+    /**
+     * @param  array<int, PairOrderData>  $orders
+     */
+    private function hasOrderDrift(array $orders): bool
+    {
+        foreach ($orders as $order) {
+            if (! in_array($order['status'], [self::PAIR_STATUS_SYNCED, self::PAIR_STATUS_UNVERIFIED], true)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<int, string>  $positionDriftFields
+     */
+    private function hasPairDrift(array $positionDriftFields, bool $hasOrderDrift): bool
+    {
+        if ($positionDriftFields !== []) {
+            return true;
+        }
+
+        return $hasOrderDrift;
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @param  PositionData|null  $exchPosData
+     */
+    private function resolveDatabasePairStatus(?array $dbPosData, ?array $exchPosData, bool $dbIsActive): ?string
+    {
+        if ($dbPosData === null) {
+            return null;
+        }
+        if (! $dbIsActive) {
+            return self::PAIR_STATUS_TRANSIENT;
+        }
+        if ($exchPosData === null) {
+            return self::PAIR_STATUS_DB_ONLY;
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @param  PositionData|null  $exchPosData
+     */
+    private function resolveExchangeOnlyPairStatus(?array $dbPosData, ?array $exchPosData): ?string
+    {
+        if ($dbPosData !== null || $exchPosData === null) {
+            return null;
+        }
+
+        return self::PAIR_STATUS_EXCHANGE_ONLY;
+    }
+
+    /**
+     * @param  PositionData|null  $dbPosData
+     * @param  PositionData|null  $exchPosData
+     */
+    private function resolvePairStatus(
+        ?array $dbPosData,
+        ?array $exchPosData,
+        bool $dbIsActive,
+        bool $hasPairDrift,
+    ): string {
+        $status = $this->resolveDatabasePairStatus($dbPosData, $exchPosData, $dbIsActive);
+        if ($status !== null) {
+            return $status;
+        }
+
+        $status = $this->resolveExchangeOnlyPairStatus($dbPosData, $exchPosData);
+        if ($status !== null) {
+            return $status;
+        }
+
+        if ($hasPairDrift) {
+            return self::PAIR_STATUS_DRIFT;
+        }
+
+        return self::PAIR_STATUS_SYNCED;
+    }
+
     private function buildOrderPair(?array $db, ?array $exch): array
     {
-        if ($db && ! $exch) {
-            // FILLED orders are historical — they no longer live on the
-            // open-orders endpoint. Their absence is expected, not drift.
-            if (strtoupper((string) ($db['status'] ?? '')) === 'FILLED') {
-                return ['status' => self::PAIR_STATUS_SYNCED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+        $singleSidedPair = $this->singleSidedOrderPair($db, $exch);
+        if ($singleSidedPair !== null) {
+            return $singleSidedPair;
+        }
+
+        $driftFields = $this->orderPairDriftFields($db, $exch);
+
+        return [
+            'status' => $driftFields === [] ? self::PAIR_STATUS_SYNCED : self::PAIR_STATUS_DRIFT,
+            'db' => $db,
+            'exchange' => $exch,
+            'drift_fields' => $driftFields,
+        ];
+    }
+
+    /**
+     * @param  RawExchangeData|null  $db
+     * @param  RawExchangeData|null  $exch
+     * @return PairOrderData|null
+     */
+    private function singleSidedOrderPair(?array $db, ?array $exch): ?array
+    {
+        if ($db) {
+            if (! $exch) {
+                return $this->databaseOnlyOrderPair($db);
             }
 
-            // Algo-endpoint types (stop-losses etc.) can't appear in the
-            // open-orders snapshot at all. With no algo snapshot to check
-            // against, their absence proves nothing — mark unverified.
-            // Once an algo snapshot exists (even empty), absence is real.
-            if (! $this->algoSnapshotPresent
-                && in_array(strtoupper((string) ($db['type'] ?? '')), self::ALGO_ENDPOINT_TYPES, true)) {
+            return null;
+        }
+
+        if ($exch) {
+            return $this->exchangeOnlyOrderPair($exch);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  RawExchangeData  $db
+     * @return PairOrderData
+     */
+    private function databaseOnlyOrderPair(array $db): array
+    {
+        // FILLED orders are historical — they no longer live on the
+        // open-orders endpoint. Their absence is expected, not drift.
+        if (strtoupper((string) ($db['status'] ?? '')) === 'FILLED') {
+            return ['status' => self::PAIR_STATUS_SYNCED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+        }
+
+        // Algo-endpoint types (stop-losses etc.) can't appear in the
+        // open-orders snapshot at all. With no algo snapshot to check
+        // against, their absence proves nothing — mark unverified.
+        // Once an algo snapshot exists (even empty), absence is real.
+        if (! $this->algoSnapshotPresent) {
+            if (in_array(strtoupper((string) ($db['type'] ?? '')), self::ALGO_ENDPOINT_TYPES, true)) {
                 return ['status' => self::PAIR_STATUS_UNVERIFIED, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
             }
-
-            return ['status' => self::PAIR_STATUS_DB_ONLY, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
         }
-        if (! $db && $exch) {
-            return ['status' => self::PAIR_STATUS_EXCHANGE_ONLY, 'db' => null, 'exchange' => $exch, 'drift_fields' => []];
+
+        return ['status' => self::PAIR_STATUS_DB_ONLY, 'db' => $db, 'exchange' => null, 'drift_fields' => []];
+    }
+
+    /**
+     * @param  RawExchangeData  $exch
+     * @return PairOrderData
+     */
+    private function exchangeOnlyOrderPair(array $exch): array
+    {
+        return ['status' => self::PAIR_STATUS_EXCHANGE_ONLY, 'db' => null, 'exchange' => $exch, 'drift_fields' => []];
+    }
+
+    /**
+     * @param  RawExchangeData|null  $db
+     * @param  RawExchangeData|null  $exch
+     * @return array<int, string>
+     */
+    private function orderPairDriftFields(?array $db, ?array $exch): array
+    {
+        if ($db === null) {
+            return [];
+        }
+        if ($exch === null) {
+            return [];
         }
 
         // Close-position plan orders (TP/SL on BitGet, certain Bybit algos):
@@ -884,33 +1482,60 @@ class PositionsController extends Controller
         //    short), so the literal value disagrees with the DB's
         //    action-side convention. Same logical order, different
         //    encoding — skip the drift check.
-        $isClosePos = $this->isClosePositionType($db['type'] ?? null);
-        $skipQty = $isClosePos
-            && $exch !== null
-            && (string) ($exch['quantity'] ?? '') !== ''
-            && is_numeric((string) $exch['quantity'])
-            && bccomp((string) $exch['quantity'], '0', 18) === 0;
-        $skipSide = $isClosePos;
+        $isClosePos = $this->isClosePositionType(isset($db['type']) ? (string) $db['type'] : null);
+        $skipQty = $this->shouldSkipClosePositionQuantity($isClosePos, $exch);
 
+        return $this->collectOrderPairDriftFields($db, $exch, $skipQty, $isClosePos);
+    }
+
+    /**
+     * @param  RawExchangeData  $db
+     * @param  RawExchangeData  $exch
+     * @return array<int, string>
+     */
+    private function collectOrderPairDriftFields(array $db, array $exch, bool $skipQty, bool $skipSide): array
+    {
         $driftFields = [];
         foreach (self::ORDER_DRIFT_FIELDS as $field) {
-            if ($field === 'quantity' && $skipQty) {
-                continue;
-            }
-            if ($field === 'side' && $skipSide) {
-                continue;
-            }
-            if (! $this->valuesEqual($field, $db[$field] ?? null, $exch[$field] ?? null)) {
+            if ($this->orderPairFieldIsDrift($field, $db, $exch, $skipQty, $skipSide)) {
                 $driftFields[] = $field;
             }
         }
 
-        return [
-            'status' => empty($driftFields) ? self::PAIR_STATUS_SYNCED : self::PAIR_STATUS_DRIFT,
-            'db' => $db,
-            'exchange' => $exch,
-            'drift_fields' => $driftFields,
-        ];
+        return $driftFields;
+    }
+
+    /** @param RawExchangeData $exch */
+    private function shouldSkipClosePositionQuantity(bool $isClosePos, array $exch): bool
+    {
+        if (! $isClosePos) {
+            return false;
+        }
+        $quantity = (string) ($exch['quantity'] ?? '');
+        if ($quantity === '') {
+            return false;
+        }
+        if (! is_numeric($quantity)) {
+            return false;
+        }
+
+        return bccomp($quantity, '0', 18) === 0;
+    }
+
+    /**
+     * @param  RawExchangeData  $db
+     * @param  RawExchangeData  $exch
+     */
+    private function orderPairFieldIsDrift(string $field, array $db, array $exch, bool $skipQty, bool $skipSide): bool
+    {
+        if ($field === 'quantity' && $skipQty) {
+            return false;
+        }
+        if ($field === 'side' && $skipSide) {
+            return false;
+        }
+
+        return ! $this->valuesEqual($field, $db[$field] ?? null, $exch[$field] ?? null);
     }
 
     private function isClosePositionType(?string $type): bool
@@ -973,11 +1598,7 @@ class PositionsController extends Controller
         // bccomp branch nulls it); BitGet reports `marginSize` = the
         // current maintenance-margin REQUIREMENT, which is a different
         // concept than the DB's allocated-margin column. Null both.
-        $isCross = strtoupper((string) ($marginMode ?? '')) === 'CROSSED';
-        if ($isCross
-            || ($margin !== null && is_numeric((string) $margin) && bccomp((string) $margin, '0', 18) === 0)) {
-            $margin = null;
-        }
+        $margin = $this->comparableExchangeMargin($margin, $marginMode);
 
         return [
             'id' => null,
@@ -990,6 +1611,18 @@ class PositionsController extends Controller
             'margin_mode' => $marginMode !== null ? strtoupper((string) $marginMode) : null,
             'unrealized_pnl' => (string) ($pos['unRealizedProfit'] ?? $pos['unrealisedPnl'] ?? $pos['unrealizedPL'] ?? 0),
         ];
+    }
+
+    private function comparableExchangeMargin(mixed $margin, mixed $marginMode): mixed
+    {
+        if (strtoupper((string) ($marginMode ?? '')) === 'CROSSED') {
+            return null;
+        }
+        if ($margin !== null && is_numeric((string) $margin) && bccomp((string) $margin, '0', 18) === 0) {
+            return null;
+        }
+
+        return $margin;
     }
 
     /**
@@ -1012,17 +1645,90 @@ class PositionsController extends Controller
     private function computeWeightedAvgEntry($dbPos, string $direction): ?string
     {
         $entrySide = strtoupper($direction) === 'LONG' ? 'BUY' : 'SELL';
+        [$totalQty, $weightedCost] = $this->filledEntryTotals($dbPos, $entrySide);
+
+        $posQty = (string) ($dbPos->quantity ?? '0');
+        [$totalQty, $weightedCost] = $this->partialEntryTotals($dbPos, $entrySide, $posQty, $totalQty, $weightedCost);
+
+        if (bccomp($totalQty, '0', 18) <= 0) {
+            return null;
+        }
+
+        return $this->trim(bcdiv($weightedCost, $totalQty, 18));
+    }
+
+    /**
+     * @param  numeric-string  $totalQty
+     * @param  numeric-string  $weightedCost
+     * @return array{0: numeric-string, 1: numeric-string}
+     */
+    private function partialEntryTotals(mixed $dbPos, string $entrySide, string $posQty, string $totalQty, string $weightedCost): array
+    {
+        if (! is_numeric($posQty) || bccomp($posQty, $totalQty, 18) <= 0) {
+            return [$totalQty, $weightedCost];
+        }
+
+        $remaining = bcsub($posQty, $totalQty, 18);
+
+        return $this->accumulatePartialOrders($dbPos, $entrySide, $remaining, $totalQty, $weightedCost);
+    }
+
+    /**
+     * @param  numeric-string  $remaining
+     * @param  numeric-string  $totalQty
+     * @param  numeric-string  $weightedCost
+     * @return array{0: numeric-string, 1: numeric-string}
+     */
+    private function accumulatePartialOrders(mixed $dbPos, string $entrySide, string $remaining, string $totalQty, string $weightedCost): array
+    {
+        $partials = $dbPos->orders
+            ->filter(fn ($order): bool => $this->isPartialEntryOrder($order, $entrySide))
+            ->sortBy('id');
+
+        foreach ($partials as $order) {
+            if (bccomp($remaining, '0', 18) <= 0) {
+                break;
+            }
+
+            $rungQty = (string) $order->quantity;
+            $rungPrice = (string) $order->price;
+            if (! is_numeric($rungQty) || ! is_numeric($rungPrice)) {
+                continue;
+            }
+
+            $take = $this->partialRungAmount($remaining, $rungQty);
+            $totalQty = bcadd($totalQty, $take, 18);
+            $weightedCost = bcadd($weightedCost, bcmul($take, $rungPrice, 18), 18);
+            $remaining = bcsub($remaining, $take, 18);
+        }
+
+        return [$totalQty, $weightedCost];
+    }
+
+    /**
+     * @param  numeric-string  $remaining
+     * @param  numeric-string  $rungQty
+     * @return numeric-string
+     */
+    private function partialRungAmount(string $remaining, string $rungQty): string
+    {
+        return bccomp($remaining, $rungQty, 18) <= 0 ? $remaining : $rungQty;
+    }
+
+    private function isPartialEntryOrder(mixed $order, string $entrySide): bool
+    {
+        return strtoupper((string) $order->status) === 'PARTIALLY_FILLED'
+            && in_array(strtoupper((string) $order->type), ['MARKET', 'LIMIT'], true)
+            && strtoupper((string) $order->side) === $entrySide;
+    }
+
+    /** @return array{0: numeric-string, 1: numeric-string} */
+    private function filledEntryTotals(mixed $dbPos, string $entrySide): array
+    {
         $totalQty = '0';
         $weightedCost = '0';
-
         foreach ($dbPos->orders as $o) {
-            if (strtoupper((string) $o->side) !== $entrySide) {
-                continue;
-            }
-            if (! in_array(strtoupper((string) $o->type), ['MARKET', 'LIMIT'], true)) {
-                continue;
-            }
-            if (strtoupper((string) $o->status) !== 'FILLED') {
+            if (! $this->isFilledEntryOrder($o, $entrySide)) {
                 continue;
             }
             $q = (string) $o->quantity;
@@ -1034,39 +1740,14 @@ class PositionsController extends Controller
             $weightedCost = bcadd($weightedCost, bcmul($q, $p, 18), 18);
         }
 
-        $posQty = (string) ($dbPos->quantity ?? '0');
-        if (is_numeric($posQty) && bccomp($posQty, $totalQty, 18) > 0) {
-            $remaining = bcsub($posQty, $totalQty, 18);
+        return [$totalQty, $weightedCost];
+    }
 
-            $partials = $dbPos->orders
-                ->filter(function ($o) use ($entrySide): bool {
-                    return strtoupper((string) $o->status) === 'PARTIALLY_FILLED'
-                        && in_array(strtoupper((string) $o->type), ['MARKET', 'LIMIT'], true)
-                        && strtoupper((string) $o->side) === $entrySide;
-                })
-                ->sortBy('id');
-
-            foreach ($partials as $o) {
-                if (bccomp($remaining, '0', 18) <= 0) {
-                    break;
-                }
-                $rungQty = (string) $o->quantity;
-                $rungPrice = (string) $o->price;
-                if (! is_numeric($rungQty) || ! is_numeric($rungPrice)) {
-                    continue;
-                }
-                $take = bccomp($remaining, $rungQty, 18) <= 0 ? $remaining : $rungQty;
-                $totalQty = bcadd($totalQty, $take, 18);
-                $weightedCost = bcadd($weightedCost, bcmul($take, $rungPrice, 18), 18);
-                $remaining = bcsub($remaining, $take, 18);
-            }
-        }
-
-        if (bccomp($totalQty, '0', 18) <= 0) {
-            return null;
-        }
-
-        return $this->trim(bcdiv($weightedCost, $totalQty, 18));
+    private function isFilledEntryOrder(mixed $order, string $entrySide): bool
+    {
+        return strtoupper((string) $order->side) === $entrySide
+            && in_array(strtoupper((string) $order->type), ['MARKET', 'LIMIT'], true)
+            && strtoupper((string) $order->status) === 'FILLED';
     }
 
     /**
@@ -1116,13 +1797,7 @@ class PositionsController extends Controller
 
     private function exchangeOrderData(array $order): array
     {
-        $price = $order['price'] ?? null;
-        if (($price === null || (string) $price === '' || (string) $price === '0' || (string) $price === '0.0') && isset($order['_price'])) {
-            $price = $order['_price'];
-        }
-        if (($price === null || (string) $price === '' || (string) $price === '0' || (string) $price === '0.0') && isset($order['triggerPrice'])) {
-            $price = $order['triggerPrice'];
-        }
+        $price = $this->exchangeOrderPrice($order);
 
         // Type resolution: the mapper writes `_orderType` as the canonical
         // upstream type (e.g. STOP_MARKET, TAKE_PROFIT) for plan/stop/algo
@@ -1146,6 +1821,25 @@ class PositionsController extends Controller
         ];
     }
 
+    /** @param array<string, mixed> $order */
+    private function exchangeOrderPrice(array $order): mixed
+    {
+        $price = $order['price'] ?? null;
+        if ($this->missingOrderPrice($price) && isset($order['_price'])) {
+            $price = $order['_price'];
+        }
+        if ($this->missingOrderPrice($price) && isset($order['triggerPrice'])) {
+            $price = $order['triggerPrice'];
+        }
+
+        return $price;
+    }
+
+    private function missingOrderPrice(mixed $price): bool
+    {
+        return $price === null || (string) $price === '' || (string) $price === '0' || (string) $price === '0.0';
+    }
+
     private function valuesEqual(string $field, $a, $b): bool
     {
         // Null on either side = "not reported" / "no signal" — we can't
@@ -1153,25 +1847,11 @@ class PositionsController extends Controller
         // hit this branch because pairing only happens when both sides
         // exist; this is specifically for position fields that an exchange
         // may omit (e.g. Binance leverage/marginType on CROSSED accounts).
-        if ($a === null || $b === null) {
+        if ($this->hasNoComparableValue($a, $b)) {
             return true;
         }
         if (in_array($field, self::NUMERIC_FIELDS, true)) {
-            $sa = (string) $a;
-            $sb = (string) $b;
-
-            // Fall back to string compare when values are empty or not
-            // well-formed for bccomp (e.g. scientific notation, stray
-            // characters). Prevents PHP 8 ValueError on bccomp.
-            if ($sa === '' || $sb === '' || ! is_numeric($sa) || ! is_numeric($sb)) {
-                return $sa === $sb;
-            }
-
-            if (in_array($field, self::PRICE_TOLERANCE_FIELDS, true)) {
-                return $this->numericWithinTolerance($sa, $sb);
-            }
-
-            return bccomp($sa, $sb, 18) === 0;
+            return $this->numericValuesEqual($field, (string) $a, (string) $b);
         }
         if ($field === 'type') {
             return $this->typesEqual((string) $a, (string) $b);
@@ -1183,6 +1863,33 @@ class PositionsController extends Controller
         return strtoupper((string) $a) === strtoupper((string) $b);
     }
 
+    private function hasNoComparableValue(mixed $a, mixed $b): bool
+    {
+        return $a === null || $b === null;
+    }
+
+    private function numericValuesEqual(string $field, string $a, string $b): bool
+    {
+        if ($a === '' || $b === '' || ! is_numeric($a) || ! is_numeric($b)) {
+            return $a === $b;
+        }
+
+        return $this->compareNumericValues($field, $a, $b);
+    }
+
+    /**
+     * @param  numeric-string  $a
+     * @param  numeric-string  $b
+     */
+    private function compareNumericValues(string $field, string $a, string $b): bool
+    {
+        if (in_array($field, self::PRICE_TOLERANCE_FIELDS, true)) {
+            return $this->numericWithinTolerance($a, $b);
+        }
+
+        return bccomp($a, $b, 18) === 0;
+    }
+
     /**
      * Order-status equality with cross-exchange aliasing. Same-shape
      * resolver as typesEqual — direct uppercase match wins, else either
@@ -1190,42 +1897,38 @@ class PositionsController extends Controller
      */
     private function statusesEqual(string $a, string $b): bool
     {
-        $au = strtoupper($a);
-        $bu = strtoupper($b);
-        if ($au === $bu) {
-            return true;
-        }
-        if (isset(self::STATUS_ALIASES[$au]) && in_array($bu, self::STATUS_ALIASES[$au], true)) {
-            return true;
-        }
-        if (isset(self::STATUS_ALIASES[$bu]) && in_array($au, self::STATUS_ALIASES[$bu], true)) {
-            return true;
-        }
-
-        return false;
+        return $this->equalWithAliases($a, $b, self::STATUS_ALIASES);
     }
 
     private function typesEqual(string $a, string $b): bool
     {
+        return $this->equalWithAliases($a, $b, self::TYPE_ALIASES);
+    }
+
+    /** @param array<string, array<int, string>> $aliases */
+    private function equalWithAliases(string $a, string $b, array $aliases): bool
+    {
         $au = strtoupper($a);
         $bu = strtoupper($b);
         if ($au === $bu) {
             return true;
         }
-        if (isset(self::TYPE_ALIASES[$au]) && in_array($bu, self::TYPE_ALIASES[$au], true)) {
-            return true;
-        }
-        if (isset(self::TYPE_ALIASES[$bu]) && in_array($au, self::TYPE_ALIASES[$bu], true)) {
-            return true;
-        }
 
-        return false;
+        return $this->aliasContains($aliases, $au, $bu)
+            || $this->aliasContains($aliases, $bu, $au);
+    }
+
+    /** @param array<string, array<int, string>> $aliases */
+    private function aliasContains(array $aliases, string $source, string $target): bool
+    {
+        return isset($aliases[$source]) && in_array($target, $aliases[$source], true);
     }
 
     private function normalizeDirection(array $pos): string
     {
-        if (! empty($pos['positionSide']) && in_array(strtoupper($pos['positionSide']), ['LONG', 'SHORT'], true)) {
-            return strtoupper($pos['positionSide']);
+        $direction = $this->explicitDirection($pos);
+        if ($direction !== null) {
+            return $direction;
         }
         if (isset($pos['side'])) {
             return strtoupper($pos['side']) === 'BUY' ? 'LONG' : 'SHORT';
@@ -1237,11 +1940,17 @@ class PositionsController extends Controller
 
     private function inferOrderDirection(array $order): ?string
     {
-        if (! empty($order['positionSide']) && in_array(strtoupper($order['positionSide']), ['LONG', 'SHORT'], true)) {
-            return strtoupper($order['positionSide']);
-        }
+        return $this->explicitDirection($order);
+    }
 
-        return null;
+    /** @param array<string, mixed> $positionOrOrder */
+    private function explicitDirection(array $positionOrOrder): ?string
+    {
+        $side = $positionOrOrder['positionSide'] ?? null;
+
+        return ! empty($side) && in_array(strtoupper($side), ['LONG', 'SHORT'], true)
+            ? strtoupper($side)
+            : null;
     }
 
     /**
@@ -1253,31 +1962,43 @@ class PositionsController extends Controller
      */
     private function computePnl($p, ?string $entryPrice): array
     {
-        $isClosed = in_array(strtolower((string) $p->status), ['closed', 'cancelled', 'failed'], true);
+        $isClosed = $this->isTerminalPnlStatus($p->status);
 
         // Prefer exchange-reported PnL when available (backfilled by cron)
         if ($isClosed && $p->pnl !== null) {
             return [$this->trim((string) $p->pnl), 'realized'];
         }
 
-        $open = $entryPrice;
-        $qty = $p->quantity;
-        $direction = strtoupper((string) $p->direction);
-
-        if ($open === null || $qty === null || (string) $qty === '' || (string) $open === '') {
+        $inputs = $this->pnlInputs($entryPrice, $p->quantity);
+        if ($inputs === null) {
             return [null, null];
         }
 
-        // Fallback for closed positions without exchange PnL yet
-        $close = $p->closing_price ?? null;
+        return $this->fallbackPnl($p, $inputs[0], $inputs[1], strtoupper((string) $p->direction), $isClosed);
+    }
 
-        if ($close !== null && (string) $close !== '' && $isClosed) {
-            $diff = $direction === 'LONG'
-                ? bcsub((string) $close, (string) $open, 18)
-                : bcsub((string) $open, (string) $close, 18);
-            $pnl = bcmul($diff, (string) $qty, 18);
+    /**
+     * @return array{0: non-empty-string, 1: non-empty-string}|null
+     */
+    private function pnlInputs(?string $entryPrice, mixed $quantity): ?array
+    {
+        if ($entryPrice === null || $entryPrice === '' || $quantity === null || (string) $quantity === '') {
+            return null;
+        }
 
-            return [$this->trim($pnl), 'realized'];
+        return [$entryPrice, (string) $quantity];
+    }
+
+    /**
+     * @param  non-empty-string  $open
+     * @param  non-empty-string  $qty
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function fallbackPnl(mixed $p, string $open, string $qty, string $direction, bool $isClosed): array
+    {
+        $realized = $this->realizedFallbackPnl($p, $open, $qty, $direction, $isClosed);
+        if ($realized !== null) {
+            return [$realized, 'realized'];
         }
 
         $mark = $p->exchangeSymbol?->mark_price;
@@ -1291,6 +2012,30 @@ class PositionsController extends Controller
         $pnl = bcmul($diff, (string) $qty, 18);
 
         return [$this->trim($pnl), 'unrealized'];
+    }
+
+    /**
+     * @param  non-empty-string  $open
+     * @param  non-empty-string  $qty
+     */
+    private function realizedFallbackPnl(mixed $p, string $open, string $qty, string $direction, bool $isClosed): ?string
+    {
+        // Fallback for closed positions without exchange PnL yet.
+        $close = $p->closing_price ?? null;
+        if ($close === null || (string) $close === '' || ! $isClosed) {
+            return null;
+        }
+
+        $diff = $direction === 'LONG'
+            ? bcsub((string) $close, (string) $open, 18)
+            : bcsub((string) $open, (string) $close, 18);
+
+        return $this->trim(bcmul($diff, (string) $qty, 18));
+    }
+
+    private function isTerminalPnlStatus(mixed $status): bool
+    {
+        return in_array(strtolower((string) $status), ['closed', 'cancelled', 'failed'], true);
     }
 
     /**
@@ -1336,131 +2081,141 @@ class PositionsController extends Controller
             return [];
         }
 
-        $direction = strtoupper((string) $dbPos->direction);
-        $isLong = $direction === 'LONG';
-        $sign = $isLong ? '1' : '-1';
+        return $this->projectionRows($this->projectionContext($dbPos));
+    }
 
-        // Per-row TP comes from the engine's WAP formula:
-        //   LONG  : avg_entry × (1 + profit_pct/100)
-        //   SHORT : avg_entry × (1 − profit_pct/100)
-        // Mirrors CalculateWapAndModifyProfitOrderJob so the projection grid
-        // matches what the position's TP would be at each ladder state.
-        $profitPct = $dbPos->profit_percentage;
-        $tpFraction = $profitPct !== null && is_numeric((string) $profitPct)
-            ? bcdiv((string) $profitPct, '100', 18)
-            : null;
-        $tpMultiplier = $tpFraction !== null
-            ? ($isLong ? bcadd('1', $tpFraction, 18) : bcsub('1', $tpFraction, 18))
-            : null;
+    /** @return array<string, mixed> */
+    private function projectionContext(mixed $dbPos): array
+    {
+        $isLong = strtoupper((string) $dbPos->direction) === 'LONG';
+        $orders = $dbPos->orders->reject(fn ($o) => in_array(strtoupper((string) $o->status), ['CANCELLED', 'EXPIRED'], true));
 
-        $excludedStatuses = ['CANCELLED', 'EXPIRED'];
+        return [
+            'sign' => $isLong ? '1' : '-1',
+            'tpMultiplier' => $this->projectionTpMultiplier($dbPos, $isLong),
+            'marketRows' => $orders->where('type', 'MARKET')->sortBy('id')->values(),
+            'limitRows' => $orders->where('type', 'LIMIT')->sortBy(fn ($o) => (float) $o->quantity)->values(),
+            'slOrder' => $orders->where('type', 'STOP-MARKET')->sortByDesc('id')->first(),
+        ];
+    }
 
-        $orders = $dbPos->orders->reject(
-            fn ($o) => in_array(strtoupper((string) $o->status), $excludedStatuses, true)
-        );
-
-        $marketRows = $orders
-            ->where('type', 'MARKET')
-            ->sortBy('id')
-            ->values();
-
-        $limitRows = $orders
-            ->where('type', 'LIMIT')
-            ->sortBy(fn ($o) => (float) $o->quantity)
-            ->values();
-
-        $slOrder = $orders
-            ->where('type', 'STOP-MARKET')
-            ->sortByDesc('id')
-            ->first();
-        $slPrice = $slOrder?->price !== null ? (string) $slOrder->price : null;
+    /**
+     * @param  array<string, mixed>  $context
+     * @return array<int, array<string, mixed>>
+     */
+    private function projectionRows(array $context): array
+    {
+        $slPrice = $this->projectionStopPrice($context['slOrder']);
 
         $rows = [];
         $cumulativeQty = '0';
         $cumulativeCost = '0';
 
-        $appendEntryRow = function (string $label, $order) use (
-            &$rows, &$cumulativeQty, &$cumulativeCost, $tpMultiplier, $sign
-        ) {
-            $qty = (string) $order->quantity;
-            $price = (string) $order->price;
-
-            if (! is_numeric($qty) || ! is_numeric($price)) {
-                return;
-            }
-
-            // A zero-price entry is a not-yet-priced fill (MARKET orders
-            // report price 0 until the fill confirmation lands seconds
-            // later). Folding it in would add cost-free quantity and drag
-            // the average entry toward zero, inflating every projected
-            // outcome — the TOSHIUSDT display symptom (2026-07-26). Skip
-            // the row until it carries a real price.
-            if (bccomp($price, '0', 18) <= 0) {
-                return;
-            }
-
-            $cumulativeQty = bcadd($cumulativeQty, $qty, 18);
-            $cumulativeCost = bcadd($cumulativeCost, bcmul($qty, $price, 18), 18);
-
-            if (bccomp($cumulativeQty, '0', 18) <= 0) {
-                return;
-            }
-
-            $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
-            $pnlAtFill = bcmul(bcmul(bcsub($price, $avgEntry, 18), $cumulativeQty, 18), $sign, 18);
-
-            $tpPrice = $tpMultiplier !== null
-                ? bcmul($avgEntry, $tpMultiplier, 18)
-                : null;
-            $profitAtTp = $tpPrice !== null
-                ? bcmul(bcmul(bcsub($tpPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18)
-                : null;
-
-            $rows[] = [
-                'type' => $label,
-                'side' => strtoupper((string) $order->side),
-                'price' => $this->trim($price),
-                'size' => $this->trim($cumulativeQty),
-                'avg_entry' => $this->trim($avgEntry),
-                'tp_price' => $tpPrice !== null ? $this->trim($tpPrice) : null,
-                'pnl_at_fill' => $this->trim($pnlAtFill),
-                'profit_at_tp' => $profitAtTp !== null ? $this->trim($profitAtTp) : null,
-                'status' => strtoupper((string) $order->status),
-            ];
-        };
-
-        foreach ($marketRows as $m) {
-            $appendEntryRow('MARKET', $m);
+        foreach ($context['marketRows'] as $marketOrder) {
+            $this->appendProjectionEntryRow($rows, $cumulativeQty, $cumulativeCost, 'MARKET', $marketOrder, $context['tpMultiplier'], $context['sign']);
         }
-        foreach ($limitRows as $idx => $l) {
-            $appendEntryRow('LIMIT '.($idx + 1), $l);
+        foreach ($context['limitRows'] as $idx => $limitOrder) {
+            $this->appendProjectionEntryRow($rows, $cumulativeQty, $cumulativeCost, 'LIMIT '.($idx + 1), $limitOrder, $context['tpMultiplier'], $context['sign']);
         }
 
-        if ($slPrice !== null && is_numeric($slPrice) && bccomp($cumulativeQty, '0', 18) > 0) {
-            $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
-            $pnlAtSl = bcmul(bcmul(bcsub($slPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18);
-
-            $tpPrice = $tpMultiplier !== null
-                ? bcmul($avgEntry, $tpMultiplier, 18)
-                : null;
-            $profitAtTp = $tpPrice !== null
-                ? bcmul(bcmul(bcsub($tpPrice, $avgEntry, 18), $cumulativeQty, 18), $sign, 18)
-                : null;
-
-            $rows[] = [
-                'type' => 'STOP-MARKET',
-                'side' => strtoupper((string) $slOrder->side),
-                'price' => $this->trim($slPrice),
-                'size' => $this->trim($cumulativeQty),
-                'avg_entry' => $this->trim($avgEntry),
-                'tp_price' => $tpPrice !== null ? $this->trim($tpPrice) : null,
-                'pnl_at_fill' => $this->trim($pnlAtSl),
-                'profit_at_tp' => $profitAtTp !== null ? $this->trim($profitAtTp) : null,
-                'status' => strtoupper((string) $slOrder->status),
-            ];
-        }
+        $this->appendProjectionStopRow($rows, $context['slOrder'], $slPrice, $cumulativeQty, $cumulativeCost, $context['tpMultiplier'], $context['sign']);
 
         return $rows;
+    }
+
+    private function projectionStopPrice(mixed $order): ?string
+    {
+        return $order?->price !== null ? (string) $order->price : null;
+    }
+
+    /** @return numeric-string|null */
+    private function projectionTpMultiplier(mixed $position, bool $isLong): ?string
+    {
+        $profitPct = $position->profit_percentage;
+        $tpFraction = $profitPct !== null && is_numeric((string) $profitPct)
+            ? bcdiv((string) $profitPct, '100', 18)
+            : null;
+
+        return $tpFraction !== null
+            ? ($isLong ? bcadd('1', $tpFraction, 18) : bcsub('1', $tpFraction, 18))
+            : null;
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  numeric-string  $cumulativeQty
+     * @param  numeric-string  $cumulativeCost
+     * @param  numeric-string|null  $tpMultiplier
+     * @param  numeric-string  $sign
+     */
+    private function appendProjectionEntryRow(array &$rows, string &$cumulativeQty, string &$cumulativeCost, string $label, mixed $order, ?string $tpMultiplier, string $sign): void
+    {
+        $qty = (string) $order->quantity;
+        $price = (string) $order->price;
+        if (! is_numeric($qty) || ! is_numeric($price)) {
+            return;
+        }
+
+        // A zero-price MARKET fill is not priced yet; including its quantity
+        // would understate the average entry and inflate projected profit.
+        if (bccomp($price, '0', 18) <= 0) {
+            return;
+        }
+
+        $cumulativeQty = bcadd($cumulativeQty, $qty, 18);
+        $cumulativeCost = bcadd($cumulativeCost, bcmul($qty, $price, 18), 18);
+        if (bccomp($cumulativeQty, '0', 18) <= 0) {
+            return;
+        }
+
+        $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
+        $rows[] = $this->projectionRow($label, $order, $price, $cumulativeQty, $avgEntry, $tpMultiplier, $sign);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $rows
+     * @param  numeric-string  $cumulativeQty
+     * @param  numeric-string  $cumulativeCost
+     * @param  numeric-string|null  $tpMultiplier
+     * @param  numeric-string  $sign
+     */
+    private function appendProjectionStopRow(array &$rows, mixed $slOrder, ?string $slPrice, string $cumulativeQty, string $cumulativeCost, ?string $tpMultiplier, string $sign): void
+    {
+        if ($slPrice === null || ! is_numeric($slPrice) || bccomp($cumulativeQty, '0', 18) <= 0) {
+            return;
+        }
+
+        $avgEntry = bcdiv($cumulativeCost, $cumulativeQty, 18);
+        $rows[] = $this->projectionRow('STOP-MARKET', $slOrder, $slPrice, $cumulativeQty, $avgEntry, $tpMultiplier, $sign);
+    }
+
+    /**
+     * @param  numeric-string  $price
+     * @param  numeric-string  $quantity
+     * @param  numeric-string  $avgEntry
+     * @param  numeric-string|null  $tpMultiplier
+     * @param  numeric-string  $sign
+     * @return array<string, mixed>
+     */
+    private function projectionRow(string $label, mixed $order, string $price, string $quantity, string $avgEntry, ?string $tpMultiplier, string $sign): array
+    {
+        $pnlAtFill = bcmul(bcmul(bcsub($price, $avgEntry, 18), $quantity, 18), $sign, 18);
+        $tpPrice = $tpMultiplier !== null ? bcmul($avgEntry, $tpMultiplier, 18) : null;
+        $profitAtTp = $tpPrice !== null
+            ? bcmul(bcmul(bcsub($tpPrice, $avgEntry, 18), $quantity, 18), $sign, 18)
+            : null;
+
+        return [
+            'type' => $label,
+            'side' => strtoupper((string) $order->side),
+            'price' => $this->trim($price),
+            'size' => $this->trim($quantity),
+            'avg_entry' => $this->trim($avgEntry),
+            'tp_price' => $tpPrice !== null ? $this->trim($tpPrice) : null,
+            'pnl_at_fill' => $this->trim($pnlAtFill),
+            'profit_at_tp' => $profitAtTp !== null ? $this->trim($profitAtTp) : null,
+            'status' => strtoupper((string) $order->status),
+        ];
     }
 
     private function countStatuses(array $orders): array

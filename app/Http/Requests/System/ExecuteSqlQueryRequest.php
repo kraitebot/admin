@@ -7,7 +7,7 @@ namespace App\Http\Requests\System;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class ExecuteSqlQueryRequest extends FormRequest
+final class ExecuteSqlQueryRequest extends FormRequest
 {
     public function authorize(): bool
     {

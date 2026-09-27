@@ -16,7 +16,7 @@ use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
-class NewPasswordController extends Controller
+final class NewPasswordController extends Controller
 {
     public function create(Request $request): View
     {
@@ -34,7 +34,25 @@ class NewPasswordController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $needsName = $this->userNeedsName((string) $request->input('email'));
+        $request->validate($this->passwordRules($needsName));
+        $status = Password::reset(
+            $request->only('email', 'password', 'password_confirmation', 'token'),
+            function (User $user) use ($request, $needsName): void {
+                $this->resetPassword($user, $request, $needsName);
+            },
+        );
 
+        return $this->redirectAfterReset($status, $request);
+    }
+
+    public function expired(): View
+    {
+        return view('auth.reset-password-invalid');
+    }
+
+    /** @return array<string, array<int, string|PasswordRule>> */
+    private function passwordRules(bool $needsName): array
+    {
         $rules = [
             'token' => ['required'],
             'email' => ['required', 'email'],
@@ -45,26 +63,27 @@ class NewPasswordController extends Controller
             $rules['name'] = ['required', 'string', 'min:2', 'max:255'];
         }
 
-        $request->validate($rules);
+        return $rules;
+    }
 
-        $status = Password::reset(
-            $request->only('email', 'password', 'password_confirmation', 'token'),
-            function (User $user) use ($request, $needsName): void {
-                $attributes = [
-                    'password' => Hash::make($request->string('password')->toString()),
-                    'remember_token' => Str::random(60),
-                ];
+    private function resetPassword(User $user, Request $request, bool $needsName): void
+    {
+        $attributes = [
+            'password' => Hash::make($request->string('password')->toString()),
+            'remember_token' => Str::random(60),
+        ];
 
-                if ($needsName) {
-                    $attributes['name'] = trim($request->string('name')->toString());
-                }
+        if ($needsName) {
+            $attributes['name'] = trim($request->string('name')->toString());
+        }
 
-                $user->forceFill($attributes)->save();
+        $user->forceFill($attributes)->save();
 
-                event(new PasswordReset($user));
-            }
-        );
+        event(new PasswordReset($user));
+    }
 
+    private function redirectAfterReset(string $status, Request $request): RedirectResponse
+    {
         if ($status === Password::PASSWORD_RESET) {
             return redirect()
                 ->route('login')
@@ -78,11 +97,6 @@ class NewPasswordController extends Controller
         return back()
             ->withInput($request->only('email', 'name'))
             ->withErrors(['email' => __($status)]);
-    }
-
-    public function expired(): View
-    {
-        return view('auth.reset-password-invalid');
     }
 
     private function userNeedsName(string $email): bool

@@ -58,8 +58,13 @@ final class NotificationHistoryRequest extends FormRequest
             return false;
         }
 
-        return is_array($parameters)
-            && is_string($parameters['sent_at'] ?? null)
+        return is_array($parameters) && $this->hasCursorParameters($parameters);
+    }
+
+    /** @param array<string, mixed> $parameters */
+    private function hasCursorParameters(array $parameters): bool
+    {
+        return is_string($parameters['sent_at'] ?? null)
             && is_numeric($parameters['id'] ?? null)
             && is_bool($parameters['_pointsToNextItems'] ?? null);
     }

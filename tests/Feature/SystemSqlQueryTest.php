@@ -180,11 +180,21 @@ it('accepts one SELECT with a trailing semicolon', function (): void {
 it('allows semicolons and blocked words inside SELECT string values', function (): void {
     $this->actingAs($this->admin)
         ->postJson(SQL_WORKBENCH_URL, [
-            'query' => "SELECT '; INTO OUTFILE FOR UPDATE' AS sample",
+            'query' => "SELECT 'it''s ; INTO OUTFILE FOR UPDATE' AS sample",
         ])
         ->assertSuccessful()
         ->assertJsonPath('total', 1)
-        ->assertJsonPath('results.0.sample', '; INTO OUTFILE FOR UPDATE');
+        ->assertJsonPath('results.0.sample', "it's ; INTO OUTFILE FOR UPDATE");
+});
+
+it('ignores blocked words in SQL comments while preserving the SELECT result', function (): void {
+    $this->actingAs($this->admin)
+        ->postJson(SQL_WORKBENCH_URL, [
+            'query' => "SELECT 1 -- ; SLEEP(5)\n AS sample /* INTO OUTFILE */",
+        ])
+        ->assertSuccessful()
+        ->assertJsonPath('total', 1)
+        ->assertJsonPath('results.0.sample', 1);
 });
 
 it('rejects non-SELECT and multiple statements without changing data', function (

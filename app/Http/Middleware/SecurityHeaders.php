@@ -15,7 +15,7 @@ use Symfony\Component\HttpFoundation\Response;
  * directives still add value (object/base/frame/form-action locked down).
  * Tighten script-src via nonces in a follow-up pass.
  */
-class SecurityHeaders
+final class SecurityHeaders
 {
     private const CSP = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https://s2.coinmarketcap.com; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'";
 

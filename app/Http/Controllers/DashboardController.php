@@ -8,6 +8,7 @@ use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -15,14 +16,192 @@ use Illuminate\View\View;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\ExchangeSymbol;
 use Kraite\Core\Models\Kraite;
+use Kraite\Core\Models\MarketRegimeSnapshot;
+use Kraite\Core\Models\Order;
 use Kraite\Core\Models\Position;
+use Kraite\Core\Models\Symbol;
 use Kraite\Core\Support\Connectivity\AccountServerConnectivityService;
 use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\DayBasisLocationHint;
 use Kraite\Core\Support\Financial\ReportingDay;
 use Kraite\Core\Support\Financial\Window;
 use Kraite\Core\Support\MarketRegime\Bscs;
+use Kraite\Core\Support\MarketRegime\BscsAccountContext;
+use Kraite\Core\Support\MarketRegime\BscsState;
 
+/**
+ * @phpstan-type ActivityEvent array{
+ *     kind: string,
+ *     sort: string,
+ *     time: string,
+ *     position_id: int,
+ *     active: bool,
+ *     waped?: bool,
+ *     side: string,
+ *     symbol: ?string,
+ *     quantity: ?string,
+ *     price: ?string,
+ *     pnl: ?string
+ * }
+ * @phpstan-type FinalActivityEvent array{
+ *     kind: string,
+ *     time: string,
+ *     position_id: int,
+ *     active: bool,
+ *     waped?: bool,
+ *     side: string,
+ *     symbol: ?string,
+ *     quantity: ?string,
+ *     price: ?string,
+ *     pnl: ?string
+ * }
+ * @phpstan-type PositionLimit array{
+ *     index: int,
+ *     price: ?string,
+ *     price_raw: string,
+ *     quantity: string,
+ *     status: string,
+ *     filled: bool
+ * }
+ * @phpstan-type TrackGeometry array{
+ *     tp_pct: float,
+ *     px_pct: float,
+ *     sl_pct: float,
+ *     gain_left: float,
+ *     gain_width: float,
+ *     rungs: array<int, array{index: int, pct: float}>
+ * }
+ * @phpstan-type PositionContext array{
+ *     current_price: ?string,
+ *     first_profit: ?string,
+ *     last_limit: ?string,
+ *     current_tp: ?string,
+ *     next_limit: ?string,
+ *     stop_loss: ?string,
+ *     limits: array<int, PositionLimit>,
+ *     total_limits: int,
+ *     filled_count: int,
+ *     alpha_path_pct: string,
+ *     alpha_limit_pct: string,
+ *     track: ?TrackGeometry,
+ *     direction: string,
+ *     take_profit_distance_pct: ?string,
+ *     next_limit_distance_pct: ?string,
+ *     quantity: string,
+ *     size: ?string,
+ *     pnl: ?string,
+ *     max_pain: int|float|string|null,
+ *     opening_price: ?string,
+ *     was_waped: bool,
+ *     wap: ?string,
+ *     entry_price: ?string
+ * }
+ * @phpstan-type PositionHeaderPayload array{
+ *     id: int,
+ *     status: string,
+ *     symbol: string,
+ *     token: ?string,
+ *     token_name: ?string,
+ *     token_image: ?string,
+ *     direction: string,
+ *     leverage: int,
+ *     opened_at: ?string,
+ *     age_human: ?string,
+ *     var_24h_pct: null,
+ *     timeframe_dots: array<int, array{timeframe: string, direction: string}>,
+ *     spark_4h: array<int, float>,
+ *     side: string
+ * }
+ * @phpstan-type PositionPricePayload array{
+ *     current_price: ?string,
+ *     opening_price: ?string,
+ *     wap_price: ?string,
+ *     was_waped: bool,
+ *     entry_label: string,
+ *     entry_price: ?string,
+ *     first_profit_price: ?string,
+ *     profit_price: ?string,
+ *     take_profit_distance_pct: ?string,
+ *     next_limit_price: ?string,
+ *     next_limit_distance_pct: ?string,
+ *     last_limit_price: ?string,
+ *     stop_loss_price: ?string
+ * }
+ * @phpstan-type PositionProgressPayload array{
+ *     track: ?TrackGeometry,
+ *     alpha_path_pct: string,
+ *     alpha_limit_pct: string
+ * }
+ * @phpstan-type PositionRiskPayload array{
+ *     size: ?string,
+ *     pnl: ?string,
+ *     max_pain: int|float|string|null,
+ *     max_pain_formatted: ?string
+ * }
+ * @phpstan-type PositionLimitPayload array{
+ *     filled_count: int,
+ *     total_limits: int,
+ *     limits: array<int, PositionLimit>
+ * }
+ * @phpstan-type BscsPayload array{
+ *     score: ?int,
+ *     band: ?string,
+ *     blocked: bool,
+ *     pause_reason: ?string,
+ *     paused: bool,
+ *     openings_switch_enabled: bool,
+ *     cooldown_active: bool,
+ *     cooldown_remaining: ?string,
+ *     cooldown_until: ?string,
+ *     status: string,
+ *     is_stale: bool,
+ *     block_threshold: int,
+ *     computed_at: ?string,
+ *     computed_ago: ?string,
+ *     next_compute_in: string,
+ *     components: list<array{key: string, label: string, value: ?float, fired: bool}>,
+ *     position_cap: array{long: array{effective: int, maximum: int}, short: array{effective: int, maximum: int}, ratio_percent: int}
+ * }
+ * @phpstan-type PositionPayload array{
+ *     id: int,
+ *     status: string,
+ *     symbol: string,
+ *     token: ?string,
+ *     token_name: ?string,
+ *     token_image: ?string,
+ *     direction: string,
+ *     leverage: int,
+ *     opened_at: ?string,
+ *     age_human: ?string,
+ *     var_24h_pct: null,
+ *     timeframe_dots: array<int, array{timeframe: string, direction: string}>,
+ *     spark_4h: array<int, float>,
+ *     side: string,
+ *     current_price: ?string,
+ *     opening_price: ?string,
+ *     wap_price: ?string,
+ *     was_waped: bool,
+ *     entry_label: string,
+ *     entry_price: ?string,
+ *     first_profit_price: ?string,
+ *     profit_price: ?string,
+ *     take_profit_distance_pct: ?string,
+ *     next_limit_price: ?string,
+ *     next_limit_distance_pct: ?string,
+ *     last_limit_price: ?string,
+ *     stop_loss_price: ?string,
+ *     track: ?TrackGeometry,
+ *     alpha_path_pct: string,
+ *     alpha_limit_pct: string,
+ *     size: ?string,
+ *     pnl: ?string,
+ *     max_pain: int|float|string|null,
+ *     max_pain_formatted: ?string,
+ *     filled_count: int,
+ *     total_limits: int,
+ *     limits: array<int, PositionLimit>
+ * }
+ */
 class DashboardController extends Controller
 {
     /**
@@ -52,15 +231,7 @@ class DashboardController extends Controller
             ->orderBy('name')
             ->get();
 
-        $accounts = $accountModels
-            ->map(fn (Account $account) => [
-                'id' => $account->id,
-                'name' => $account->name,
-                'exchange' => $account->apiSystem?->name ?? 'Unknown',
-                'owner' => $account->user?->name ?? 'Unknown',
-                'is_trading' => $account->isReadyToTrade(),
-                'disabled_reason' => $account->disabled_reason,
-            ]);
+        $accounts = $this->accountOptions($accountModels);
 
         // First paint renders the same payload the polling endpoint serves,
         // so the page never flashes empty and both paths share one shape.
@@ -198,6 +369,22 @@ class DashboardController extends Controller
         ];
     }
 
+    /**
+     * @param  \Illuminate\Database\Eloquent\Collection<int, Account>  $accounts
+     * @return Collection<int, array{id: int, name: string, exchange: string, owner: string, is_trading: bool, disabled_reason: ?string}>
+     */
+    private function accountOptions(Collection $accounts): Collection
+    {
+        return $accounts->map(fn (Account $account): array => [
+            'id' => $account->id,
+            'name' => $account->name,
+            'exchange' => $account->apiSystem?->name ?? 'Unknown',
+            'owner' => $account->user?->name ?? 'Unknown',
+            'is_trading' => $account->isReadyToTrade(),
+            'disabled_reason' => $account->disabled_reason === null ? null : (string) $account->disabled_reason,
+        ]);
+    }
+
     private function lastPositionClosedAt(Account $account): ?string
     {
         return $account->positions()
@@ -209,7 +396,7 @@ class DashboardController extends Controller
             ?->toIso8601String();
     }
 
-    /** @return array<int, array<string, mixed>> */
+    /** @return array<int, PositionPayload> */
     private function openPositions(Account $account): array
     {
         $rawPositions = $account->positions()
@@ -231,7 +418,7 @@ class DashboardController extends Controller
                 $candleOpensByExchangeSymbol,
                 $fourHourSparksByExchangeSymbol,
             ))
-            ->sortByDesc(fn (array $p) => (float) ($p['alpha_limit_pct'] ?? 0))
+            ->sortByDesc(fn (array $p): float => (float) $p['alpha_limit_pct'])
             ->values()
             ->all();
     }
@@ -275,70 +462,44 @@ class DashboardController extends Controller
      */
     private function activityFeed(Account $account): array
     {
-        $ago = fn ($ts): string => $this->humanAgo($ts) ?? 'just now';
-
         $events = collect();
+        $this->appendActiveOpenActivityEvents($events, $account);
+        $this->appendHistoryOpenActivityEvents($events, $account);
+        $this->appendClosedActivityEvents($events, $account);
+        $this->appendActiveWapActivityEvents($events, $account);
+        $this->appendHistoryWapActivityEvents($events, $account);
 
-        $pushOpen = function ($p, bool $active) use ($events, $ago): void {
-            $events->push([
-                'kind' => 'OPEN',
-                'sort' => (string) $p->opened_at,
-                'time' => $ago($p->opened_at),
-                'position_id' => (int) $p->id,
-                'active' => $active,
-                'side' => strtoupper((string) $p->direction),
-                'symbol' => $p->parsed_trading_pair,
-                'quantity' => $p->quantity !== null ? rtrim(rtrim((string) $p->quantity, '0'), '.') : null,
-                'price' => $p->opening_price !== null ? rtrim(rtrim((string) $p->opening_price, '0'), '.') : null,
-                'pnl' => null,
-            ]);
-        };
+        return $this->finalizeActivityEvents($events);
+    }
 
-        $pushWap = function ($o, bool $active) use ($events, $ago): void {
-            $events->push([
-                'kind' => 'WAP',
-                'sort' => (string) $o->filled_at,
-                'time' => $ago($o->filled_at),
-                'position_id' => (int) $o->position_id,
-                'active' => $active,
-                'side' => strtoupper((string) $o->direction),
-                'symbol' => $o->parsed_trading_pair,
-                'quantity' => $o->quantity !== null ? rtrim(rtrim((string) $o->quantity, '0'), '.') : null,
-                'price' => $o->price !== null ? rtrim(rtrim((string) $o->price, '0'), '.') : null,
-                'pnl' => null,
-            ]);
-        };
-
-        $openColumns = ['id', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'];
-        $wapColumns = ['positions.id as position_id', 'positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'];
-
-        // OPEN events for currently-open positions — fetched WITHOUT a recency
-        // cap. The client's "active only" toggle filters to these, so every
-        // open position must be present regardless of how many closed-position
-        // opens are newer; capping here would silently drop an active position
-        // whose open is older than the 30 most recent opens (heavy churn
-        // pushes active opens well past that window).
+    /** @param  Collection<int, ActivityEvent>  $events */
+    private function appendActiveOpenActivityEvents(Collection $events, Account $account): void
+    {
         DB::table('positions')
             ->where('account_id', $account->id)
             ->whereIn('status', self::OPEN_POSITION_STATUSES)
             ->whereNotNull('opened_at')
             ->orderByDesc('opened_at')
-            ->get($openColumns)
-            ->each(fn ($p) => $pushOpen($p, true));
+            ->get($this->activityOpenColumns())
+            ->each(fn (\stdClass $position): Collection => $events->push($this->openActivityEvent($position, true)));
+    }
 
-        // OPEN events for already-terminal positions — history only, so the
-        // recent 30 are enough for the full (toggle-off) view.
+    /** @param  Collection<int, ActivityEvent>  $events */
+    private function appendHistoryOpenActivityEvents(Collection $events, Account $account): void
+    {
         DB::table('positions')
             ->where('account_id', $account->id)
             ->whereNotIn('status', self::OPEN_POSITION_STATUSES)
             ->whereNotNull('opened_at')
             ->orderByDesc('opened_at')
             ->limit(30)
-            ->get($openColumns)
-            ->each(fn ($p) => $pushOpen($p, false));
+            ->get($this->activityOpenColumns())
+            ->each(fn (\stdClass $position): Collection => $events->push($this->openActivityEvent($position, false)));
+    }
 
-        // CLOSE events — clean closes, with price-true realized PnL. Always
-        // terminal, so never "active"; recent 30 for the history view.
+    /** @param  Collection<int, ActivityEvent>  $events */
+    private function appendClosedActivityEvents(Collection $events, Account $account): void
+    {
         DB::table('positions')
             ->where('account_id', $account->id)
             ->where('status', 'closed')
@@ -346,43 +507,12 @@ class DashboardController extends Controller
             ->orderByDesc('closed_at')
             ->limit(30)
             ->get(['id', 'pnl', 'was_waped', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'closing_price', 'closed_at'])
-            ->each(function ($p) use ($events, $ago): void {
-                // The engine stores the exchange's own net realized PnL on the
-                // position after every close (fees included) — the SAME figure
-                // the KPI strip sums. Prefer it; the price-delta recompute is
-                // only a fallback for rows closed before that column existed,
-                // and it is WRONG on WAP'd closes (opening_price is the first
-                // fill, not the blended entry the close actually realized).
-                $pnl = null;
-                if (is_numeric($p->pnl)) {
-                    $pnl = number_format((float) $p->pnl, 2, '.', '');
-                } elseif (is_numeric($p->opening_price) && is_numeric($p->closing_price) && is_numeric($p->quantity)) {
-                    $delta = strtoupper((string) $p->direction) === 'LONG'
-                        ? bcsub((string) $p->closing_price, (string) $p->opening_price, 8)
-                        : bcsub((string) $p->opening_price, (string) $p->closing_price, 8);
-                    $pnl = number_format((float) bcmul($delta, (string) $p->quantity, 8), 2, '.', '');
-                }
+            ->each(fn (\stdClass $position): Collection => $events->push($this->closedActivityEvent($position)));
+    }
 
-                $events->push([
-                    'kind' => 'CLOSE',
-                    'sort' => (string) $p->closed_at,
-                    'time' => $ago($p->closed_at),
-                    'position_id' => (int) $p->id,
-                    // A closed position is never "active" — but it carries the
-                    // waped flag so the row can badge a WAP'd (averaged-down) close.
-                    'active' => false,
-                    'waped' => (bool) $p->was_waped,
-                    'side' => strtoupper((string) $p->direction),
-                    'symbol' => $p->parsed_trading_pair,
-                    'quantity' => null,
-                    'price' => $p->closing_price !== null ? rtrim(rtrim((string) $p->closing_price, '0'), '.') : null,
-                    'pnl' => $pnl,
-                ]);
-            });
-
-        // WAP events for currently-open positions — a filled ladder rung
-        // re-anchors the position. Uncapped for the same reason as active
-        // opens: the toggle-on view must show every active position's WAPs.
+    /** @param  Collection<int, ActivityEvent>  $events */
+    private function appendActiveWapActivityEvents(Collection $events, Account $account): void
+    {
         DB::table('orders')
             ->join('positions', 'positions.id', '=', 'orders.position_id')
             ->where('positions.account_id', $account->id)
@@ -391,10 +521,13 @@ class DashboardController extends Controller
             ->where('orders.status', 'FILLED')
             ->whereNotNull('orders.filled_at')
             ->orderByDesc('orders.filled_at')
-            ->get($wapColumns)
-            ->each(fn ($o) => $pushWap($o, true));
+            ->get($this->activityWapColumns())
+            ->each(fn (\stdClass $order): Collection => $events->push($this->wapActivityEvent($order, true)));
+    }
 
-        // WAP events for terminal positions — history only, recent 30.
+    /** @param  Collection<int, ActivityEvent>  $events */
+    private function appendHistoryWapActivityEvents(Collection $events, Account $account): void
+    {
         DB::table('orders')
             ->join('positions', 'positions.id', '=', 'orders.position_id')
             ->where('positions.account_id', $account->id)
@@ -404,25 +537,141 @@ class DashboardController extends Controller
             ->whereNotNull('orders.filled_at')
             ->orderByDesc('orders.filled_at')
             ->limit(30)
-            ->get($wapColumns)
-            ->each(fn ($o) => $pushWap($o, false));
+            ->get($this->activityWapColumns())
+            ->each(fn (\stdClass $order): Collection => $events->push($this->wapActivityEvent($order, false)));
+    }
 
-        // Active-position events are ALWAYS kept — they're what the "active
-        // only" toggle surfaces and must never be starved. Terminal-position
-        // events fill the remaining history up to 30. Without this split the
-        // shared 30-row cap let closed-position churn evict active events
-        // before the client-side filter ever ran.
-        $active = $events->filter(fn (array $e): bool => $e['active']);
-        $history = $events->reject(fn (array $e): bool => $e['active'])
+    /** @return list<string> */
+    private function activityOpenColumns(): array
+    {
+        return ['id', 'parsed_trading_pair', 'direction', 'quantity', 'opening_price', 'opened_at'];
+    }
+
+    /** @return list<string> */
+    private function activityWapColumns(): array
+    {
+        return ['positions.id as position_id', 'positions.parsed_trading_pair', 'positions.direction', 'orders.price', 'orders.quantity', 'orders.filled_at'];
+    }
+
+    /** @return ActivityEvent */
+    private function openActivityEvent(\stdClass $position, bool $active): array
+    {
+        return [
+            'kind' => 'OPEN',
+            'sort' => (string) $position->opened_at,
+            'time' => $this->activityTime($position->opened_at),
+            'position_id' => (int) $position->id,
+            'active' => $active,
+            'side' => strtoupper((string) $position->direction),
+            'symbol' => $position->parsed_trading_pair,
+            'quantity' => $this->trimActivityNumber($position->quantity),
+            'price' => $this->trimActivityNumber($position->opening_price),
+            'pnl' => null,
+        ];
+    }
+
+    /** @return ActivityEvent */
+    private function wapActivityEvent(\stdClass $order, bool $active): array
+    {
+        return [
+            'kind' => 'WAP',
+            'sort' => (string) $order->filled_at,
+            'time' => $this->activityTime($order->filled_at),
+            'position_id' => (int) $order->position_id,
+            'active' => $active,
+            'side' => strtoupper((string) $order->direction),
+            'symbol' => $order->parsed_trading_pair,
+            'quantity' => $this->trimActivityNumber($order->quantity),
+            'price' => $this->trimActivityNumber($order->price),
+            'pnl' => null,
+        ];
+    }
+
+    /** @return ActivityEvent */
+    private function closedActivityEvent(\stdClass $position): array
+    {
+        return [
+            'kind' => 'CLOSE',
+            'sort' => (string) $position->closed_at,
+            'time' => $this->activityTime($position->closed_at),
+            'position_id' => (int) $position->id,
+            'active' => false,
+            'waped' => (bool) $position->was_waped,
+            'side' => strtoupper((string) $position->direction),
+            'symbol' => $position->parsed_trading_pair,
+            'quantity' => null,
+            'price' => $this->trimActivityNumber($position->closing_price),
+            'pnl' => $this->closedPositionPnl($position),
+        ];
+    }
+
+    private function activityTime(CarbonInterface|string|null $timestamp): string
+    {
+        return $this->humanAgo($timestamp) ?? 'just now';
+    }
+
+    private function trimActivityNumber(int|float|string|null $value): ?string
+    {
+        return $value === null ? null : rtrim(rtrim((string) $value, '0'), '.');
+    }
+
+    private function closedPositionPnl(\stdClass $position): ?string
+    {
+        if (is_numeric($position->pnl)) {
+            return number_format((float) $position->pnl, 2, '.', '');
+        }
+
+        $values = $this->numericCloseValues($position);
+        if ($values === null) {
+            return null;
+        }
+
+        $delta = strtoupper((string) $position->direction) === 'LONG'
+            ? bcsub($values['closing_price'], $values['opening_price'], 8)
+            : bcsub($values['opening_price'], $values['closing_price'], 8);
+
+        return number_format((float) bcmul($delta, $values['quantity'], 8), 2, '.', '');
+    }
+
+    /**
+     * @return array{opening_price: numeric-string, closing_price: numeric-string, quantity: numeric-string}|null
+     */
+    private function numericCloseValues(\stdClass $position): ?array
+    {
+        $openingPrice = (string) $position->opening_price;
+        $closingPrice = (string) $position->closing_price;
+        $quantity = (string) $position->quantity;
+
+        if (! $this->isNumericPrice($openingPrice)
+            || ! $this->isNumericPrice($closingPrice)
+            || ! $this->isNumericPrice($quantity)) {
+            return null;
+        }
+
+        return [
+            'opening_price' => $openingPrice,
+            'closing_price' => $closingPrice,
+            'quantity' => $quantity,
+        ];
+    }
+
+    /**
+     * @param  Collection<int, ActivityEvent>  $events
+     * @return array<int, FinalActivityEvent>
+     */
+    private function finalizeActivityEvents(Collection $events): array
+    {
+        $active = $events->filter(fn (array $event): bool => $event['active']);
+        $history = $events->reject(fn (array $event): bool => $event['active'])
             ->sortByDesc('sort')
             ->take(30);
 
         return $active->merge($history)
             ->sortByDesc('sort')
-            ->map(function (array $e): array {
-                unset($e['sort']);
+            ->map(function (array $event): array {
+                unset($event['sort']);
 
-                return $e;
+                return $event;
             })
             ->values()
             ->all();
@@ -493,51 +742,76 @@ class DashboardController extends Controller
      *    of the cumulative daily realized series.
      *  - Open positions: count + long/short split from the live payload.
      *
-     * @param  array<int, array<string, mixed>>  $positions
+     * @param  array<int, PositionPayload>  $positions
      * @return array<string, mixed>
      */
     private function kpis(Account $account, array $positions): array
     {
         $financials = new AccountFinancials($account);
+        $now = CarbonImmutable::now();
 
-        // ---- portfolio value + spark + 24h delta ----
-        $series = DB::table('account_balance_history')
+        return [
+            ...$this->portfolioKpis($account, $financials, $now),
+            ...$this->realizedKpis($financials, $now),
+            ...$this->positionCountKpis($positions),
+        ];
+    }
+
+    /** @return array{balance: ?string, balance_delta_24h_pct: ?float, balance_spark: array<int, float>} */
+    private function portfolioKpis(Account $account, AccountFinancials $financials, CarbonImmutable $now): array
+    {
+        $series = $this->balanceSeries($account);
+        $balance = $series === [] ? null : end($series);
+        $dayAgo = $this->balanceDayAgo($account, $now);
+        $pnl24h = $financials->realizedDelta(Window::between($now->subDay(), $now));
+
+        return [
+            'balance' => $balance !== null ? number_format($balance, 2, '.', '') : null,
+            'balance_delta_24h_pct' => $this->balanceDelta24hPct($pnl24h, $dayAgo),
+            'balance_spark' => $series,
+        ];
+    }
+
+    /** @return array<int, float> */
+    private function balanceSeries(Account $account): array
+    {
+        return DB::table('account_balance_history')
             ->where('account_id', $account->id)
             ->orderByDesc('id')
             ->limit(30)
             ->pluck('total_wallet_balance')
             ->reverse()
-            ->map(fn ($v) => (float) $v)
+            ->map(fn ($value): float => (float) $value)
             ->values()
             ->all();
+    }
 
-        $balance = $series === [] ? null : end($series);
-
-        // One clock for both halves of the chip: the wallet it divides by and
-        // the window it sums trades over have to mean the same "24h ago".
-        $now = CarbonImmutable::now();
-
-        $dayAgo = DB::table('account_balance_history')
+    private function balanceDayAgo(Account $account, CarbonImmutable $now): int|float|string|null
+    {
+        return DB::table('account_balance_history')
             ->where('account_id', $account->id)
             ->where('created_at', '<=', $now->subDay())
             ->orderByDesc('id')
             ->value('total_wallet_balance');
+    }
 
-        // The chip beside the portfolio value is read as performance, so it
-        // reports the trading slice of the last 24h only. Raw wallet drift
-        // would paint a deposit as a double-digit "gain" — the wallet grew,
-        // the trader did not. Cash flow is exactly `walletChange − tradePnl`,
-        // so dividing trade PnL alone by the 24h-ago wallet strips it out.
-        $pnl24h = $financials->realizedDelta(Window::between($now->subDay(), $now));
-
-        $balanceDelta24hPct = null;
-        if ($pnl24h !== null && $dayAgo !== null && (float) $dayAgo > 0) {
-            $balanceDelta24hPct = round((float) bcmul(bcdiv($pnl24h, (string) $dayAgo, 8), '100', 4), 2);
+    private function balanceDelta24hPct(?string $pnl24h, int|float|string|null $dayAgo): ?float
+    {
+        if ($pnl24h === null || ! $this->isPositiveNumber($dayAgo)) {
+            return null;
         }
 
-        // ---- realized P&L: today + 30d (trade-PnL sourced) ----
-        // "Today" is the trader's day, which starts when their exchange says
-        // it does — a UTC+2 trader's day opened at 22:00 UTC yesterday.
+        return round((float) bcmul(bcdiv($pnl24h, (string) $dayAgo, 8), '100', 4), 2);
+    }
+
+    private function isPositiveNumber(int|float|string|null $value): bool
+    {
+        return $value !== null && is_numeric($value) && (float) $value > 0;
+    }
+
+    /** @return array{pnl_today: ?string, pnl_today_pct: ?float, pnl_yesterday: ?string, pnl_30d: ?string, pnl_30d_pct: ?float, pnl_30d_spark: array<int, float>} */
+    private function realizedKpis(AccountFinancials $financials, CarbonImmutable $now): array
+    {
         $basis = $financials->reportingDay();
         $todayWindow = Window::today($now, $basis);
         $yesterdayWindow = Window::between(
@@ -551,33 +825,51 @@ class DashboardController extends Controller
         $pnl30d = $financials->realizedDelta($monthWindow);
         $roi30dPct = $financials->realizedRoiPct($monthWindow);
 
-        $todayStart = $financials->startWallet($todayWindow);
-        $pnlTodayPct = null;
-        if ($pnlToday !== null && $todayStart !== null && bccomp($todayStart, '0', 8) > 0) {
-            $pnlTodayPct = round((float) bcmul(bcdiv($pnlToday, $todayStart, 8), '100', 4), 2);
-        }
-
-        // 30d sparkline = cumulative realized-per-day series.
-        $cumulative = 0.0;
-        $pnl30dSpark = [];
-        foreach ($financials->dailyRevenues($monthWindow) as $delta) {
-            $cumulative += (float) $delta;
-            $pnl30dSpark[] = round($cumulative, 2);
-        }
-
-        // ---- open positions split ----
-        $longCount = count(array_filter($positions, fn (array $p) => $p['direction'] === 'LONG'));
-
         return [
-            'balance' => $balance !== null ? number_format($balance, 2, '.', '') : null,
-            'balance_delta_24h_pct' => $balanceDelta24hPct,
-            'balance_spark' => $series,
             'pnl_today' => $pnlToday !== null ? number_format((float) $pnlToday, 2, '.', '') : null,
-            'pnl_today_pct' => $pnlTodayPct,
+            'pnl_today_pct' => $this->pnlPercentage($pnlToday, $financials->startWallet($todayWindow)),
             'pnl_yesterday' => $pnlYesterday !== null ? bcround($pnlYesterday, precision: 2) : null,
             'pnl_30d' => $pnl30d !== null ? number_format((float) $pnl30d, 2, '.', '') : null,
             'pnl_30d_pct' => $roi30dPct !== null ? round($roi30dPct, 2) : null,
-            'pnl_30d_spark' => $pnl30dSpark,
+            'pnl_30d_spark' => $this->cumulativeRevenueSpark($financials->dailyRevenues($monthWindow)),
+        ];
+    }
+
+    private function pnlPercentage(?string $pnl, ?string $start): ?float
+    {
+        if ($pnl === null || $start === null || bccomp($start, '0', 8) <= 0) {
+            return null;
+        }
+
+        return round((float) bcmul(bcdiv($pnl, $start, 8), '100', 4), 2);
+    }
+
+    /**
+     * @param  array<string, string>  $revenues
+     * @return array<int, float>
+     */
+    private function cumulativeRevenueSpark(array $revenues): array
+    {
+        $cumulative = 0.0;
+        $spark = [];
+
+        foreach ($revenues as $delta) {
+            $cumulative += (float) $delta;
+            $spark[] = round($cumulative, 2);
+        }
+
+        return $spark;
+    }
+
+    /**
+     * @param  array<int, PositionPayload>  $positions
+     * @return array<string, int>
+     */
+    private function positionCountKpis(array $positions): array
+    {
+        $longCount = count(array_filter($positions, fn (array $position): bool => $position['direction'] === 'LONG'));
+
+        return [
             'open_count' => count($positions),
             'long_count' => $longCount,
             'short_count' => count($positions) - $longCount,
@@ -585,7 +877,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $positions
+     * @param  array<int, PositionPayload>  $positions
      * @return array<string, mixed>
      */
     private function webKpis(Account $account, array $positions): array
@@ -599,7 +891,7 @@ class DashboardController extends Controller
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $positions
+     * @param  array<int, PositionPayload>  $positions
      * @return array{
      *     open_long_max_pain_total: ?string,
      *     open_long_max_pain_pct: ?float,
@@ -610,46 +902,16 @@ class DashboardController extends Controller
      */
     private function openPositionKpis(array $positions, ?string $portfolioBalance): array
     {
-        $maxPainTotals = [
-            'LONG' => '0',
-            'SHORT' => '0',
-        ];
-        $hasCompleteMaxPain = [
-            'LONG' => true,
-            'SHORT' => true,
-        ];
-        $positionsPnl = '0';
-        $hasCompletePnl = true;
-
-        foreach ($positions as $position) {
-            $direction = $position['direction'] ?? null;
-            $maxPain = $position['max_pain'] ?? null;
-
-            if (! is_string($direction) || ! isset($maxPainTotals[$direction])) {
-                $hasCompleteMaxPain['LONG'] = false;
-                $hasCompleteMaxPain['SHORT'] = false;
-            } elseif (is_numeric($maxPain)) {
-                $maxPainTotals[$direction] = bcadd($maxPainTotals[$direction], (string) $maxPain, scale: 8);
-            } else {
-                $hasCompleteMaxPain[$direction] = false;
-            }
-
-            $pnl = $position['pnl'] ?? null;
-            if (is_numeric($pnl)) {
-                $positionsPnl = bcadd($positionsPnl, (string) $pnl, scale: 8);
-            } else {
-                $hasCompletePnl = false;
-            }
-        }
+        $summary = $this->summarizeOpenPositions($positions);
 
         $longMaxPain = $this->maxPainSummary(
-            $maxPainTotals['LONG'],
-            $hasCompleteMaxPain['LONG'],
+            $summary['max_pain_totals']['LONG'],
+            $summary['complete_max_pain']['LONG'],
             $portfolioBalance,
         );
         $shortMaxPain = $this->maxPainSummary(
-            $maxPainTotals['SHORT'],
-            $hasCompleteMaxPain['SHORT'],
+            $summary['max_pain_totals']['SHORT'],
+            $summary['complete_max_pain']['SHORT'],
             $portfolioBalance,
         );
 
@@ -658,10 +920,99 @@ class DashboardController extends Controller
             'open_long_max_pain_pct' => $longMaxPain['percentage'],
             'open_short_max_pain_total' => $shortMaxPain['total'],
             'open_short_max_pain_pct' => $shortMaxPain['percentage'],
-            'open_positions_pnl' => $hasCompletePnl
-                ? bcround($positionsPnl, precision: 2)
+            'open_positions_pnl' => $summary['complete_pnl']
+                ? bcround($summary['pnl'], precision: 2)
                 : null,
         ];
+    }
+
+    /**
+     * @param  array<int, PositionPayload>  $positions
+     * @return array{
+     *     max_pain_totals: array{LONG: numeric-string, SHORT: numeric-string},
+     *     complete_max_pain: array{LONG: bool, SHORT: bool},
+     *     pnl: string,
+     *     complete_pnl: bool
+     * }
+     */
+    private function summarizeOpenPositions(array $positions): array
+    {
+        $maxPainTotals = ['LONG' => '0', 'SHORT' => '0'];
+        $completeMaxPain = ['LONG' => true, 'SHORT' => true];
+        $pnl = '0';
+        $completePnl = true;
+
+        foreach ($positions as $position) {
+            $this->accumulateMaxPain($position, $maxPainTotals, $completeMaxPain);
+            $this->accumulatePositionPnl($position, $pnl, $completePnl);
+        }
+
+        return [
+            'max_pain_totals' => $maxPainTotals,
+            'complete_max_pain' => $completeMaxPain,
+            'pnl' => $pnl,
+            'complete_pnl' => $completePnl,
+        ];
+    }
+
+    /**
+     * @param  array{direction?: string|null, max_pain?: int|float|string|null, pnl?: string|null}  $position
+     * @param  array{LONG: numeric-string, SHORT: numeric-string}  $totals
+     * @param  array{LONG: bool, SHORT: bool}  $complete
+     */
+    private function accumulateMaxPain(array $position, array &$totals, array &$complete): void
+    {
+        $direction = $position['direction'] ?? null;
+
+        if (! is_string($direction)) {
+            $this->markMaxPainIncomplete($complete);
+
+            return;
+        }
+
+        if (! isset($totals[$direction])) {
+            $this->markMaxPainIncomplete($complete);
+
+            return;
+        }
+
+        $maxPain = $this->numericString($position['max_pain'] ?? null);
+        if ($maxPain === null) {
+            $complete[$direction] = false;
+
+            return;
+        }
+
+        $total = $this->numericString($totals[$direction]);
+        if ($total === null) {
+            $this->markMaxPainIncomplete($complete);
+
+            return;
+        }
+
+        $totals[$direction] = bcadd($total, $maxPain, scale: 8);
+    }
+
+    /** @param array{LONG: bool, SHORT: bool} $complete */
+    private function markMaxPainIncomplete(array &$complete): void
+    {
+        $complete['LONG'] = false;
+        $complete['SHORT'] = false;
+    }
+
+    /** @param  array{direction?: string|null, max_pain?: int|float|string|null, pnl?: string|null}  $position */
+    private function accumulatePositionPnl(array $position, string &$pnl, bool &$complete): void
+    {
+        $value = $this->numericString($position['pnl'] ?? null);
+
+        $currentPnl = $this->numericString($pnl);
+        if ($value !== null && $currentPnl !== null) {
+            $pnl = bcadd($currentPnl, $value, scale: 8);
+
+            return;
+        }
+
+        $complete = false;
     }
 
     /**
@@ -670,24 +1021,32 @@ class DashboardController extends Controller
     private function maxPainSummary(string $total, bool $isComplete, ?string $portfolioBalance): array
     {
         if (! $isComplete) {
-            return [
-                'total' => null,
-                'percentage' => null,
-            ];
+            return $this->emptyMaxPainSummary();
+        }
+
+        $numericTotal = $this->numericString($total);
+        if ($numericTotal === null) {
+            return $this->emptyMaxPainSummary();
         }
 
         $percentage = null;
         if ($portfolioBalance !== null && bccomp($portfolioBalance, '0', scale: 8) > 0) {
             $percentage = (float) bcround(
-                bcmul(bcdiv($total, $portfolioBalance, scale: 8), '100', scale: 4),
+                bcmul(bcdiv($numericTotal, $portfolioBalance, scale: 8), '100', scale: 4),
                 precision: 2,
             );
         }
 
         return [
-            'total' => bcround($total, precision: 2),
+            'total' => bcround($numericTotal, precision: 2),
             'percentage' => $percentage,
         ];
+    }
+
+    /** @return array{total: null, percentage: null} */
+    private function emptyMaxPainSummary(): array
+    {
+        return ['total' => null, 'percentage' => null];
     }
 
     /**
@@ -744,7 +1103,7 @@ class DashboardController extends Controller
      * and the account-specific position cap. Falls back to a calm-display
      * when no compute has landed yet.
      *
-     * @return array<string, mixed>
+     * @return BscsPayload
      */
     private function bscsBadge(Account $account): array
     {
@@ -754,35 +1113,82 @@ class DashboardController extends Controller
         $band = $index->band()?->value;
         $blocked = $index->shouldBlockOpens();
         $cooldownUntil = $index->cooldownUntil();
+        $pauseState = $this->bscsPauseState($index, $score, $blocked);
+        $snapshot = $index->latestSnapshot();
 
-        // Third pause source, outside BSCS entirely: the error-storm
-        // monitor flips the openings switch off (allow_opening_positions)
-        // and holds it until an operator clears it — no auto-until.
-        // 2026-07-27 incident: opens sat parked for 4h while this widget
-        // showed "calm, no cooldown", because only BSCS was surfaced.
+        return $this->bscsPayload($bscs, $index, $score, $band, $blocked, $cooldownUntil, $pauseState, $snapshot);
+    }
+
+    /**
+     * @param  array{pause_reason: ?string, paused: bool, openings_switch_enabled: bool}  $pauseState
+     * @return BscsPayload
+     */
+    private function bscsPayload(
+        BscsAccountContext $bscs,
+        BscsState $index,
+        ?int $score,
+        ?string $band,
+        bool $blocked,
+        ?CarbonImmutable $cooldownUntil,
+        array $pauseState,
+        ?MarketRegimeSnapshot $snapshot,
+    ): array {
+        return [
+            'score' => $score,
+            'band' => $band,
+            'blocked' => $blocked,
+            'pause_reason' => $pauseState['pause_reason'],
+            'paused' => $pauseState['paused'],
+            'openings_switch_enabled' => $pauseState['openings_switch_enabled'],
+            'cooldown_active' => $index->isCooldownActive(),
+            'cooldown_remaining' => $this->humanUntil($cooldownUntil),
+            'cooldown_until' => $cooldownUntil?->toIso8601String(),
+            'status' => $this->bscsStatus($pauseState['paused'], $score, $band),
+            'is_stale' => $index->isStale(),
+            'block_threshold' => $index->blockThreshold(),
+            'computed_at' => $snapshot?->computed_at ? CarbonImmutable::parse($snapshot->computed_at)->toIso8601String() : null,
+            'computed_ago' => $this->humanAgo($snapshot?->computed_at),
+            'next_compute_in' => $this->nextBscsComputeIn(),
+            'components' => $this->bscsComponents($snapshot),
+            'position_cap' => $bscs->positions()->max()->toArray(),
+        ];
+    }
+
+    /** @return array{pause_reason: ?string, paused: bool, openings_switch_enabled: bool} */
+    private function bscsPauseState(BscsState $index, ?int $score, bool $blocked): array
+    {
         $openingsSwitchEnabled = (bool) (Kraite::find(1)?->allow_opening_positions ?? true);
-        $paused = $blocked || ! $openingsSwitchEnabled;
+        $paused = $this->bscsIsPaused($blocked, $openingsSwitchEnabled);
+        $pauseReason = $this->bscsPauseReason($index, $score, $blocked, $openingsSwitchEnabled);
 
-        // Inferred pause source. The fast 1-minute market-shock detector
-        // arms the same cooldown the slow score gate uses, even when the
-        // score is nowhere near the block threshold — so a cooldown active
-        // with a sub-threshold score is a SHOCK cooldown; at/above the
-        // threshold it's the regime gate. (No persisted reason column.)
-        // The monitor latch outranks both for display: it never expires on
-        // its own, so naming a cooldown here would promise a resumption
-        // time the latch does not honour.
-        $pauseReason = null;
+        return [
+            'pause_reason' => $pauseReason,
+            'paused' => $paused,
+            'openings_switch_enabled' => $openingsSwitchEnabled,
+        ];
+    }
+
+    private function bscsIsPaused(bool $blocked, bool $openingsSwitchEnabled): bool
+    {
+        return $blocked || ! $openingsSwitchEnabled;
+    }
+
+    private function bscsPauseReason(BscsState $index, ?int $score, bool $blocked, bool $openingsSwitchEnabled): ?string
+    {
         if (! $openingsSwitchEnabled) {
-            $pauseReason = 'monitor';
-        } elseif ($blocked) {
-            // Regime gate is the cause ONLY when a computed score is at/above
-            // the block threshold (the only way the slow gate arms a cooldown).
-            // Everything else — sub-threshold score, or no score yet — can only
-            // be the fast shock breaker, so it defaults to 'shock'.
-            $pauseReason = ($score !== null && $score >= $index->blockThreshold()) ? 'regime' : 'shock';
+            return 'monitor';
         }
 
-        $statusLine = match (true) {
+        if (! $blocked) {
+            return null;
+        }
+
+        return $score !== null && $score >= $index->blockThreshold() ? 'regime' : 'shock';
+    }
+
+    private function bscsStatus(bool $paused, ?int $score, ?string $band): string
+    {
+        return match (true) {
             $paused => 'New trades paused.',
             $score === null => 'Awaiting first compute…',
             $band === 'critical' => 'Market in critical regime.',
@@ -790,58 +1196,39 @@ class DashboardController extends Controller
             $band === 'elevated' => 'Market moving more than usual.',
             default => 'Market normal.',
         };
+    }
 
-        // Sub-signal grid from the latest snapshot. Raw values live on
-        // heterogeneous scales (ratios, percentages, z-scores), so the card
-        // renders the FIRED state as the visual signal and the raw value as
-        // the mono figure — no fake normalisation into a 0–1 bar.
-        $snapshot = $index->latestSnapshot();
-        $components = [];
-
-        if ($snapshot) {
-            $signalMap = [
-                'vol_expansion' => 'Vol expansion',
-                'range_blowout' => 'Range blowout',
-                'corr_regime' => 'Correlation regime',
-                'rejection_pct' => 'Rejection %',
-                'fut_vol' => 'Futures vol',
-            ];
-
-            foreach ($signalMap as $key => $label) {
-                $value = $snapshot->{$key.'_value'};
-                $components[] = [
-                    // Stable identifier so a client can attach its own copy
-                    // (the phone's per-signal explanations) without matching
-                    // on the display label.
-                    'key' => $key,
-                    'label' => $label,
-                    'value' => $value !== null ? round((float) $value, 2) : null,
-                    'fired' => (bool) $snapshot->{$key.'_fired'},
-                ];
-            }
+    /** @return list<array{key: string, label: string, value: ?float, fired: bool}> */
+    private function bscsComponents(?MarketRegimeSnapshot $snapshot): array
+    {
+        if (! $snapshot) {
+            return [];
         }
 
+        $components = [];
+
+        foreach ($this->bscsSignalMap() as $key => $label) {
+            $value = $snapshot->{$key.'_value'};
+            $components[] = [
+                'key' => $key,
+                'label' => $label,
+                'value' => $value !== null ? round((float) $value, 2) : null,
+                'fired' => (bool) $snapshot->{$key.'_fired'},
+            ];
+        }
+
+        return $components;
+    }
+
+    /** @return array<string, string> */
+    private function bscsSignalMap(): array
+    {
         return [
-            'score' => $score,
-            'band' => $band,
-            'blocked' => $blocked,
-            // Cooldown / market-shock surface — when opens are paused and
-            // until when. pause_reason is 'shock' (fast 1-min breaker) or
-            // 'regime' (slow score gate at ≥ block_threshold).
-            'pause_reason' => $pauseReason,
-            'paused' => $paused,
-            'openings_switch_enabled' => $openingsSwitchEnabled,
-            'cooldown_active' => $index->isCooldownActive(),
-            'cooldown_remaining' => $this->humanUntil($cooldownUntil),
-            'cooldown_until' => $cooldownUntil ? $cooldownUntil->toIso8601String() : null,
-            'status' => $statusLine,
-            'is_stale' => $index->isStale(),
-            'block_threshold' => $index->blockThreshold(),
-            'computed_at' => $snapshot?->computed_at ? CarbonImmutable::parse($snapshot->computed_at)->toIso8601String() : null,
-            'computed_ago' => $this->humanAgo($snapshot?->computed_at),
-            'next_compute_in' => $this->nextBscsComputeIn(),
-            'components' => $components,
-            'position_cap' => $bscs->positions()->max()->toArray(),
+            'vol_expansion' => 'Vol expansion',
+            'range_blowout' => 'Range blowout',
+            'corr_regime' => 'Correlation regime',
+            'rejection_pct' => 'Rejection %',
+            'fut_vol' => 'Futures vol',
         ];
     }
 
@@ -868,38 +1255,50 @@ class DashboardController extends Controller
             ];
         }
 
-        $marginBalance = (string) ($latest->total_margin_balance ?? '0');
-        $maintMargin = (string) ($latest->total_maintenance_margin ?? '0');
-
-        $marginRatio = (is_numeric($marginBalance) && bccomp($marginBalance, '0', 16) > 0)
-            ? number_format((float) bcmul(bcdiv($maintMargin, $marginBalance, 6), '100', 4), 2, '.', '')
-            : null;
-
-        // Max historical drawdown = (peak - trough) / peak. Reads as "the
-        // worst dip the account has ever taken". Peak-vs-current would
-        // show 0% when the live margin happens to match the historic high
-        // (common when the account has been monotonically growing or the
-        // latest write coincides with the previous max), masking the
-        // risk-history signal an operator wants on the dashboard.
-        $extremes = DB::table('account_balance_history')
-            ->where('account_id', $account->id)
-            ->selectRaw('MAX(total_margin_balance) AS peak, MIN(total_margin_balance) AS trough')
-            ->first();
-
-        $drawdownPct = null;
-        if ($extremes && $extremes->peak !== null && is_numeric($extremes->peak) && bccomp((string) $extremes->peak, '0', 16) > 0) {
-            $delta = bcsub((string) $extremes->peak, (string) ($extremes->trough ?? $extremes->peak), 16);
-            $drawdownPct = number_format((float) bcmul(bcdiv($delta, (string) $extremes->peak, 6), '100', 4), 2, '.', '');
-        }
+        $marginRatio = $this->marginRatio($latest);
+        $drawdownPct = $this->historicalDrawdown($account);
 
         return [
-            // USDT amounts → 2 decimals to match exchange convention.
             'balance' => number_format((float) $latest->total_wallet_balance, 2, '.', ''),
             'pnl' => number_format((float) $latest->total_unrealized_profit, 2, '.', ''),
             'drawdown_pct' => $drawdownPct,
             'margin_ratio' => $marginRatio,
             'is_stub' => false,
         ];
+    }
+
+    private function marginRatio(\stdClass $latest): ?string
+    {
+        $marginBalance = (string) ($latest->total_margin_balance ?? '0');
+        $maintMargin = (string) ($latest->total_maintenance_margin ?? '0');
+
+        if (! is_numeric($marginBalance) || bccomp($marginBalance, '0', 16) <= 0) {
+            return null;
+        }
+
+        return number_format((float) bcmul(bcdiv($maintMargin, $marginBalance, 6), '100', 4), 2, '.', '');
+    }
+
+    private function historicalDrawdown(Account $account): ?string
+    {
+        $extremes = DB::table('account_balance_history')
+            ->where('account_id', $account->id)
+            ->selectRaw('MAX(total_margin_balance) AS peak, MIN(total_margin_balance) AS trough')
+            ->first();
+
+        if (! $extremes || $extremes->peak === null) {
+            return null;
+        }
+
+        $peak = (string) $extremes->peak;
+        $trough = (string) ($extremes->trough ?? $extremes->peak);
+        if (! $this->isPositivePrice($peak) || ! $this->isNumericPrice($trough)) {
+            return null;
+        }
+
+        $delta = bcsub($peak, $trough, 16);
+
+        return number_format((float) bcmul(bcdiv($delta, $peak, 6), '100', 4), 2, '.', '');
     }
 
     /**
@@ -911,15 +1310,7 @@ class DashboardController extends Controller
      */
     private function btcStrip(): ?array
     {
-        $btc = DB::table('exchange_symbols')
-            ->join('symbols', 'symbols.id', '=', 'exchange_symbols.symbol_id')
-            ->join('api_systems', 'api_systems.id', '=', 'exchange_symbols.api_system_id')
-            ->where('symbols.token', 'BTC')
-            ->where('exchange_symbols.quote', 'USDT')
-            ->where('api_systems.canonical', 'binance')
-            ->select('exchange_symbols.id as es_id', 'symbols.name', 'symbols.image_url')
-            ->first();
-
+        $btc = $this->findBtcSymbol();
         if (! $btc) {
             return null;
         }
@@ -927,24 +1318,42 @@ class DashboardController extends Controller
         $exchangeSymbolId = (int) $btc->es_id;
         $opens = $this->loadCandleOpens([$exchangeSymbolId])[$exchangeSymbolId] ?? [];
         $btcEs = ExchangeSymbol::find($exchangeSymbolId);
-        $mark = $this->markOrLastClose(
-            $exchangeSymbolId,
-            $btcEs?->mark_price !== null ? (string) $btcEs->mark_price : null,
-        );
-
-        // Format with the actual BTC exchange-symbol precision so the
-        // dashboard mirrors what Binance shows ($69,123.45 not $69,123.4567).
-        $markFormatted = $mark !== null && $btcEs ? api_format_price($mark, $btcEs) : $mark;
+        $mark = $this->btcMark($exchangeSymbolId, $btcEs);
 
         return [
             'token' => 'BTC',
             'name' => $btc->name ?? 'Bitcoin',
             'image' => $btc->image_url,
-            'mark' => $markFormatted,
+            'mark' => $this->btcFormattedMark($mark, $btcEs),
             'day_change_pct' => $this->btcTraderDayChangePct($exchangeSymbolId, $mark),
             'spark_4h' => $this->loadFourHourSparks([$exchangeSymbolId])[$exchangeSymbolId] ?? [],
             'dots' => $this->buildTimeframeDots($mark, $opens),
         ];
+    }
+
+    private function findBtcSymbol(): ?\stdClass
+    {
+        return DB::table('exchange_symbols')
+            ->join('symbols', 'symbols.id', '=', 'exchange_symbols.symbol_id')
+            ->join('api_systems', 'api_systems.id', '=', 'exchange_symbols.api_system_id')
+            ->where('symbols.token', 'BTC')
+            ->where('exchange_symbols.quote', 'USDT')
+            ->where('api_systems.canonical', 'binance')
+            ->select('exchange_symbols.id as es_id', 'symbols.name', 'symbols.image_url')
+            ->first();
+    }
+
+    private function btcMark(int $exchangeSymbolId, ?ExchangeSymbol $exchangeSymbol): ?string
+    {
+        return $this->markOrLastClose(
+            $exchangeSymbolId,
+            $this->nullableString($exchangeSymbol?->mark_price),
+        );
+    }
+
+    private function btcFormattedMark(?string $mark, ?ExchangeSymbol $exchangeSymbol): ?string
+    {
+        return $mark !== null && $exchangeSymbol ? api_format_price($mark, $exchangeSymbol) : $mark;
     }
 
     /**
@@ -954,10 +1363,27 @@ class DashboardController extends Controller
      */
     private function btcTraderDayChangePct(int $exchangeSymbolId, ?string $mark): ?string
     {
-        if ($mark === null || ! is_numeric($mark)) {
+        if (! is_numeric($mark)) {
             return null;
         }
 
+        $dayOpen = $this->btcDayOpen($exchangeSymbolId);
+        if (! is_numeric($dayOpen) || bccomp($dayOpen, '0', 16) <= 0) {
+            return null;
+        }
+
+        $change = bcmul(
+            bcdiv(bcsub($mark, $dayOpen, 16), $dayOpen, 16),
+            '100',
+            8,
+        );
+        $rounded = bcround($change, precision: 2);
+
+        return bccomp($rounded, '0', 2) === 0 ? '0.00' : $rounded;
+    }
+
+    private function btcDayOpen(int $exchangeSymbolId): ?string
+    {
         $dayStart = ReportingDay::forUser(Auth::user())
             ->startOfDayUtc(CarbonImmutable::now())
             ->getTimestamp();
@@ -967,18 +1393,7 @@ class DashboardController extends Controller
             ->where('timestamp', $dayStart)
             ->value('open');
 
-        if (! is_numeric($dayOpen) || bccomp((string) $dayOpen, '0', 16) <= 0) {
-            return null;
-        }
-
-        $change = bcmul(
-            bcdiv(bcsub($mark, (string) $dayOpen, 16), (string) $dayOpen, 16),
-            '100',
-            8,
-        );
-        $rounded = bcround($change, precision: 2);
-
-        return bccomp($rounded, '0', 2) === 0 ? '0.00' : $rounded;
+        return $dayOpen === null ? null : (string) $dayOpen;
     }
 
     /**
@@ -996,39 +1411,57 @@ class DashboardController extends Controller
             return [];
         }
 
-        $timeframes = collect(['15m'])
-            ->merge(Kraite::timeframes())
-            ->filter(fn ($candidate) => isset(self::TIMEFRAME_SECONDS[$candidate])
-                && self::TIMEFRAME_SECONDS[$candidate] <= 14_400)
-            ->sortBy(fn ($candidate) => self::TIMEFRAME_SECONDS[$candidate])
-            ->unique()
-            ->values();
-
+        $timeframes = $this->fourHourTimeframes();
         if ($timeframes->isEmpty()) {
             return [];
         }
 
-        $pointLimits = $timeframes->mapWithKeys(fn (string $timeframe): array => [
+        $pointLimits = $this->fourHourPointLimits($timeframes);
+        $series = $this->fetchFourHourSeries(
+            $exchangeSymbolIds,
+            $timeframes,
+            (int) $pointLimits->max(),
+        );
+
+        return $this->selectFourHourSparks($exchangeSymbolIds, $timeframes, $pointLimits, $series);
+    }
+
+    /** @return Collection<int, string> */
+    private function fourHourTimeframes(): Collection
+    {
+        return collect(['15m'])
+            ->merge(Kraite::timeframes())
+            ->filter(fn (string $timeframe): bool => $this->isFourHourTimeframe($timeframe))
+            ->sortBy(fn (string $timeframe): int => self::TIMEFRAME_SECONDS[$timeframe])
+            ->unique()
+            ->values();
+    }
+
+    private function isFourHourTimeframe(string $timeframe): bool
+    {
+        return isset(self::TIMEFRAME_SECONDS[$timeframe])
+            && self::TIMEFRAME_SECONDS[$timeframe] <= 14_400;
+    }
+
+    /**
+     * @param  Collection<int, string>  $timeframes
+     * @return Collection<string, int>
+     */
+    private function fourHourPointLimits(Collection $timeframes): Collection
+    {
+        return $timeframes->mapWithKeys(fn (string $timeframe): array => [
             $timeframe => intdiv(14_400, self::TIMEFRAME_SECONDS[$timeframe]) + 1,
         ]);
-        $maxPointLimit = (int) $pointLimits->max();
+    }
 
-        $ranked = DB::table('candles')
-            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
-            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id, timeframe ORDER BY timestamp DESC) AS rn')
-            ->whereIn('exchange_symbol_id', $exchangeSymbolIds)
-            ->whereIn('timeframe', $timeframes)
-            ->whereNotNull('close');
-
-        $rows = DB::query()
-            ->fromSub($ranked, 'ranked_candles')
-            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
-            ->where('rn', '<=', $maxPointLimit)
-            ->orderBy('exchange_symbol_id')
-            ->orderBy('timeframe')
-            ->orderBy('timestamp')
-            ->get();
-
+    /**
+     * @param  array<int, int>  $exchangeSymbolIds
+     * @param  Collection<int, string>  $timeframes
+     * @return array<int, array<string, array<int, float>>>
+     */
+    private function fetchFourHourSeries(array $exchangeSymbolIds, Collection $timeframes, int $maxPointLimit): array
+    {
+        $rows = $this->fourHourCandleRows($exchangeSymbolIds, $timeframes, $maxPointLimit);
         $series = [];
         foreach ($rows as $row) {
             if (is_numeric($row->close)) {
@@ -1036,6 +1469,42 @@ class DashboardController extends Controller
             }
         }
 
+        return $series;
+    }
+
+    /**
+     * @param  array<int, int>  $exchangeSymbolIds
+     * @param  Collection<int, string>  $timeframes
+     * @return Collection<int, \stdClass>
+     */
+    private function fourHourCandleRows(array $exchangeSymbolIds, Collection $timeframes, int $maxPointLimit): Collection
+    {
+        $ranked = DB::table('candles')
+            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
+            ->selectRaw('ROW_NUMBER() OVER (PARTITION BY exchange_symbol_id, timeframe ORDER BY timestamp DESC) AS rn')
+            ->whereIn('exchange_symbol_id', $exchangeSymbolIds)
+            ->whereIn('timeframe', $timeframes)
+            ->whereNotNull('close');
+
+        return DB::query()
+            ->fromSub($ranked, 'ranked_candles')
+            ->select('exchange_symbol_id', 'timeframe', 'close', 'timestamp')
+            ->where('rn', '<=', $maxPointLimit)
+            ->orderBy('exchange_symbol_id')
+            ->orderBy('timeframe')
+            ->orderBy('timestamp')
+            ->get();
+    }
+
+    /**
+     * @param  array<int, int>  $exchangeSymbolIds
+     * @param  Collection<int, string>  $timeframes
+     * @param  Collection<string, int>  $pointLimits
+     * @param  array<int, array<string, array<int, float>>>  $series
+     * @return array<int, array<int, float>>
+     */
+    private function selectFourHourSparks(array $exchangeSymbolIds, Collection $timeframes, Collection $pointLimits, array $series): array
+    {
         $sparks = [];
         foreach ($exchangeSymbolIds as $exchangeSymbolId) {
             foreach ($timeframes as $timeframe) {
@@ -1057,155 +1526,291 @@ class DashboardController extends Controller
      * Shape a single Position for the tile renderer, including its live
      * price, lifecycle metrics, timeframe directions and four-hour trend.
      *
-     * @param  Position  $position
      * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol  Keyed by exchange_symbol_id → [tf => current_candle_open]
      * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol  Keyed by exchange_symbol_id → chronological closes spanning four hours
+     * @return PositionPayload
      */
     private function serializePosition(
-        $position,
+        Position $position,
         array $candleOpensByExchangeSymbol = [],
         array $fourHourSparksByExchangeSymbol = [],
     ): array {
         $exchangeSymbol = $position->exchangeSymbol;
         $symbol = $exchangeSymbol?->symbol;
+        $markPrice = $this->nullableString($exchangeSymbol?->mark_price);
+        $context = $this->positionContext($position, $exchangeSymbol, $markPrice);
 
-        // Raw values used for math (need full precision); formatted values
-        // for display use kraite-core's api_format_* helpers so the tile
-        // shows the same precision the exchange does (price_precision +
-        // tick_size for prices, quantity_precision for sizes).
-        $currentPrice = $this->markOrLastClose(
-            (int) $position->exchange_symbol_id,
-            $exchangeSymbol?->mark_price !== null ? (string) $exchangeSymbol->mark_price : null,
+        return $this->positionPayload(
+            $position,
+            $exchangeSymbol,
+            $symbol,
+            $context,
+            $candleOpensByExchangeSymbol,
+            $fourHourSparksByExchangeSymbol,
         );
+    }
 
-        $firstProfit = $position->first_profit_price !== null ? (string) $position->first_profit_price : null;
-        $lastLimit = $position->lastLimitOrder()?->price;
-        $lastLimit = $lastLimit !== null ? (string) $lastLimit : null;
+    /** @return PositionContext */
+    private function positionContext(Position $position, ?ExchangeSymbol $exchangeSymbol, ?string $markPrice): array
+    {
+        $prices = $this->positionPrices($position, $markPrice);
+        $limits = $this->positionLimits($position, $exchangeSymbol);
+        $progress = $this->positionProgress($position, $prices, $limits);
+        $financials = $this->positionFinancials($position, $prices);
 
+        return [...$prices, ...$limits, ...$progress, ...$financials];
+    }
+
+    /** @return array{current_price: ?string, first_profit: ?string, last_limit: ?string, current_tp: ?string, next_limit: ?string, stop_loss: ?string} */
+    private function positionPrices(Position $position, ?string $markPrice): array
+    {
         $profitOrder = $position->profitOrder();
-        $currentTp = $profitOrder?->price !== null ? (string) $profitOrder->price : null;
-        $nextLimit = $position->nextPendingLimitOrderPrice();
         $stopLossOrder = $position->orders
             ->where('type', 'STOP-MARKET')
             ->whereNotNull('exchange_order_id')
             ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
             ->sortByDesc('id')
             ->first();
-        $stopLoss = $stopLossOrder?->price !== null ? (string) $stopLossOrder->price : null;
 
-        $fmtPrice = fn (?string $v) => $exchangeSymbol && $v !== null && is_numeric($v)
-            ? api_format_price($v, $exchangeSymbol)
-            : $v;
+        return [
+            'current_price' => $this->markOrLastClose(
+                (int) $position->exchange_symbol_id,
+                $markPrice,
+            ),
+            'first_profit' => $this->nullableString($position->first_profit_price),
+            'last_limit' => $this->nullableString($position->lastLimitOrder()?->price),
+            'current_tp' => $this->nullableString($profitOrder?->price),
+            'next_limit' => $this->nullableString($position->nextPendingLimitOrderPrice()),
+            'stop_loss' => $this->nullableString($stopLossOrder?->price),
+        ];
+    }
 
-        // Limit ticks — current/filled ladder rungs only. The orders relation
-        // also contains cancelled history, including rows replaced at the
-        // same ladder level; counting those makes the configured ladder grow.
-        // This matches Position::lastLimitOrder() and the fleet positions UI.
+    /** @return array{limits: array<int, PositionLimit>, total_limits: int, filled_count: int} */
+    private function positionLimits(Position $position, ?ExchangeSymbol $exchangeSymbol): array
+    {
         $limits = $position->orders
             ->where('type', 'LIMIT')
             ->whereNotNull('exchange_order_id')
             ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
             ->sortBy('quantity')
             ->values()
-            ->map(fn ($order, $idx) => [
-                'index' => $idx + 1,
-                'price' => $fmtPrice((string) $order->price),
-                'price_raw' => (string) $order->price,
-                'quantity' => $exchangeSymbol ? api_format_quantity((string) $order->quantity, $exchangeSymbol) : (string) $order->quantity,
-                'status' => strtoupper((string) $order->status),
-                'filled' => strtoupper((string) $order->status) === 'FILLED',
-            ])
+            ->map(fn (Order $order, int $index): array => $this->serializeLimitOrder($order, $index, $exchangeSymbol))
             ->all();
 
-        $totalLimits = (int) ($position->total_limit_orders ?? count($limits));
-        $filledCount = collect($limits)->filter(fn ($l) => $l['filled'])->count();
+        return [
+            'limits' => $limits,
+            'total_limits' => (int) ($position->total_limit_orders ?? count($limits)),
+            'filled_count' => collect($limits)->filter(fn (array $limit): bool => $limit['filled'])->count(),
+        ];
+    }
 
-        // Alpha values — reimplement against mark_price (kraite-core's
-        // accessor reads exchange_symbols.current_price, which is itself
-        // a candle-derived accessor with a 15-min freshness gate; on the
-        // dashboard we want the live mark from the exchange feed).
-        $alphaPathPct = $this->computeAlphaPathPercent($firstProfit, $lastLimit, $currentPrice);
-        $alphaLimitPct = $this->computeAlphaLimitPercent($currentTp, $nextLimit, $currentPrice);
-        $trackProgressPct = $this->computeAlphaLimitPercent(
-            $currentTp,
-            $nextLimit ?? $stopLoss,
-            $currentPrice,
-        );
+    /** @return PositionLimit */
+    private function serializeLimitOrder(Order $order, int $index, ?ExchangeSymbol $exchangeSymbol): array
+    {
+        $status = strtoupper((string) $order->status);
+
+        return [
+            'index' => $index + 1,
+            'price' => $this->formatPositionPrice((string) $order->price, $exchangeSymbol),
+            'price_raw' => (string) $order->price,
+            'quantity' => $exchangeSymbol === null
+                ? (string) $order->quantity
+                : api_format_quantity((string) $order->quantity, $exchangeSymbol),
+            'status' => $status,
+            'filled' => $status === 'FILLED',
+        ];
+    }
+
+    /**
+     * @param  array{current_price: ?string, first_profit: ?string, last_limit: ?string, current_tp: ?string, next_limit: ?string, stop_loss: ?string}  $prices
+     * @param  array{limits: array<int, PositionLimit>, total_limits: int, filled_count: int}  $limits
+     * @return array{alpha_path_pct: string, alpha_limit_pct: string, track: ?TrackGeometry, direction: string, take_profit_distance_pct: ?string, next_limit_distance_pct: ?string}
+     */
+    private function positionProgress(Position $position, array $prices, array $limits): array
+    {
         $direction = strtoupper((string) $position->direction);
-        $takeProfitDistancePct = $this->takeProfitDistancePercent($currentPrice, $currentTp, $direction);
-        $nextLimitDistancePct = $this->nextLimitDistancePercent($currentPrice, $nextLimit, $direction);
+        $alphaLimitPct = $this->computeAlphaLimitPercent($prices['current_tp'], $prices['next_limit'], $prices['current_price']);
 
-        $quantity = (string) ($position->quantity ?? '0');
-        $size = $this->computeSize($quantity, $currentPrice);
-        $pnl = $position->unrealizedPnl();
-        $maxPain = $position->getAttribute('max_pain');
+        return [
+            'alpha_path_pct' => $this->computeAlphaPathPercent($prices['first_profit'], $prices['last_limit'], $prices['current_price']),
+            'alpha_limit_pct' => $alphaLimitPct,
+            'track' => $this->trackGeometry(
+                $limits['filled_count'],
+                $limits['total_limits'],
+                (float) $this->computeAlphaLimitPercent($prices['current_tp'], $prices['next_limit'] ?? $prices['stop_loss'], $prices['current_price']),
+            ),
+            'direction' => $direction,
+            'take_profit_distance_pct' => $this->takeProfitDistancePercent($prices['current_price'], $prices['current_tp'], $direction),
+            'next_limit_distance_pct' => $this->nextLimitDistancePercent($prices['current_price'], $prices['next_limit'], $direction),
+        ];
+    }
 
-        $openingPrice = $position->opening_price !== null ? (string) $position->opening_price : null;
-
-        // After a WAP the original opening_price no longer reflects the
-        // blended entry the TP is computed against — show the weighted-
-        // average entry instead so "entry → TP" reads the right direction.
+    /**
+     * @param  array{current_price: ?string}  $prices
+     * @return array{quantity: string, size: ?string, pnl: ?string, max_pain: int|float|string|null, opening_price: ?string, was_waped: bool, wap: ?string, entry_price: ?string}
+     */
+    private function positionFinancials(Position $position, array $prices): array
+    {
+        $openingPrice = $this->nullableString($position->opening_price);
         $wasWaped = (bool) $position->was_waped;
         $wap = $this->computeWap($position);
-        $entryPrice = $wasWaped && $wap !== null ? $wap : $openingPrice;
 
-        // Lifecycle-track geometry — the design's stage grammar, not a
-        // price-proportional scale (real ladders cluster the markers into
-        // an unreadable left-edge pile). See trackGeometry().
-        $track = $this->trackGeometry($filledCount, $totalLimits, (float) $trackProgressPct);
+        return [
+            'quantity' => (string) ($position->quantity ?? '0'),
+            'size' => $this->computeSize((string) ($position->quantity ?? '0'), $prices['current_price']),
+            'pnl' => $position->unrealizedPnl(),
+            'max_pain' => $position->getAttribute('max_pain'),
+            'opening_price' => $openingPrice,
+            'was_waped' => $wasWaped,
+            'wap' => $wap,
+            'entry_price' => $wasWaped && $wap !== null ? $wap : $openingPrice,
+        ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol
+     * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol
+     * @return PositionPayload
+     */
+    private function positionPayload(
+        Position $position,
+        ?ExchangeSymbol $exchangeSymbol,
+        ?Symbol $symbol,
+        array $context,
+        array $candleOpensByExchangeSymbol,
+        array $fourHourSparksByExchangeSymbol,
+    ): array {
+        return [
+            ...$this->positionHeaderPayload($position, $exchangeSymbol, $symbol, $context, $candleOpensByExchangeSymbol, $fourHourSparksByExchangeSymbol),
+            ...$this->positionPricePayload($context, $exchangeSymbol),
+            ...$this->positionProgressPayload($context),
+            ...$this->positionRiskPayload($context, $exchangeSymbol),
+            ...$this->positionLimitPayload($context),
+        ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @param  array<int, array<string, string>>  $candleOpensByExchangeSymbol
+     * @param  array<int, array<int, float>>  $fourHourSparksByExchangeSymbol
+     * @return PositionHeaderPayload
+     */
+    private function positionHeaderPayload(
+        Position $position,
+        ?ExchangeSymbol $exchangeSymbol,
+        ?Symbol $symbol,
+        array $context,
+        array $candleOpensByExchangeSymbol,
+        array $fourHourSparksByExchangeSymbol,
+    ): array {
+        $currentPrice = $context['current_price'];
 
         return [
             'id' => $position->id,
             'status' => strtolower((string) $position->status),
-            'symbol' => $position->parsed_trading_pair ?? $exchangeSymbol?->parsed_trading_pair ?? 'Unknown',
-            'token' => $exchangeSymbol?->token ?? $symbol?->token ?? null,
+            'symbol' => (string) ($position->parsed_trading_pair ?? $exchangeSymbol?->parsed_trading_pair ?? 'Unknown'),
+            'token' => $exchangeSymbol?->token ?? ($symbol !== null ? $symbol->token : null),
             'token_name' => $symbol?->name ?? null,
             'token_image' => $symbol?->image_url ?? null,
-            'direction' => $direction,
+            'direction' => $context['direction'],
             'leverage' => (int) $position->leverage,
             'opened_at' => optional($position->opened_at ?? $position->created_at)?->toIso8601String(),
             'age_human' => $this->humanAgo($position->opened_at ?? $position->created_at),
-
-            // 24h % stays stubbed — needs a separate candles aggregate.
             'var_24h_pct' => null,
-            'timeframe_dots' => $this->buildTimeframeDots(
-                $currentPrice,
-                $candleOpensByExchangeSymbol[$position->exchange_symbol_id] ?? [],
-            ),
+            'timeframe_dots' => $this->buildTimeframeDots($currentPrice, $candleOpensByExchangeSymbol[$position->exchange_symbol_id] ?? []),
             'spark_4h' => $fourHourSparksByExchangeSymbol[$position->exchange_symbol_id] ?? [],
-
             'side' => strtolower((string) $position->direction),
-
-            'current_price' => $fmtPrice($currentPrice),
-            'opening_price' => $fmtPrice($openingPrice),
-            'wap_price' => $fmtPrice($wap),
-            'was_waped' => $wasWaped,
-            // The entry the tile shows: blended WAP once the position has
-            // averaged down, the original open otherwise.
-            'entry_label' => $wasWaped ? 'WAP' : 'Open',
-            'entry_price' => $fmtPrice($entryPrice),
-            'first_profit_price' => $fmtPrice($firstProfit),
-            'profit_price' => $fmtPrice($currentTp),
-            'take_profit_distance_pct' => $takeProfitDistancePct,
-            'next_limit_price' => $fmtPrice($nextLimit),
-            'next_limit_distance_pct' => $nextLimitDistancePct,
-            'last_limit_price' => $fmtPrice($lastLimit),
-            'stop_loss_price' => $fmtPrice($stopLoss),
-
-            'track' => $track,
-
-            'alpha_path_pct' => $alphaPathPct,
-            'alpha_limit_pct' => $alphaLimitPct,
-
-            'size' => $size,
-            'pnl' => $pnl,
-            'max_pain' => $maxPain,
-            'max_pain_formatted' => $fmtPrice(is_numeric($maxPain) ? (string) $maxPain : null),
-
-            'filled_count' => $filledCount,
-            'total_limits' => $totalLimits,
-            'limits' => $limits,
         ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @return PositionPricePayload
+     */
+    private function positionPricePayload(array $context, ?ExchangeSymbol $exchangeSymbol): array
+    {
+        return [
+            'current_price' => $this->formatPositionPrice($context['current_price'], $exchangeSymbol),
+            'opening_price' => $this->formatPositionPrice($context['opening_price'], $exchangeSymbol),
+            'wap_price' => $this->formatPositionPrice($context['wap'], $exchangeSymbol),
+            'was_waped' => $context['was_waped'],
+            'entry_label' => $context['was_waped'] ? 'WAP' : 'Open',
+            'entry_price' => $this->formatPositionPrice($context['entry_price'], $exchangeSymbol),
+            'first_profit_price' => $this->formatPositionPrice($context['first_profit'], $exchangeSymbol),
+            'profit_price' => $this->formatPositionPrice($context['current_tp'], $exchangeSymbol),
+            'take_profit_distance_pct' => $context['take_profit_distance_pct'],
+            'next_limit_price' => $this->formatPositionPrice($context['next_limit'], $exchangeSymbol),
+            'next_limit_distance_pct' => $context['next_limit_distance_pct'],
+            'last_limit_price' => $this->formatPositionPrice($context['last_limit'], $exchangeSymbol),
+            'stop_loss_price' => $this->formatPositionPrice($context['stop_loss'], $exchangeSymbol),
+        ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @return PositionProgressPayload
+     */
+    private function positionProgressPayload(array $context): array
+    {
+        return [
+            'track' => $context['track'],
+            'alpha_path_pct' => $context['alpha_path_pct'],
+            'alpha_limit_pct' => $context['alpha_limit_pct'],
+        ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @return PositionRiskPayload
+     */
+    private function positionRiskPayload(array $context, ?ExchangeSymbol $exchangeSymbol): array
+    {
+        return [
+            'size' => $context['size'],
+            'pnl' => $context['pnl'],
+            'max_pain' => $context['max_pain'],
+            'max_pain_formatted' => $this->formatPositionPrice($this->numericString($context['max_pain']), $exchangeSymbol),
+        ];
+    }
+
+    /**
+     * @param  PositionContext  $context
+     * @return PositionLimitPayload
+     */
+    private function positionLimitPayload(array $context): array
+    {
+        return [
+            'filled_count' => $context['filled_count'],
+            'total_limits' => $context['total_limits'],
+            'limits' => $context['limits'],
+        ];
+    }
+
+    private function nullableString(int|float|string|null $value): ?string
+    {
+        return $value === null ? null : (string) $value;
+    }
+
+    /** @return numeric-string|null */
+    private function numericString(int|float|string|null $value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $normalized = (string) $value;
+
+        return $this->isNumericPrice($normalized) ? $normalized : null;
+    }
+
+    private function formatPositionPrice(?string $value, ?ExchangeSymbol $exchangeSymbol): ?string
+    {
+        if ($exchangeSymbol === null || $value === null || ! is_numeric($value)) {
+            return $value;
+        }
+
+        return api_format_price($value, $exchangeSymbol);
     }
 
     /**
@@ -1266,11 +1871,20 @@ class DashboardController extends Controller
      */
     private function loadCandleOpens(array $exchangeSymbolIds): array
     {
-        if (empty($exchangeSymbolIds)) {
+        if ($exchangeSymbolIds === []) {
             return [];
         }
 
-        $rows = DB::table(DB::raw('(
+        return $this->indexCandleOpens($this->candleOpenRows($exchangeSymbolIds));
+    }
+
+    /**
+     * @param  array<int, int>  $exchangeSymbolIds
+     * @return Collection<int, \stdClass>
+     */
+    private function candleOpenRows(array $exchangeSymbolIds): Collection
+    {
+        return DB::table(DB::raw('(
             SELECT
                 exchange_symbol_id,
                 timeframe,
@@ -1284,7 +1898,14 @@ class DashboardController extends Controller
             ->select('exchange_symbol_id', 'timeframe', 'open')
             ->whereRaw('rn = 1')
             ->get();
+    }
 
+    /**
+     * @param  Collection<int, \stdClass>  $rows
+     * @return array<int, array<string, string>>
+     */
+    private function indexCandleOpens(Collection $rows): array
+    {
         $result = [];
         foreach ($rows as $row) {
             $result[$row->exchange_symbol_id][$row->timeframe] = (string) $row->open;
@@ -1300,7 +1921,7 @@ class DashboardController extends Controller
      * none = either side missing.
      *
      * @param  array<string, string>  $candleOpensByTimeframe  [tf => current candle's open price]
-     * @return array<int, array<string, string>>
+     * @return array<int, array{timeframe: string, direction: string}>
      */
     private function buildTimeframeDots(?string $currentPrice, array $candleOpensByTimeframe): array
     {
@@ -1341,7 +1962,7 @@ class DashboardController extends Controller
      *    proportional to that leg's progress. After every rung fills, PX
      *    travels from the WAP-adjusted TP toward SL instead.
      *
-     * @return array{tp_pct: float, px_pct: float, sl_pct: float, gain_left: float, gain_width: float, rungs: array<int, array<string, mixed>>}|null
+     * @return TrackGeometry|null
      */
     private function trackGeometry(int $filledCount, int $totalLimits, float $alphaLimitPct): ?array
     {
@@ -1349,24 +1970,13 @@ class DashboardController extends Controller
             return null;
         }
 
-        $slot = function (int $index) use ($totalLimits): float {
-            if ($totalLimits === 1) {
-                return 53.0;
-            }
-
-            return round(26.0 + ($index - 1) * (54.0 / ($totalLimits - 1)), 1);
-        };
-
-        $tp = $filledCount === 0 ? 0.0 : $slot(min($filledCount, $totalLimits));
-        $nextAnchor = $filledCount < $totalLimits ? $slot($filledCount + 1) : 100.0;
+        $tp = $filledCount === 0 ? 0.0 : $this->trackSlot(min($filledCount, $totalLimits), $totalLimits);
+        $nextAnchor = $filledCount < $totalLimits
+            ? $this->trackSlot($filledCount + 1, $totalLimits)
+            : 100.0;
 
         $fraction = max(0.0, min(100.0, $alphaLimitPct)) / 100.0;
         $px = round($tp + ($nextAnchor - $tp) * $fraction, 1);
-
-        $rungs = [];
-        for ($i = $filledCount + 1; $i <= $totalLimits; $i++) {
-            $rungs[] = ['index' => $i, 'pct' => $slot($i)];
-        }
 
         return [
             'tp_pct' => $tp,
@@ -1374,8 +1984,28 @@ class DashboardController extends Controller
             'sl_pct' => 100.0,
             'gain_left' => round(min($tp, $px), 1),
             'gain_width' => round(abs($px - $tp), 1),
-            'rungs' => $rungs,
+            'rungs' => $this->trackRungs($filledCount, $totalLimits),
         ];
+    }
+
+    private function trackSlot(int $index, int $totalLimits): float
+    {
+        if ($totalLimits === 1) {
+            return 53.0;
+        }
+
+        return round(26.0 + ($index - 1) * (54.0 / ($totalLimits - 1)), 1);
+    }
+
+    /** @return array<int, array{index: int, pct: float}> */
+    private function trackRungs(int $filledCount, int $totalLimits): array
+    {
+        $rungs = [];
+        for ($i = $filledCount + 1; $i <= $totalLimits; $i++) {
+            $rungs[] = ['index' => $i, 'pct' => $this->trackSlot($i, $totalLimits)];
+        }
+
+        return $rungs;
     }
 
     private function directionFromLive(?string $current, ?string $lastClose): string
@@ -1407,20 +2037,13 @@ class DashboardController extends Controller
         $quantitySum = '0';
 
         foreach ($position->orders as $order) {
-            if (! in_array(strtoupper((string) $order->type), ['MARKET', 'LIMIT'], true)) {
+            $fill = $this->filledEntryValues($order);
+            if ($fill === null) {
                 continue;
             }
 
-            if (strtoupper((string) $order->status) !== 'FILLED') {
-                continue;
-            }
-
-            if (! is_numeric($order->price) || ! is_numeric($order->quantity)) {
-                continue;
-            }
-
-            $numerator = bcadd($numerator, bcmul((string) $order->price, (string) $order->quantity, 16), 16);
-            $quantitySum = bcadd($quantitySum, (string) $order->quantity, 16);
+            $numerator = bcadd($numerator, bcmul($fill['price'], $fill['quantity'], 16), 16);
+            $quantitySum = bcadd($quantitySum, $fill['quantity'], 16);
         }
 
         if (bccomp($quantitySum, '0', 16) === 0) {
@@ -1428,6 +2051,31 @@ class DashboardController extends Controller
         }
 
         return bcdiv($numerator, $quantitySum, 8);
+    }
+
+    /**
+     * @return array{price: numeric-string, quantity: numeric-string}|null
+     */
+    private function filledEntryValues(Order $order): ?array
+    {
+        if (! in_array(strtoupper((string) $order->type), ['MARKET', 'LIMIT'], true)) {
+            return null;
+        }
+
+        if (strtoupper((string) $order->status) !== 'FILLED') {
+            return null;
+        }
+
+        $price = (string) $order->price;
+        $quantity = (string) $order->quantity;
+        if (! $this->isNumericPrice($price) || ! $this->isNumericPrice($quantity)) {
+            return null;
+        }
+
+        return [
+            'price' => $price,
+            'quantity' => $quantity,
+        ];
     }
 
     /**
@@ -1453,39 +2101,71 @@ class DashboardController extends Controller
      */
     private function computeAlphaPathPercent(?string $start, ?string $end, ?string $current): string
     {
-        if ($start === null || $end === null || $current === null
-            || ! is_numeric($start) || ! is_numeric($end) || ! is_numeric($current)) {
+        if (! $this->isNumericPrice($start) || ! $this->isNumericPrice($end) || ! $this->isNumericPrice($current)) {
             return '0.0';
         }
 
-        if (bccomp($start, $end, 16) === 0) {
-            return '0.0';
+        return $this->formatAlphaFraction($this->alphaPathFraction($start, $end, $current));
+    }
+
+    /**
+     * @param  numeric-string  $start
+     * @param  numeric-string  $end
+     * @param  numeric-string  $current
+     * @return numeric-string
+     */
+    private function alphaPathFraction(string $start, string $end, string $current): string
+    {
+        if ($this->pricesEqual($start, $end)) {
+            return '0';
         }
 
-        // SHORT branch (end >= start: TP below, limits above).
-        if (bccomp($end, $start, 16) >= 0) {
-            if (bccomp($current, $start, 16) <= 0) {
-                $fraction = '0';
-            } elseif (bccomp($current, $end, 16) >= 0) {
-                $fraction = '1';
-            } else {
-                $num = bcsub($current, $start, 16);
-                $den = bcsub($end, $start, 16);
-                $fraction = bcdiv($num, $den, 6);
-            }
-        } else {
-            // LONG branch (end < start: TP above, limits below).
-            if (bccomp($current, $start, 16) >= 0) {
-                $fraction = '0';
-            } elseif (bccomp($current, $end, 16) <= 0) {
-                $fraction = '1';
-            } else {
-                $num = bcsub($start, $current, 16);
-                $den = bcsub($start, $end, 16);
-                $fraction = bcdiv($num, $den, 6);
-            }
+        return bccomp($end, $start, 16) >= 0
+            ? $this->shortAlphaPathFraction($start, $end, $current)
+            : $this->longAlphaPathFraction($start, $end, $current);
+    }
+
+    /**
+     * @param  numeric-string  $start
+     * @param  numeric-string  $end
+     * @param  numeric-string  $current
+     * @return numeric-string
+     */
+    private function shortAlphaPathFraction(string $start, string $end, string $current): string
+    {
+        if (bccomp($current, $start, 16) <= 0) {
+            return '0';
         }
 
+        if (bccomp($current, $end, 16) >= 0) {
+            return '1';
+        }
+
+        return bcdiv(bcsub($current, $start, 16), bcsub($end, $start, 16), 6);
+    }
+
+    /**
+     * @param  numeric-string  $start
+     * @param  numeric-string  $end
+     * @param  numeric-string  $current
+     * @return numeric-string
+     */
+    private function longAlphaPathFraction(string $start, string $end, string $current): string
+    {
+        if (bccomp($current, $start, 16) >= 0) {
+            return '0';
+        }
+
+        if (bccomp($current, $end, 16) <= 0) {
+            return '1';
+        }
+
+        return bcdiv(bcsub($start, $current, 16), bcsub($start, $end, 16), 6);
+    }
+
+    /** @param  numeric-string  $fraction */
+    private function formatAlphaFraction(string $fraction): string
+    {
         return number_format((float) bcmul($fraction, '100', 2), 1, '.', '');
     }
 
@@ -1497,37 +2177,68 @@ class DashboardController extends Controller
      */
     private function computeAlphaLimitPercent(?string $tp, ?string $nextLimit, ?string $current): string
     {
-        if ($tp === null || $nextLimit === null || $current === null
-            || ! is_numeric($tp) || ! is_numeric($nextLimit) || ! is_numeric($current)) {
+        if (! $this->isNumericPrice($tp) || ! $this->isNumericPrice($nextLimit) || ! $this->isNumericPrice($current)) {
             return '0.0';
         }
 
-        if (bccomp($tp, $nextLimit, 16) === 0) {
+        $fraction = $this->alphaLimitFraction($tp, $nextLimit, $current);
+        if ($fraction === null) {
             return '0.0';
         }
 
-        $num = bccomp($nextLimit, $tp, 16) >= 0
-            ? bcsub($current, $tp, 16)
-            : bcsub($tp, $current, 16);
+        return $this->formatAlphaFraction($this->clampAlphaFraction($fraction));
+    }
 
-        $den = bccomp($nextLimit, $tp, 16) >= 0
-            ? bcsub($nextLimit, $tp, 16)
-            : bcsub($tp, $nextLimit, 16);
-
-        if (bccomp($den, '0', 16) === 0) {
-            return '0.0';
+    /**
+     * @param  numeric-string  $tp
+     * @param  numeric-string  $nextLimit
+     * @param  numeric-string  $current
+     * @return numeric-string|null
+     */
+    private function alphaLimitFraction(string $tp, string $nextLimit, string $current): ?string
+    {
+        if ($this->pricesEqual($tp, $nextLimit)) {
+            return '0';
         }
 
-        $fraction = bcdiv($num, $den, 6);
+        $ascending = bccomp($nextLimit, $tp, 16) >= 0;
+        $num = $this->alphaLimitNumerator($tp, $current, $ascending);
+        $den = $this->alphaLimitDenominator($tp, $nextLimit, $ascending);
 
-        // Clamp to [0, 1] — price can sit beyond the rung in either direction.
+        return bccomp($den, '0', 16) === 0 ? null : bcdiv($num, $den, 6);
+    }
+
+    /**
+     * @param  numeric-string  $tp
+     * @param  numeric-string  $current
+     * @return numeric-string
+     */
+    private function alphaLimitNumerator(string $tp, string $current, bool $ascending): string
+    {
+        return $ascending ? bcsub($current, $tp, 16) : bcsub($tp, $current, 16);
+    }
+
+    /**
+     * @param  numeric-string  $tp
+     * @param  numeric-string  $nextLimit
+     * @return numeric-string
+     */
+    private function alphaLimitDenominator(string $tp, string $nextLimit, bool $ascending): string
+    {
+        return $ascending ? bcsub($nextLimit, $tp, 16) : bcsub($tp, $nextLimit, 16);
+    }
+
+    /**
+     * @param  numeric-string  $fraction
+     * @return numeric-string
+     */
+    private function clampAlphaFraction(string $fraction): string
+    {
         if (bccomp($fraction, '0', 16) < 0) {
-            $fraction = '0';
-        } elseif (bccomp($fraction, '1', 16) > 0) {
-            $fraction = '1';
+            return '0';
         }
 
-        return number_format((float) bcmul($fraction, '100', 2), 1, '.', '');
+        return bccomp($fraction, '1', 16) > 0 ? '1' : $fraction;
     }
 
     private function takeProfitDistancePercent(?string $current, ?string $target, string $direction): ?string
@@ -1550,14 +2261,11 @@ class DashboardController extends Controller
 
     private function directionalPriceDistancePercent(?string $current, ?string $target, bool $targetAbove): ?string
     {
-        if ($current === null || $target === null || ! is_numeric($current) || ! is_numeric($target)
-            || bccomp($current, '0', 16) <= 0) {
+        if (! $this->isPositivePrice($current) || ! $this->isNumericPrice($target)) {
             return null;
         }
 
-        $distance = $targetAbove
-            ? bcsub($target, $current, 16)
-            : bcsub($current, $target, 16);
+        $distance = $this->priceDistance($current, $target, $targetAbove);
 
         if (bccomp($distance, '0', 16) <= 0) {
             return '0.00';
@@ -1566,5 +2274,38 @@ class DashboardController extends Controller
         $percentage = bcmul(bcdiv($distance, $current, 16), '100', 8);
 
         return bcround($percentage, precision: 2);
+    }
+
+    /** @phpstan-assert-if-true numeric-string $value */
+    private function isNumericPrice(?string $value): bool
+    {
+        return $value !== null && is_numeric($value);
+    }
+
+    /** @phpstan-assert-if-true numeric-string $value */
+    private function isPositivePrice(?string $value): bool
+    {
+        return $this->isNumericPrice($value) && bccomp($value, '0', 16) > 0;
+    }
+
+    /**
+     * @param  numeric-string  $first
+     * @param  numeric-string  $second
+     */
+    private function pricesEqual(string $first, string $second): bool
+    {
+        return bccomp($first, $second, 16) === 0;
+    }
+
+    /**
+     * @param  numeric-string  $current
+     * @param  numeric-string  $target
+     * @return numeric-string
+     */
+    private function priceDistance(string $current, string $target, bool $targetAbove): string
+    {
+        return $targetAbove
+            ? bcsub($target, $current, 16)
+            : bcsub($current, $target, 16);
     }
 }

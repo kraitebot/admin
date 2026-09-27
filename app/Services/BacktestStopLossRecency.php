@@ -15,36 +15,48 @@ final class BacktestStopLossRecency
      */
     public function latestByDirection(array $rows): array
     {
-        $latest = [
-            'LONG' => null,
-            'SHORT' => null,
-        ];
+        $latest = ['LONG' => null, 'SHORT' => null];
 
         foreach ($rows as $row) {
-            $direction = $row['direction'] ?? null;
-            $stoppedAt = $row['sl_candle'] ?? null;
-
-            if (($row['status'] ?? null) !== 'stopped_out'
-                || ! array_key_exists($direction, $latest)
-                || ! is_string($stoppedAt)
-                || $stoppedAt === '') {
+            if (! $this->isStoppedPosition($row)) {
                 continue;
             }
 
-            try {
-                $candidate = CarbonImmutable::parse($stoppedAt, 'UTC')->utc();
-            } catch (Throwable) {
+            $candidate = $this->stoppedAt($row['sl_candle']);
+            if ($candidate === null) {
                 continue;
             }
 
-            if ($latest[$direction] === null || $candidate->isAfter($latest[$direction])) {
-                $latest[$direction] = $candidate;
-            }
+            $direction = $row['direction'];
+            $latest[$direction] = $this->newerStop($latest[$direction], $candidate);
         }
 
         return [
             'LONG' => $latest['LONG']?->toIso8601String(),
             'SHORT' => $latest['SHORT']?->toIso8601String(),
         ];
+    }
+
+    /** @param array<string, mixed> $row */
+    private function isStoppedPosition(array $row): bool
+    {
+        return ($row['status'] ?? null) === 'stopped_out'
+            && in_array($row['direction'] ?? null, ['LONG', 'SHORT'], true)
+            && is_string($row['sl_candle'] ?? null)
+            && $row['sl_candle'] !== '';
+    }
+
+    private function stoppedAt(string $value): ?CarbonImmutable
+    {
+        try {
+            return CarbonImmutable::parse($value, 'UTC')->utc();
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    private function newerStop(?CarbonImmutable $current, CarbonImmutable $candidate): CarbonImmutable
+    {
+        return $current === null || $candidate->isAfter($current) ? $candidate : $current;
     }
 }

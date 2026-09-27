@@ -46,34 +46,16 @@ final class YearlyProjectionPlanner
             throw new InvalidArgumentException('Yearly projection needs at least one year.');
         }
 
-        $scenarioRates = [
-            'pessimistic' => $scenarios['pessimistic_pct'],
-            'neutral' => $scenarios['neutral_pct'],
-            'optimistic' => $scenarios['optimistic_pct'],
-        ];
-
         $outlook = [];
 
-        foreach ($scenarioRates as $scenario => $dailyPct) {
-            $reason = $this->unavailableReason(
-                currentWallet: $currentWallet,
-                dailyPct: $dailyPct,
-                daysObserved: $scenarios['days_observed'],
+        foreach ($this->scenarioRates($scenarios) as $scenario => $dailyPct) {
+            $outlook[$scenario] = $this->scenarioOutlook(
+                $currentWallet,
+                $dailyPct,
+                $scenarios['days_observed'],
+                $now,
+                $years,
             );
-            $available = $reason === null;
-
-            $outlook[$scenario] = [
-                'daily_pct' => $dailyPct,
-                'available' => $available,
-                'reason' => $reason,
-                'milestones' => $this->milestones(
-                    currentWallet: $currentWallet,
-                    dailyPct: $dailyPct,
-                    now: $now,
-                    years: $years,
-                    available: $available,
-                ),
-            ];
         }
 
         return [
@@ -82,9 +64,43 @@ final class YearlyProjectionPlanner
         ];
     }
 
+    /**
+     * @param  array{pessimistic_pct: ?string, neutral_pct: ?string, optimistic_pct: ?string, days_observed: int}  $scenarios
+     * @return array{pessimistic: ?string, neutral: ?string, optimistic: ?string}
+     */
+    private function scenarioRates(array $scenarios): array
+    {
+        return [
+            'pessimistic' => $scenarios['pessimistic_pct'],
+            'neutral' => $scenarios['neutral_pct'],
+            'optimistic' => $scenarios['optimistic_pct'],
+        ];
+    }
+
+    /**
+     * @return array{daily_pct: ?string, available: bool, reason: ?string, milestones: array<int, array{year: int, label: string, end_date: string, days: int, end_wallet: ?string, projected_profit: ?string, growth_pct: ?string, multiple: ?string}>}
+     */
+    private function scenarioOutlook(
+        ?string $currentWallet,
+        ?string $dailyPct,
+        int $daysObserved,
+        CarbonImmutable $now,
+        int $years,
+    ): array {
+        $reason = $this->unavailableReason($currentWallet, $dailyPct, $daysObserved);
+        $available = $reason === null;
+
+        return [
+            'daily_pct' => $dailyPct,
+            'available' => $available,
+            'reason' => $reason,
+            'milestones' => $this->milestones($currentWallet, $dailyPct, $now, $years, $available),
+        ];
+    }
+
     private function unavailableReason(?string $currentWallet, ?string $dailyPct, int $daysObserved): ?string
     {
-        if ($currentWallet === null || bccomp($currentWallet, '0', 8) <= 0) {
+        if ($this->hasNoWallet($currentWallet)) {
             return 'no_wallet';
         }
 
@@ -97,6 +113,11 @@ final class YearlyProjectionPlanner
         }
 
         return null;
+    }
+
+    private function hasNoWallet(?string $currentWallet): bool
+    {
+        return $currentWallet === null || bccomp($currentWallet, '0', 8) <= 0;
     }
 
     /**
@@ -121,43 +142,58 @@ final class YearlyProjectionPlanner
         $milestones = [];
 
         for ($offset = 0; $offset < $years; $offset++) {
-            $year = $now->year + $offset;
-            $target = $now->setYear($year)->endOfYear();
-            $days = (int) $now->startOfDay()->diffInDays($target->startOfDay());
-
-            $milestone = [
-                'year' => $year,
-                'label' => $offset === 0 ? 'Until end of year' : $year.' end',
-                'end_date' => $target->toDateString(),
-                'days' => $days,
-                'end_wallet' => null,
-                'projected_profit' => null,
-                'growth_pct' => null,
-                'multiple' => null,
-            ];
-
-            if ($available && $currentWallet !== null && $dailyPct !== null) {
-                $endWallet = ProjectionCompounder::compoundWallet(
-                    currentWallet: $currentWallet,
-                    dailyPct: $dailyPct,
-                    from: $now,
-                    until: $target,
-                );
-                $projectedProfit = bcsub($endWallet, $currentWallet, 8);
-
-                $milestone['end_wallet'] = $endWallet;
-                $milestone['projected_profit'] = $projectedProfit;
-                $milestone['growth_pct'] = bcmul(
-                    bcdiv($projectedProfit, $currentWallet, 16),
-                    '100',
-                    8,
-                );
-                $milestone['multiple'] = bcdiv($endWallet, $currentWallet, 8);
-            }
-
-            $milestones[] = $milestone;
+            $milestones[] = $this->milestoneFor($currentWallet, $dailyPct, $now, $offset, $available);
         }
 
         return $milestones;
+    }
+
+    /**
+     * @return array{year: int, label: string, end_date: string, days: int, end_wallet: ?string, projected_profit: ?string, growth_pct: ?string, multiple: ?string}
+     */
+    private function milestoneFor(
+        ?string $currentWallet,
+        ?string $dailyPct,
+        CarbonImmutable $now,
+        int $offset,
+        bool $available,
+    ): array {
+        $year = $now->year + $offset;
+        $target = $now->setYear($year)->endOfYear();
+        $milestone = [
+            'year' => $year,
+            'label' => $offset === 0 ? 'Until end of year' : $year.' end',
+            'end_date' => $target->toDateString(),
+            'days' => (int) $now->startOfDay()->diffInDays($target->startOfDay()),
+            'end_wallet' => null,
+            'projected_profit' => null,
+            'growth_pct' => null,
+            'multiple' => null,
+        ];
+
+        if (! $available || $currentWallet === null || $dailyPct === null) {
+            return $milestone;
+        }
+
+        return array_replace($milestone, $this->projectionFor($currentWallet, $dailyPct, $now, $target));
+    }
+
+    /** @return array{end_wallet: string, projected_profit: string, growth_pct: string, multiple: string} */
+    private function projectionFor(string $currentWallet, string $dailyPct, CarbonImmutable $now, CarbonImmutable $target): array
+    {
+        $endWallet = ProjectionCompounder::compoundWallet(
+            currentWallet: $currentWallet,
+            dailyPct: $dailyPct,
+            from: $now,
+            until: $target,
+        );
+        $projectedProfit = bcsub($endWallet, $currentWallet, 8);
+
+        return [
+            'end_wallet' => $endWallet,
+            'projected_profit' => $projectedProfit,
+            'growth_pct' => bcmul(bcdiv($projectedProfit, $currentWallet, 16), '100', 8),
+            'multiple' => bcdiv($endWallet, $currentWallet, 8),
+        ];
     }
 }

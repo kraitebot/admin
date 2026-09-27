@@ -9,19 +9,14 @@ use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
-class ReadOnlySqlBrowser
+/**
+ * @phpstan-type SqlPage array{results: array<int, array<string, mixed>>, columns: array<int, string>, duration: float, total: int, page: int, per_page: int, last_page: int}
+ */
+final class ReadOnlySqlBrowser
 {
     /**
      * @param  array<string, string|null>  $filters
-     * @return array{
-     *     results: array<int, array<string, mixed>>,
-     *     columns: array<int, string>,
-     *     duration: float,
-     *     total: int,
-     *     page: int,
-     *     per_page: int,
-     *     last_page: int
-     * }
+     * @return SqlPage
      */
     public function execute(
         string $query,
@@ -33,59 +28,52 @@ class ReadOnlySqlBrowser
         [$whereClause, $bindings] = $this->buildFilters($filters);
 
         return $this->withinReadOnlyTransaction(
-            function (Connection $connection) use ($bindings, $page, $perPage, $query, $whereClause): array {
-                $startedAt = microtime(true);
-                $source = "({$query}) AS _sql_editor_source";
-                $count = $connection->selectOne(
-                    "SELECT COUNT(*) AS aggregate FROM {$source}{$whereClause}",
-                    $bindings,
-                );
-                $total = (int) ($count?->aggregate ?? 0);
-                $lastPage = max(1, (int) ceil($total / $perPage));
-                $currentPage = min($page, $lastPage);
-                $offset = ($currentPage - 1) * $perPage;
-
-                $rows = $connection->select(
-                    "SELECT * FROM {$source}{$whereClause} LIMIT {$perPage} OFFSET {$offset}",
-                    $bindings,
-                );
-                $results = array_map(
-                    static fn (object $row): array => (array) $row,
-                    $rows,
-                );
-
-                return [
-                    'results' => $results,
-                    'columns' => $results === [] ? [] : array_keys($results[0]),
-                    'duration' => round((microtime(true) - $startedAt) * 1000, 2),
-                    'total' => $total,
-                    'page' => $currentPage,
-                    'per_page' => $perPage,
-                    'last_page' => $lastPage,
-                ];
-            },
+            fn (Connection $connection): array => $this->queryPage(
+                $connection,
+                "({$query}) AS _sql_editor_source",
+                $whereClause,
+                $bindings,
+                $page,
+                $perPage,
+            ),
         );
     }
 
     /**
-     * @param  Closure(Connection): array{
-     *     results: array<int, array<string, mixed>>,
-     *     columns: array<int, string>,
-     *     duration: float,
-     *     total: int,
-     *     page: int,
-     *     per_page: int,
-     *     last_page: int
-     * }  $callback
-     * @return array{
-     *     results: array<int, array<string, mixed>>,
-     *     columns: array<int, string>,
-     *     duration: float,
-     *     total: int,
-     *     page: int,
-     *     per_page: int,
-     *     last_page: int
-     * }
+     * @param  array<int, string>  $bindings
+     * @return SqlPage
+     */
+    private function queryPage(
+        Connection $connection,
+        string $source,
+        string $whereClause,
+        array $bindings,
+        int $page,
+        int $perPage,
+    ): array {
+        $startedAt = microtime(true);
+        $count = $connection->selectOne("SELECT COUNT(*) AS aggregate FROM {$source}{$whereClause}", $bindings);
+        $total = (int) ($count?->aggregate ?? 0);
+        $lastPage = max(1, (int) ceil($total / $perPage));
+        $currentPage = min($page, $lastPage);
+        $offset = ($currentPage - 1) * $perPage;
+        $rows = $connection->select("SELECT * FROM {$source}{$whereClause} LIMIT {$perPage} OFFSET {$offset}", $bindings);
+        $results = array_map(static fn (object $row): array => (array) $row, $rows);
+
+        return [
+            'results' => $results,
+            'columns' => $results === [] ? [] : array_keys($results[0]),
+            'duration' => round((microtime(true) - $startedAt) * 1000, 2),
+            'total' => $total,
+            'page' => $currentPage,
+            'per_page' => $perPage,
+            'last_page' => $lastPage,
+        ];
+    }
+
+    /**
+     * @param  Closure(Connection): SqlPage  $callback
+     * @return SqlPage
      */
     private function withinReadOnlyTransaction(Closure $callback): array
     {
@@ -116,7 +104,14 @@ class ReadOnlySqlBrowser
         }
 
         $structuralSql = ltrim($this->withoutQuotedContentOrComments($query));
+        $this->assertSelectQuery($query, $structuralSql);
+        $this->assertSafeSelectOperations($structuralSql);
 
+        return $query;
+    }
+
+    private function assertSelectQuery(string $query, string $structuralSql): void
+    {
         if ($query === '' || preg_match('/\ASELECT\b/i', $structuralSql) !== 1) {
             throw new InvalidArgumentException('Only SELECT statements are allowed.');
         }
@@ -124,7 +119,10 @@ class ReadOnlySqlBrowser
         if (str_contains($structuralSql, ';')) {
             throw new InvalidArgumentException('Run one SELECT statement at a time.');
         }
+    }
 
+    private function assertSafeSelectOperations(string $structuralSql): void
+    {
         if (preg_match('/\bINTO\s+(?:OUTFILE|DUMPFILE)\b/i', $structuralSql) === 1) {
             throw new InvalidArgumentException('File-writing SELECT statements are not allowed.');
         }
@@ -136,8 +134,6 @@ class ReadOnlySqlBrowser
         if (preg_match('/\b(?:LOAD_FILE|GET_LOCK|RELEASE_LOCK|SLEEP|BENCHMARK)\s*\(/i', $structuralSql) === 1) {
             throw new InvalidArgumentException('This SELECT function is not allowed in the inspection workspace.');
         }
-
-        return $query;
     }
 
     private function withoutQuotedContentOrComments(string $query): string
@@ -149,88 +145,92 @@ class ReadOnlySqlBrowser
         for ($index = 0; $index < $length; $index++) {
             $character = $query[$index];
             $next = $index + 1 < $length ? $query[$index + 1] : '';
-
-            if ($state === 'line-comment') {
-                if ($character === "\n") {
-                    $state = 'sql';
-                    $sanitized .= "\n";
-                } else {
-                    $sanitized .= ' ';
-                }
-
-                continue;
-            }
-
-            if ($state === 'block-comment') {
-                if ($character === '*' && $next === '/') {
-                    $sanitized .= '  ';
-                    $index++;
-                    $state = 'sql';
-                } else {
-                    $sanitized .= $character === "\n" ? "\n" : ' ';
-                }
-
-                continue;
-            }
-
-            if ($state !== 'sql') {
-                $sanitized .= ' ';
-
-                if ($character === '\\') {
-                    if ($next !== '') {
-                        $sanitized .= ' ';
-                        $index++;
-                    }
-
-                    continue;
-                }
-
-                if ($character === $state) {
-                    if ($next === $state) {
-                        $sanitized .= ' ';
-                        $index++;
-                    } else {
-                        $state = 'sql';
-                    }
-                }
-
-                continue;
-            }
-
-            if ($character === '-' && $next === '-') {
-                $sanitized .= '  ';
-                $index++;
-                $state = 'line-comment';
-
-                continue;
-            }
-
-            if ($character === '#') {
-                $sanitized .= ' ';
-                $state = 'line-comment';
-
-                continue;
-            }
-
-            if ($character === '/' && $next === '*') {
-                $sanitized .= '  ';
-                $index++;
-                $state = 'block-comment';
-
-                continue;
-            }
-
-            if (in_array($character, ["'", '"', '`'], true)) {
-                $sanitized .= ' ';
-                $state = $character;
-
-                continue;
-            }
-
-            $sanitized .= $character;
+            [$replacement, $offset, $state] = $this->scanSqlCharacter($state, $character, $next);
+            $sanitized .= $replacement;
+            $index += $offset;
         }
 
         return $sanitized;
+    }
+
+    /** @return array{string, int, string} */
+    private function scanSqlCharacter(string $state, string $character, string $next): array
+    {
+        if ($state === 'line-comment') {
+            return $this->scanLineComment($character);
+        }
+        if ($state === 'block-comment') {
+            return $this->scanBlockComment($character, $next);
+        }
+        if ($state !== 'sql') {
+            return $this->scanQuotedContent($state, $character, $next);
+        }
+
+        return $this->scanSqlContent($character, $next);
+    }
+
+    /** @return array{string, int, string} */
+    private function scanLineComment(string $character): array
+    {
+        return $character === "\n" ? ["\n", 0, 'sql'] : [' ', 0, 'line-comment'];
+    }
+
+    /** @return array{string, int, string} */
+    private function scanBlockComment(string $character, string $next): array
+    {
+        if ($character === '*' && $next === '/') {
+            return ['  ', 1, 'sql'];
+        }
+
+        return [$character === "\n" ? "\n" : ' ', 0, 'block-comment'];
+    }
+
+    /** @return array{string, int, string} */
+    private function scanQuotedContent(string $quote, string $character, string $next): array
+    {
+        if ($character === '\\') {
+            return $next !== '' ? ['  ', 1, $quote] : [' ', 0, $quote];
+        }
+        if ($character === $quote) {
+            return $next === $quote ? ['  ', 1, $quote] : [' ', 0, 'sql'];
+        }
+
+        return [' ', 0, $quote];
+    }
+
+    /** @return array{string, int, string} */
+    private function scanSqlContent(string $character, string $next): array
+    {
+        $comment = $this->commentStart($character, $next);
+        if ($comment !== null) {
+            return $comment;
+        }
+        if (in_array($character, ["'", '"', '`'], true)) {
+            return [' ', 0, $character];
+        }
+
+        return [$character, 0, 'sql'];
+    }
+
+    /** @return array{string, int, string}|null */
+    private function commentStart(string $character, string $next): ?array
+    {
+        if ($this->startsDoubleDashComment($character, $next)) {
+            return ['  ', 1, 'line-comment'];
+        }
+        if ($character === '#') {
+            return [' ', 0, 'line-comment'];
+        }
+        if ($character === '/' && $next === '*') {
+            return ['  ', 1, 'block-comment'];
+        }
+
+        return null;
+    }
+
+    private function startsDoubleDashComment(string $character, string $next): bool
+    {
+        return $character === '-' && $next === '-';
     }
 
     /**
@@ -247,34 +247,38 @@ class ReadOnlySqlBrowser
                 continue;
             }
 
-            $identifier = $this->quoteIdentifier((string) $column);
-
-            if (strcasecmp($value, 'NULL') === 0) {
-                $clauses[] = "{$identifier} IS NULL";
-
-                continue;
+            [$clause, $binding] = $this->filterClause((string) $column, $value);
+            $clauses[] = $clause;
+            if ($binding !== null) {
+                $bindings[] = $binding;
             }
-
-            if (str_contains($value, '*')) {
-                $escaped = str_replace(
-                    ['!', '%', '_', '*'],
-                    ['!!', '!%', '!_', '%'],
-                    $value,
-                );
-                $clauses[] = "{$identifier} LIKE ? ESCAPE '!'";
-                $bindings[] = $escaped;
-
-                continue;
-            }
-
-            $clauses[] = "{$identifier} = ?";
-            $bindings[] = $value;
         }
 
-        return [
-            $clauses === [] ? '' : ' WHERE '.implode(' AND ', $clauses),
-            $bindings,
-        ];
+        return [$this->filterWhereClause($clauses), $bindings];
+    }
+
+    /** @param array<int, string> $clauses */
+    private function filterWhereClause(array $clauses): string
+    {
+        return $clauses === [] ? '' : ' WHERE '.implode(' AND ', $clauses);
+    }
+
+    /** @return array{string, ?string} */
+    private function filterClause(string $column, string $value): array
+    {
+        $identifier = $this->quoteIdentifier($column);
+
+        if (strcasecmp($value, 'NULL') === 0) {
+            return ["{$identifier} IS NULL", null];
+        }
+
+        if (str_contains($value, '*')) {
+            $escaped = str_replace(['!', '%', '_', '*'], ['!!', '!%', '!_', '%'], $value);
+
+            return ["{$identifier} LIKE ? ESCAPE '!'", $escaped];
+        }
+
+        return ["{$identifier} = ?", $value];
     }
 
     private function quoteIdentifier(string $identifier): string

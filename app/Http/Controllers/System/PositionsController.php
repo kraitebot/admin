@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 use Kraite\Core\Models\Account;
+use Kraite\Core\Models\Order;
 use Kraite\Core\Models\Position;
 
 /**
@@ -27,7 +28,7 @@ use Kraite\Core\Models\Position;
  *
  * Deep per-position analysis is deliberately out of scope (v2 topic).
  */
-class PositionsController extends Controller
+final class PositionsController extends Controller
 {
     /** Statuses that make a position "open" for this page. */
     private const OPEN_FLAG = 1;
@@ -80,21 +81,88 @@ class PositionsController extends Controller
         $byAccount = $positions->groupBy('account_id');
         $accountIds = $byAccount->keys()->all();
 
-        $accounts = DB::table('accounts')
-            ->join('users', 'users.id', '=', 'accounts.user_id')
-            ->join('api_systems', 'api_systems.id', '=', 'accounts.api_system_id')
-            ->whereIn('accounts.id', $accountIds)
-            ->get([
-                'accounts.id',
-                'users.name as owner',
-                'api_systems.name as exchange',
-            ])
-            ->keyBy('id');
+        $accounts = $this->accountMetadata($accountIds);
 
         // Freshest exchange-reported account state we hold — one row per
         // account. Margin ratio the Binance way: maintenance margin over
         // margin balance; 100% = liquidation.
-        $balances = DB::table('account_balance_history as abh')
+        $balances = $this->latestAccountBalances($accountIds);
+
+        $rows = [];
+        foreach ($byAccount as $accountId => $accountPositions) {
+            $meta = $accounts->get($accountId);
+            if ($meta === null) {
+                continue;
+            }
+
+            $rows[] = $this->accountSummaryRow((int) $accountId, $accountPositions, $meta, $balances->get($accountId));
+        }
+
+        // Worst first: deepest roll-up, then closest to liquidation.
+        usort($rows, static fn (array $a, array $b): int => [$b['worst_alpha_pct'], $b['margin_ratio'] ?? 0]
+            <=> [$a['worst_alpha_pct'], $a['margin_ratio'] ?? 0]);
+
+        return $rows;
+    }
+
+    /**
+     * @param  Collection<int, Position>  $accountPositions
+     * @return array<string, mixed>
+     */
+    private function accountSummaryRow(int $accountId, Collection $accountPositions, \stdClass $meta, ?\stdClass $balance): array
+    {
+        $marginRatio = $this->accountMarginRatio($accountPositions, $balance);
+        $worstAlpha = (float) $accountPositions->max(fn (Position $position): float => $this->alphaPct($position));
+
+        return [
+            'id' => $accountId,
+            'owner' => $meta->owner,
+            'exchange' => $meta->exchange,
+            'positions' => $accountPositions->count(),
+            'margin_ratio' => $marginRatio,
+            'pnl' => $balance !== null ? round((float) $balance->total_unrealized_profit, 2) : null,
+            'worst_alpha_pct' => round($worstAlpha, 1),
+            'band' => $this->band($worstAlpha),
+        ];
+    }
+
+    /** @param Collection<int, Position> $accountPositions */
+    private function accountMarginRatio(Collection $accountPositions, ?\stdClass $balance): ?float
+    {
+        $marginBalance = (float) ($balance->total_margin_balance ?? 0);
+        $maintenance = (float) ($balance->total_maintenance_margin ?? 0);
+        if ($maintenance <= 0.0) {
+            $maintenance = (float) $accountPositions->sum(
+                fn (Position $position): float => $this->estimatedMaintenanceMargin($position)
+            );
+        }
+
+        return $marginBalance > 0.0 && $maintenance > 0.0
+            ? round(($maintenance / $marginBalance) * 100, 2)
+            : null;
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return Collection<int, \stdClass>
+     */
+    private function accountMetadata(array $accountIds): Collection
+    {
+        return DB::table('accounts')
+            ->join('users', 'users.id', '=', 'accounts.user_id')
+            ->join('api_systems', 'api_systems.id', '=', 'accounts.api_system_id')
+            ->whereIn('accounts.id', $accountIds)
+            ->get(['accounts.id', 'users.name as owner', 'api_systems.name as exchange'])
+            ->keyBy('id');
+    }
+
+    /**
+     * @param  array<int, int>  $accountIds
+     * @return Collection<int, \stdClass>
+     */
+    private function latestAccountBalances(array $accountIds): Collection
+    {
+        return DB::table('account_balance_history as abh')
             ->whereIn('abh.account_id', $accountIds)
             ->whereIn('abh.id', function ($query) use ($accountIds): void {
                 $query->selectRaw('MAX(id)')
@@ -104,52 +172,6 @@ class PositionsController extends Controller
             })
             ->get(['abh.account_id', 'abh.total_maintenance_margin', 'abh.total_margin_balance', 'abh.total_unrealized_profit'])
             ->keyBy('account_id');
-
-        $rows = [];
-        foreach ($byAccount as $accountId => $accountPositions) {
-            $meta = $accounts->get($accountId);
-            if ($meta === null) {
-                continue;
-            }
-
-            $balance = $balances->get($accountId);
-            $marginBalance = (float) ($balance->total_margin_balance ?? 0);
-
-            // Exchange-reported maintenance margin when the snapshot carries
-            // it; otherwise estimate it ourselves from the open positions —
-            // the same bracket formula every venue uses (mark notional ×
-            // bracket rate − bracket deduction). Mark staleness makes the
-            // estimate approximate, which is fine for a triage glance.
-            $maintenance = (float) ($balance->total_maintenance_margin ?? 0);
-            if ($maintenance <= 0.0) {
-                $maintenance = (float) $accountPositions->sum(
-                    fn (Position $p): float => $this->estimatedMaintenanceMargin($p)
-                );
-            }
-
-            $marginRatio = $marginBalance > 0.0 && $maintenance > 0.0
-                ? round(($maintenance / $marginBalance) * 100, 2)
-                : null;
-
-            $worstAlpha = (float) $accountPositions->max(fn (Position $p): float => $this->alphaPct($p));
-
-            $rows[] = [
-                'id' => (int) $accountId,
-                'owner' => $meta->owner,
-                'exchange' => $meta->exchange,
-                'positions' => $accountPositions->count(),
-                'margin_ratio' => $marginRatio,
-                'pnl' => $balance !== null ? round((float) $balance->total_unrealized_profit, 2) : null,
-                'worst_alpha_pct' => round($worstAlpha, 1),
-                'band' => $this->band($worstAlpha),
-            ];
-        }
-
-        // Worst first: deepest roll-up, then closest to liquidation.
-        usort($rows, static fn (array $a, array $b): int => [$b['worst_alpha_pct'], $b['margin_ratio'] ?? 0]
-            <=> [$a['worst_alpha_pct'], $a['margin_ratio'] ?? 0]);
-
-        return $rows;
     }
 
     // ------------------------------------------------------------------
@@ -221,23 +243,17 @@ class PositionsController extends Controller
      */
     private function ladder(Position $p, float $alphaPct): ?array
     {
-        $tp = $p->first_profit_price !== null ? (float) $p->first_profit_price : null;
-        $mark = $p->exchangeSymbol?->mark_price !== null ? (float) $p->exchangeSymbol->mark_price : null;
+        $tp = $this->floatOrNull($p->first_profit_price);
+        $mark = $this->floatOrNull($p->exchangeSymbol?->mark_price);
 
         // Live rungs in ladder order (quantity ascending — martingale
         // doubles each rung), same liveness rule as the engine's
         // lastLimitOrder(): placed on the exchange, not terminal.
-        $rungs = $p->orders
-            ->where('type', 'LIMIT')
-            ->whereNotNull('exchange_order_id')
-            ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
-            ->sortBy(fn ($o) => (float) $o->quantity)
-            ->values();
+        $rungs = $this->liveRungs($p);
 
-        $deepest = $rungs->last()?->price;
-        $deepest = $deepest !== null ? (float) $deepest : null;
+        $deepest = $this->floatOrNull($rungs->last()?->price);
 
-        if ($tp === null || $deepest === null || $tp === $deepest) {
+        if ($this->invalidLadder($tp, $deepest)) {
             return null;
         }
 
@@ -248,12 +264,7 @@ class PositionsController extends Controller
         // as the engine's profitOrder(), read off the eager-loaded orders).
         // Starts equal to first_profit_price; each WAP recalculation after a
         // rung fills moves it deeper into the corridor.
-        $liveTp = $p->orders
-            ->whereIn('type', ['PROFIT-LIMIT', 'PROFIT-MARKET'])
-            ->whereNotIn('status', ['CANCELLED', 'EXPIRED', 'REJECTED'])
-            ->sortByDesc('id')
-            ->first()?->price;
-        $liveTp = $liveTp !== null ? (float) $liveTp : null;
+        $liveTp = $this->liveTpPrice($p);
 
         return [
             'tp_price' => $tp,
@@ -262,13 +273,55 @@ class PositionsController extends Controller
             'live_tp_price' => $liveTp,
             'live_tp_pct' => $liveTp !== null ? $pct($liveTp) : null,
             'price_pct' => round($alphaPct, 1),
-            'rungs' => $rungs->map(fn ($o, int $i): array => [
-                'n' => $i + 1,
-                'price' => (float) $o->price,
-                'pct' => $pct((float) $o->price),
-                'filled' => $o->status === 'FILLED',
-            ])->all(),
+            'rungs' => $this->ladderRungRows($rungs, $pct),
         ];
+    }
+
+    /**
+     * @param  Collection<int, Order>  $rungs
+     * @param  callable(float): float  $percentage
+     * @return array<int, array{n: int, price: float, pct: float, filled: bool}>
+     */
+    private function ladderRungRows(Collection $rungs, callable $percentage): array
+    {
+        return $rungs->map(fn ($order, int $index): array => [
+            'n' => $index + 1,
+            'price' => (float) $order->price,
+            'pct' => $percentage((float) $order->price),
+            'filled' => $order->status === 'FILLED',
+        ])->all();
+    }
+
+    /** @return Collection<int, mixed> */
+    private function liveRungs(Position $p): Collection
+    {
+        return $p->orders
+            ->where('type', 'LIMIT')
+            ->whereNotNull('exchange_order_id')
+            ->whereIn('status', ['NEW', 'PARTIALLY_FILLED', 'FILLED'])
+            ->sortBy(fn ($order) => (float) $order->quantity)
+            ->values();
+    }
+
+    private function liveTpPrice(Position $p): ?float
+    {
+        $price = $p->orders
+            ->whereIn('type', ['PROFIT-LIMIT', 'PROFIT-MARKET'])
+            ->whereNotIn('status', ['CANCELLED', 'EXPIRED', 'REJECTED'])
+            ->sortByDesc('id')
+            ->first()?->price;
+
+        return $price !== null ? (float) $price : null;
+    }
+
+    private function floatOrNull(mixed $value): ?float
+    {
+        return $value !== null ? (float) $value : null;
+    }
+
+    private function invalidLadder(?float $tp, ?float $deepest): bool
+    {
+        return $tp === null || $deepest === null || $tp === $deepest;
     }
 
     /**
@@ -287,23 +340,36 @@ class PositionsController extends Controller
             // candles table absent (dev suite) — fall through to mark math
         }
 
-        $start = $p->first_profit_price !== null ? (float) $p->first_profit_price : null;
-        $end = null;
-        try {
-            $end = $p->lastLimitOrder()?->price;
-            $end = $end !== null ? (float) $end : null;
-        } catch (\Throwable) {
-            $end = null;
-        }
-        $current = $p->exchangeSymbol?->mark_price !== null ? (float) $p->exchangeSymbol->mark_price : null;
+        return $this->fallbackAlphaPct($p);
+    }
 
-        if ($start === null || $end === null || $current === null || $start === $end) {
+    private function fallbackAlphaPct(Position $p): float
+    {
+        $start = $this->floatOrNull($p->first_profit_price);
+        $end = $this->lastLimitPrice($p);
+        $current = $this->floatOrNull($p->exchangeSymbol?->mark_price);
+
+        if ($this->invalidAlphaCorridor($start, $end, $current)) {
             return 0.0;
         }
 
         $fraction = ($start - $current) / ($start - $end);
 
         return max(0.0, min(1.0, $fraction)) * 100;
+    }
+
+    private function lastLimitPrice(Position $p): ?float
+    {
+        try {
+            return $this->floatOrNull($p->lastLimitOrder()?->price);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function invalidAlphaCorridor(?float $start, ?float $end, ?float $current): bool
+    {
+        return $start === null || $end === null || $current === null || $start === $end;
     }
 
     /**
@@ -320,7 +386,7 @@ class PositionsController extends Controller
         }
         $mark = $p->exchangeSymbol?->mark_price;
 
-        if ($next === null || $mark === null || (float) $mark === 0.0) {
+        if ($this->missingAlphaLimitPrice($next, $mark)) {
             return null;
         }
 
@@ -329,6 +395,11 @@ class PositionsController extends Controller
             : ((float) $next - (float) $mark) / (float) $mark;
 
         return round(max(0.0, $distance) * 100, 1);
+    }
+
+    private function missingAlphaLimitPrice(mixed $next, mixed $mark): bool
+    {
+        return $next === null || $mark === null || (float) $mark === 0.0;
     }
 
     /**
@@ -343,7 +414,7 @@ class PositionsController extends Controller
         $mark = $p->exchangeSymbol?->mark_price;
         $brackets = $p->exchangeSymbol?->leverage_brackets ?? [];
 
-        if ($mark === null || $brackets === []) {
+        if ($this->cannotEstimateMaintenance($mark, $brackets)) {
             return 0.0;
         }
 
@@ -354,15 +425,27 @@ class PositionsController extends Controller
                 continue;
             }
 
-            $floor = (float) ($bracket['notionalFloor'] ?? 0);
-            $cap = $bracket['notionalCap'] ?? null;
-
-            if ($notional >= $floor && ($cap === null || $notional < (float) $cap)) {
+            if ($this->notionalWithinBracket($notional, $bracket)) {
                 return max(0.0, $notional * (float) $bracket['maintMarginRatio'] - (float) ($bracket['cum'] ?? 0));
             }
         }
 
         return 0.0;
+    }
+
+    /** @param array<int, array<string, mixed>> $brackets */
+    private function cannotEstimateMaintenance(mixed $mark, array $brackets): bool
+    {
+        return $mark === null || $brackets === [];
+    }
+
+    /** @param array<string, mixed> $bracket */
+    private function notionalWithinBracket(float $notional, array $bracket): bool
+    {
+        $floor = (float) ($bracket['notionalFloor'] ?? 0);
+        $cap = $bracket['notionalCap'] ?? null;
+
+        return $notional >= $floor && ($cap === null || $notional < (float) $cap);
     }
 
     /**

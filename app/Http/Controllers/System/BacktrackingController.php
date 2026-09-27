@@ -11,6 +11,7 @@ use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -52,6 +53,136 @@ use Throwable;
  * Results are ephemeral by design (no persistence this release). If we
  * want the per-customer selection UI later, we'll add a
  * token_backtest_reports table and persist the totals on each run.
+ *
+ * @phpstan-type VisionReport array{
+ *   months_downloaded?: int,
+ *   months_already_covered?: int,
+ *   candles_upserted?: int,
+ *   earliest_candle?: string|null,
+ *   latest_candle?: string|null,
+ *   errors?: array<int, string>
+ * }
+ * @phpstan-type RestGaps array{
+ *   gaps_found?: int,
+ *   gaps_filled?: int,
+ *   inserted?: int,
+ *   skipped?: array<int, array{from: string, to: string, missing: int, reason: string}>
+ * }
+ * @phpstan-type RestReport array{
+ *   inserted?: int,
+ *   earliest?: string|null,
+ *   latest?: string|null,
+ *   pages?: int,
+ *   skipped?: bool,
+ *   reason?: string,
+ *   gaps?: RestGaps
+ * }
+ * @phpstan-type TaapiReport array{
+ *   inserted?: int,
+ *   earliest?: string|null,
+ *   latest?: string|null,
+ *   source_url?: string,
+ *   skipped?: bool,
+ *   reason?: string,
+ *   requested?: int
+ * }
+ * @phpstan-type CandleReports array{
+ *   vision: VisionReport|null,
+ *   rest: RestReport|null,
+ *   taapi: TaapiReport|null,
+ *   vision_error: string|null,
+ *   rest_error: string|null,
+ *   taapi_error: string|null
+ * }
+ * @phpstan-type FetchCandlePayload array{
+ *   ok: bool,
+ *   window_months: int,
+ *   vision: VisionReport|null,
+ *   rest: RestReport|null,
+ *   taapi: TaapiReport|null,
+ *   vision_error: string|null,
+ *   rest_error: string|null,
+ *   taapi_error: string|null,
+ *   coverage: CoverageReport|null,
+ *   has_holes: bool,
+ *   message: string
+ * }
+ * @phpstan-type CoverageReport array{
+ *   timeframe?: string,
+ *   total_present?: int,
+ *   earliest?: string|null,
+ *   latest?: string|null,
+ *   span_hours?: float|null,
+ *   expected_if_contiguous?: int,
+ *   holes_count?: int,
+ *   holes_sample?: array<int, array{from: string, to: string, missing: int}>,
+ *   contiguity_percent?: float,
+ *   is_fresh?: bool,
+ *   staleness_hours?: float|null
+ * }
+ * @phpstan-type ValidatedInput array<string, scalar|null>
+ * @phpstan-type StructuredValue scalar|array<array-key, scalar|array<array-key, scalar|array<array-key, scalar|array<array-key, scalar|null>|null>|null>|null>
+ * @phpstan-type BacktestResult array{
+ *   rows: array<int, array<string, StructuredValue>>,
+ *   totals: array<string, StructuredValue>,
+ *   ...
+ * }
+ * @phpstan-type SimulationArguments array{
+ *   symbol: ExchangeSymbol,
+ *   timeframe: string,
+ *   margin: string,
+ *   leverage: int,
+ *   totalLimitOrders: int,
+ *   multipliers: array<int, string>|null,
+ *   tpPercent: string,
+ *   gapLongPercent: string|null,
+ *   gapShortPercent: string|null,
+ *   slPercent: string,
+ *   skipStopLoss: bool,
+ *   daysToIgnore: int,
+ *   limitHit: int|null,
+ *   specificCandle: Carbon|null,
+ *   since: Carbon|null
+ * }
+ * @phpstan-type AdjustmentCandidate array{
+ *   lever: string,
+ *   delta: float,
+ *   gap_long?: float,
+ *   gap_short?: float,
+ *   sl?: float,
+ *   stops: int,
+ *   acceptable: bool
+ * }
+ * @phpstan-type SymbolRow array<string, scalar|null>
+ * @phpstan-type InsightInput array{
+ *   exchange_symbol_id: int,
+ *   timeframe: string,
+ *   totals: array<string, StructuredValue>,
+ *   meta: array<string, scalar|null>,
+ *   config: array<string, StructuredValue>,
+ *   regimes: array<int|string, StructuredValue>|null,
+ *   rows: array<int, array<string, StructuredValue>>|null
+ * }
+ * @phpstan-type InsightMetrics array{
+ *   cumulative: string,
+ *   rung_count: int|float,
+ *   total_sims: int|float,
+ *   rung_pct: int|float
+ * }
+ * @phpstan-type InsightContext array{
+ *   symbol: ExchangeSymbol,
+ *   account: Account|null,
+ *   meta: array<string, scalar|null>,
+ *   config: array<string, StructuredValue>,
+ *   regimes: array<int|string, StructuredValue>,
+ *   totals: array<string, StructuredValue>,
+ *   n: int,
+ *   cumulative: string,
+ *   rung_count: int|float,
+ *   total_sims: int|float,
+ *   rung_pct: int|float,
+ *   failure_rows: string|false
+ * }
  */
 final class BacktrackingController extends Controller
 {
@@ -63,627 +194,7 @@ final class BacktrackingController extends Controller
      */
     private const APPROVE_STOPS_MAX = 5;
 
-    public function index(): View
-    {
-        $symbols = $this->enabledSymbolGroups();
-        $defaults = $this->pullDefaultsFromMainAccount();
-
-        return view('system.backtesting', [
-            'symbols' => $symbols,
-            'defaults' => $defaults,
-            'timeframes' => $this->availableTimeframes(),
-        ]);
-    }
-
-    public function fetchCandles(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
-            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
-            'since' => ['nullable', 'date'],
-            'taapi_topup' => ['sometimes', 'boolean'],
-        ]);
-
-        try {
-            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
-            $timeframe = (string) $validated['timeframe'];
-            $useTopup = (bool) ($validated['taapi_topup'] ?? true);
-            $maxMonths = $this->resolveMaxMonths(
-                $timeframe,
-                $validated['since'] ?? null,
-                isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
-                $validated['max_months'] ?? null,
-            );
-
-            $isBinance = mb_strtolower($symbol->apiSystem->canonical ?? '') === 'binance';
-
-            // Tier 1: Vision — bulk completed months. Only Binance.
-            $visionReport = null;
-            $visionError = null;
-            if ($isBinance) {
-                try {
-                    $visionReport = (new BinanceVisionCandleFetcher)->fetch($symbol, $timeframe, $maxMonths);
-                } catch (Throwable $e) {
-                    $visionError = $e->getMessage();
-                }
-            }
-
-            // Tier 2: Binance REST — fills the current-month tail Vision
-            // doesn't have yet, and closes any internal gaps in the window.
-            // Forward-resume covers "since latest DB row to now"; gap-scan
-            // covers "holes older than the latest row" (common when a
-            // timeframe was enabled after partial history was already
-            // present, e.g. 1d added to kraite.timeframes retroactively).
-            $restReport = null;
-            $restError = null;
-            if ($isBinance) {
-                try {
-                    $rest = new BinanceRestCandleFetcher;
-                    $forward = $rest->fetch($symbol, $timeframe);
-
-                    // Gap-scan lookback: prefer the user's `since` / `candles_back`
-                    // window; otherwise default to 6 months (the fetcher's own
-                    // default when null is passed).
-                    $gapLookbackTs = $this->resolveWindowSince(
-                        $timeframe,
-                        $validated['since'] ?? null,
-                        isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
-                    )?->getTimestamp();
-
-                    $gaps = $rest->fillGaps($symbol, $timeframe, $gapLookbackTs);
-                    $restReport = array_merge($forward, ['gaps' => $gaps]);
-                } catch (Throwable $e) {
-                    $restError = $e->getMessage();
-                }
-            }
-
-            // Tier 3: TAAPI — last resort. Non-Binance symbols have no Vision
-            // or REST path, so TAAPI is their only source. For Binance this
-            // mostly no-ops (REST already filled the tail) but covers the
-            // rare case where Binance REST fails.
-            $taapiReport = null;
-            $taapiError = null;
-            if ($useTopup) {
-                try {
-                    $taapiReport = (new TaapiCandlesFetcher)->fetch($symbol, $timeframe, 200, 0);
-                } catch (Throwable $e) {
-                    $taapiError = $e->getMessage();
-                }
-            }
-
-            // Post-fetch coverage audit — remaining holes go back to the UI
-            // so the operator sees what actually landed vs what was asked.
-            $coverage = null;
-            try {
-                $coverage = (new CandleCoverageVerifier)->verify($symbol, $timeframe);
-            } catch (Throwable $e) {
-                // Non-fatal — coverage is diagnostic, not load-bearing.
-            }
-
-            $ok = $visionReport !== null || $restReport !== null || $taapiReport !== null;
-
-            return response()->json([
-                'ok' => $ok,
-                'window_months' => $maxMonths,
-                'vision' => $visionReport,
-                'rest' => $restReport,
-                'taapi' => $taapiReport,
-                'vision_error' => $visionError,
-                'rest_error' => $restError,
-                'taapi_error' => $taapiError,
-                'coverage' => $coverage,
-                'has_holes' => $coverage !== null && (($coverage['holes_count'] ?? 0) > 0),
-                'message' => $this->formatFetchSummary($maxMonths, $visionReport, $restReport, $taapiReport, $visionError, $restError, $taapiError, $coverage),
-            ], $ok ? 200 : 422);
-        } catch (Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-            ], 422);
-        }
-    }
-
-    public function verifyCoverage(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-        ]);
-
-        try {
-            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
-            $report = (new CandleCoverageVerifier)->verify($symbol, (string) $validated['timeframe']);
-
-            return response()->json([
-                'ok' => true,
-                'coverage' => $report,
-                'pair' => $symbol->parsed_trading_pair,
-            ]);
-        } catch (Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-            ], 422);
-        }
-    }
-
-    /**
-     * Kick off the dispatcher-orchestrated candle-coverage ensure for a token +
-     * timeframe. Creates the EnsureBacktestCandleCoverageStep orchestrator and
-     * returns its block_uuid so the UI can poll coverageStatus to completion.
-     * Reuses an in-flight block for the same symbol+timeframe (dedupe).
-     */
-    public function ensureCoverage(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'since' => ['nullable', 'date'],
-            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
-            'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
-        ]);
-
-        $symbolId = (int) $validated['exchange_symbol_id'];
-        $timeframe = (string) $validated['timeframe'];
-
-        $existing = Step::query()
-            ->where('class', EnsureBacktestCandleCoverageStep::class)
-            ->whereJsonContains('arguments->exchangeSymbolId', $symbolId)
-            ->whereJsonContains('arguments->timeframe', $timeframe)
-            ->whereNotIn('state', Step::terminalStepStates())
-            ->latest('id')
-            ->first();
-
-        if ($existing !== null) {
-            return response()->json(['ok' => true, 'block_uuid' => $existing->block_uuid, 'reused' => true]);
-        }
-
-        $maxMonths = $this->resolveMaxMonths(
-            $timeframe,
-            $validated['since'] ?? null,
-            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
-            $validated['max_months'] ?? null,
-        );
-        $gapLookbackTs = $this->resolveWindowSince(
-            $timeframe,
-            $validated['since'] ?? null,
-            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
-        )?->getTimestamp();
-
-        $blockUuid = (string) Str::uuid();
-        Step::create([
-            'block_uuid' => $blockUuid,
-            'index' => 1,
-            'class' => EnsureBacktestCandleCoverageStep::class,
-            'queue' => 'indicators',
-            'arguments' => [
-                'exchangeSymbolId' => $symbolId,
-                'timeframe' => $timeframe,
-                'maxMonths' => $maxMonths,
-                'gapLookbackTs' => $gapLookbackTs,
-            ],
-        ]);
-
-        return response()->json(['ok' => true, 'block_uuid' => $blockUuid, 'reused' => false]);
-    }
-
-    /**
-     * Poll the coverage block created by ensureCoverage. Returns block progress
-     * plus the readiness verdict — from the final VerifyCoverageResultStep, or
-     * the orchestrator's own response when it completed inline (already covered).
-     */
-    public function coverageStatus(Request $request): JsonResponse
-    {
-        $validated = $request->validate(['block_uuid' => ['required', 'string']]);
-
-        $orchestrator = Step::query()
-            ->where('block_uuid', $validated['block_uuid'])
-            ->where('class', EnsureBacktestCandleCoverageStep::class)
-            ->first();
-
-        if ($orchestrator === null) {
-            return response()->json(['ok' => false, 'error' => 'unknown coverage block'], 404);
-        }
-
-        $orchState = class_basename($orchestrator->state);
-
-        $verdict = $orchestrator->response;
-        $stepsDone = 0;
-        $stepsTotal = 0;
-
-        if ($orchestrator->child_block_uuid !== null) {
-            $children = Step::where('block_uuid', $orchestrator->child_block_uuid)->get();
-            $stepsTotal = $children->count();
-            $stepsDone = $children->filter(fn ($s) => in_array(get_class($s->state), Step::terminalStepStates(), true))->count();
-            $verdict = $children->firstWhere('class', VerifyCoverageResultStep::class)?->response ?? $verdict;
-        }
-
-        $state = 'queued';
-        $error = null;
-        if (in_array($orchState, ['Failed', 'Stopped', 'Cancelled'], true)) {
-            $state = 'failed';
-            $error = $orchestrator->error_message;
-        } elseif ($orchState === 'Completed') {
-            $state = 'done';
-        } elseif ($orchestrator->child_block_uuid !== null) {
-            $state = 'fetching';
-        } elseif ($orchState === 'Running') {
-            $state = 'checking';
-        } elseif (in_array($orchState, ['Pending', 'Dispatched'], true)
-            && $orchestrator->created_at?->lt(now()->subMinutes(3))) {
-            $state = 'daemon_slow';
-        }
-
-        return response()->json([
-            'ok' => true,
-            'state' => $state,
-            'steps_done' => $stepsDone,
-            'steps_total' => $stepsTotal,
-            'ready' => is_array($verdict) ? ($verdict['ready'] ?? null) : null,
-            'coverage' => is_array($verdict) ? ($verdict['coverage'] ?? null) : null,
-            'reason' => is_array($verdict) ? ($verdict['reason'] ?? null) : null,
-            'error' => $error,
-        ]);
-    }
-
-    public function run(Request $request, BacktestStopLossRecency $stopLossRecency): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'tp_percent' => ['required', 'numeric', 'gt:0'],
-            'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
-            'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
-            'sl_percent' => ['required', 'numeric', 'gt:0'],
-            'limit_hit' => ['nullable', 'integer', 'min:1'],
-            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
-            'max_rows' => ['sometimes', 'integer', 'min:10', 'max:1000'],
-        ]);
-
-        try {
-            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
-            $timeframe = (string) $validated['timeframe'];
-
-            // Coverage is advisory at grade time, not a hard block. The UI runs
-            // a best-effort fetch first; here we grade on whatever is present and
-            // surface a warning when the data isn't fresh + complete, so the
-            // operator reads the grade with eyes open instead of seeing nothing.
-            // (Approve still guards separately — that's the real-money live push.)
-            $coverage = (new CandleCoverageVerifier)->verify($symbol, $timeframe);
-            $gate = CoverageGate::evaluate($coverage, $timeframe);
-            $coverageWarning = $gate['ready'] ? null : 'Graded on imperfect data: '.$gate['reason'];
-
-            $windowSince = $this->resolveWindowSince(
-                $timeframe,
-                null,
-                isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
-            );
-
-            // Backtests measure price-geometry (does WAP recover to TP?), not
-            // capital allocation. Margin and leverage drive per-rung qty
-            // sizing; with anything too small, lot-step rounding silently
-            // skips sims on high-priced tokens. Hardcoding 5000 × 20 keeps
-            // the per-rung qty above min_lot for every Binance perp without
-            // affecting the rebound math.
-            $simulator = new BacktestSimulator;
-            $result = $simulator->simulate(
-                symbol: $symbol,
-                timeframe: $timeframe,
-                margin: '5000',
-                leverage: 20,
-                totalLimitOrders: 4,
-                multipliers: ['2', '2', '2', '2'],
-                tpPercent: (string) $validated['tp_percent'],
-                gapLongPercent: isset($validated['gap_long_percent']) ? (string) $validated['gap_long_percent'] : null,
-                gapShortPercent: isset($validated['gap_short_percent']) ? (string) $validated['gap_short_percent'] : null,
-                slPercent: (string) $validated['sl_percent'],
-                skipStopLoss: false,
-                daysToIgnore: 0,
-                limitHit: isset($validated['limit_hit']) ? (int) $validated['limit_hit'] : null,
-                specificCandle: null,
-                since: $windowSince,
-            );
-
-            foreach ($stopLossRecency->latestByDirection($result['rows']) as $direction => $stoppedAt) {
-                $result['totals']['sl_coverage'][$direction]['latest_stop_at'] = $stoppedAt;
-            }
-
-            // Row cap — shipping all 10k rows in one JSON response is a
-            // UI hazard. Truncate on the API, the UI can always ask for
-            // unfiltered via the CLI for serious analysis.
-            $maxRows = (int) ($validated['max_rows'] ?? 500);
-            $truncated = false;
-            if (count($result['rows']) > $maxRows) {
-                $result['rows'] = array_slice($result['rows'], 0, $maxRows);
-                $truncated = true;
-            }
-
-            return response()->json([
-                'ok' => true,
-                'pair' => $symbol->parsed_trading_pair,
-                'pair_name' => $symbol->symbol?->name,
-                'result' => $result,
-                'rows_truncated' => $truncated,
-                'coverage' => $coverage,
-                'coverage_warning' => $coverageWarning,
-            ]);
-        } catch (Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-            ], 422);
-        }
-    }
-
-    /**
-     * Smart configuration adjustment for the "adjust" band (5–10 bad endings).
-     *
-     * Tries small single-lever bumps — a wider limit gap, or a wider stop-loss —
-     * in +0.5% / +1.0% / +1.5% steps (no larger; small nudges only), re-runs the
-     * full backtest for each, and reports which (if any) brings the stop-loss-hit
-     * count back under the approve threshold. The smallest successful bump is
-     * surfaced as the recommended fix; a wider gap is preferred over a wider SL
-     * on a tie (it reduces deep fills at the source rather than just tolerating
-     * more bleed). Advisory only — nothing is persisted.
-     */
-    public function suggestAdjustment(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'tp_percent' => ['required', 'numeric', 'gt:0'],
-            'sl_percent' => ['required', 'numeric', 'gt:0'],
-            'gap_long_percent' => ['required', 'numeric', 'gt:0'],
-            'gap_short_percent' => ['required', 'numeric', 'gt:0'],
-        ]);
-
-        // Six full re-simulations; give the request room without hanging forever.
-        set_time_limit(120);
-
-        try {
-            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
-            $timeframe = (string) $validated['timeframe'];
-            $tp = (string) $validated['tp_percent'];
-            $sl = (float) $validated['sl_percent'];
-            $gapLong = (float) $validated['gap_long_percent'];
-            $gapShort = (float) $validated['gap_short_percent'];
-
-            $simulator = new BacktestSimulator;
-            $stopsFor = function (float $gl, float $gs, float $slPct) use ($simulator, $symbol, $timeframe, $tp): int {
-                $res = $simulator->simulate(
-                    symbol: $symbol,
-                    timeframe: $timeframe,
-                    margin: '5000',
-                    leverage: 20,
-                    totalLimitOrders: 4,
-                    multipliers: ['2', '2', '2', '2'],
-                    tpPercent: $tp,
-                    gapLongPercent: (string) $gl,
-                    gapShortPercent: (string) $gs,
-                    slPercent: (string) $slPct,
-                    skipStopLoss: false,
-                    daysToIgnore: 0,
-                    limitHit: null,
-                    specificCandle: null,
-                    since: null,
-                );
-
-                return (int) ($res['totals']['stops'] ?? 0);
-            };
-
-            $candidates = [];
-            foreach ([0.5, 1.0, 1.5] as $delta) {
-                $gapStops = $stopsFor($gapLong + $delta, $gapShort + $delta, $sl);
-                $candidates[] = [
-                    'lever' => 'gap',
-                    'delta' => $delta,
-                    'gap_long' => round($gapLong + $delta, 2),
-                    'gap_short' => round($gapShort + $delta, 2),
-                    'stops' => $gapStops,
-                    'acceptable' => $gapStops < self::APPROVE_STOPS_MAX,
-                ];
-
-                $slStops = $stopsFor($gapLong, $gapShort, $sl + $delta);
-                $candidates[] = [
-                    'lever' => 'sl',
-                    'delta' => $delta,
-                    'sl' => round($sl + $delta, 2),
-                    'stops' => $slStops,
-                    'acceptable' => $slStops < self::APPROVE_STOPS_MAX,
-                ];
-            }
-
-            // Smallest delta that reaches acceptable; gap wins a tie.
-            $best = null;
-            foreach ($candidates as $candidate) {
-                if (! $candidate['acceptable']) {
-                    continue;
-                }
-                $beatsBest = $best === null
-                    || $candidate['delta'] < $best['delta']
-                    || ($candidate['delta'] === $best['delta'] && $candidate['lever'] === 'gap' && $best['lever'] === 'sl');
-                if ($beatsBest) {
-                    $best = $candidate;
-                }
-            }
-
-            return response()->json([
-                'ok' => true,
-                'acceptable_max' => self::APPROVE_STOPS_MAX,
-                'candidates' => $candidates,
-                'best' => $best,
-            ]);
-        } catch (Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-            ], 422);
-        }
-    }
-
-    /**
-     * Approve or revoke approval for a backtested symbol. On approve, also
-     * persist the gap_long / gap_short used in the form so the live trader
-     * picks them up. ExchangeSymbolObserver fans both `was_backtesting_approved`
-     * and the gap percentages out to every other ExchangeSymbol sharing the
-     * same `symbol_id` (cross-exchange propagation).
-     */
-    public function toggleApproval(Request $request): JsonResponse
-    {
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'approve' => ['required', 'boolean'],
-            'timeframe' => ['nullable', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
-            'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
-            'tp_percent' => ['nullable', 'numeric', 'gt:0'],
-            'sl_percent' => ['nullable', 'numeric', 'gt:0'],
-        ]);
-
-        try {
-            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
-            $approve = (bool) $validated['approve'];
-
-            // No coverage block here — approve / reject is the admin's final call.
-            // The run surfaces a coverage warning when the data is imperfect; the
-            // operator weighs it and decides whether to push the config live.
-
-            $symbol->was_backtesting_approved = $approve;
-            $symbol->backtesting_review_status = $approve ? 'approved' : 'rejected';
-            // Stamped on every decision, including a reversal, so the panel can
-            // tell the operator when the standing call was actually taken.
-            $symbol->backtesting_reviewed_at = now();
-
-            if ($approve) {
-                $symbol->is_manually_enabled = true;
-
-                if (isset($validated['gap_long_percent'])) {
-                    $symbol->percentage_gap_long = (float) $validated['gap_long_percent'];
-                }
-                if (isset($validated['gap_short_percent'])) {
-                    $symbol->percentage_gap_short = (float) $validated['gap_short_percent'];
-                }
-                if (isset($validated['tp_percent'])) {
-                    $symbol->profit_percentage = (float) $validated['tp_percent'];
-                }
-                if (isset($validated['sl_percent'])) {
-                    $symbol->stop_market_percentage = (float) $validated['sl_percent'];
-                }
-            }
-
-            $symbol->save();
-        } catch (Throwable $e) {
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage(),
-                'exception' => $e::class,
-            ], 500);
-        }
-
-        return response()->json([
-            'ok' => true,
-            'was_backtesting_approved' => $symbol->was_backtesting_approved,
-            'backtesting_review_status' => $symbol->backtesting_review_status,
-            'backtesting_reviewed_at' => optional($symbol->backtesting_reviewed_at)->toIso8601String(),
-            'percentage_gap_long' => $symbol->percentage_gap_long,
-            'percentage_gap_short' => $symbol->percentage_gap_short,
-            'profit_percentage' => $symbol->profit_percentage,
-            'stop_market_percentage' => $symbol->stop_market_percentage,
-        ]);
-    }
-
-    /**
-     * Interpret a backtest result via LLM. Accepts the result + config
-     * payload the UI just received from POST /run, builds a prompt, calls
-     * the `backtest-insights` AI connection, returns the raw text answer.
-     * No config changes are applied — advisory only.
-     */
-    public function aiInsights(Request $request, ChatManager $chat): JsonResponse
-    {
-        // Prism + streaming response parsing can push past FPM's 128M default
-        // when the prompt includes full regime buckets + failure rows. Lift
-        // for this single action only — the request is operator-triggered and
-        // naturally rate-limited by the throttle middleware.
-        ini_set('memory_limit', '512M');
-
-        $validated = $request->validate([
-            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
-            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
-            'totals' => ['required', 'array'],
-            'regimes' => ['nullable', 'array'],
-            'meta' => ['required', 'array'],
-            'config' => ['required', 'array'],
-            'rows' => ['nullable', 'array'],
-        ]);
-
-        try {
-            $symbol = ExchangeSymbol::with('apiSystem', 'symbol')->findOrFail((int) $validated['exchange_symbol_id']);
-
-            $response = $chat->send(
-                messages: $this->buildInsightMessages($symbol, $validated),
-                connection: 'backtest-insights',
-            );
-
-            return response()->json([
-                'ok' => true,
-                'insights' => $response,
-                'model' => config('ai-bridge.resolver.connections.backtest-insights'),
-            ]);
-        } catch (Throwable $e) {
-            Log::error('[AI Insights] '.$e->getMessage(), [
-                'exception' => $e::class,
-                'trace' => mb_substr($e->getTraceAsString(), 0, 2000),
-            ]);
-
-            return response()->json([
-                'ok' => false,
-                'error' => $e->getMessage().' ('.$e::class.')',
-            ], 500);
-        }
-    }
-
-    /**
-     * Build the prompt messages for the AI Insights call.
-     *
-     * System message explains: Kraite's martingale ladder strategy, the
-     * portfolio shape (12 concurrent positions sharing margin), the
-     * liquidation risk model at deep rungs, and the priority order the
-     * operator actually cares about (NOT "maximise pass rate"). Anti-
-     * patterns are called out explicitly so the model doesn't propose
-     * risk-inflating "improvements".
-     *
-     * User message packs: token + timeframe, portfolio context from the
-     * live Account, current persisted symbol config, the config that was
-     * just tested, all backtest totals including the rung distribution +
-     * cumulative-qty-at-rung-N, and the regime buckets.
-     *
-     * @param  array<string, mixed>  $validated
-     * @return array<int, array{role: string, content: string}>
-     */
-    private function buildInsightMessages(ExchangeSymbol $symbol, array $validated): array
-    {
-        $totals = $validated['totals'];
-        $meta = $validated['meta'];
-        $config = $validated['config'];
-        $regimes = $validated['regimes'] ?? [];
-        $rows = $validated['rows'] ?? [];
-
-        $account = Account::find(1);
-        $n = (int) ($config['total_limit_orders'] ?? $symbol->total_limit_orders ?? 4);
-        $multipliersTested = $this->resolveEffectiveMultipliers(
-            $config['multipliers'] ?? null,
-            $symbol->limit_quantity_multipliers ?? null,
-            $n,
-        );
-        $cumulativeQtyAtRungN = $this->cumulativeQtyMultipleAtRung($multipliersTested, $n);
-        $rungDist = $totals['rung_distribution'] ?? [];
-        $rungNCount = $rungDist[(string) $n] ?? $rungDist[$n] ?? 0;
-        $totalSims = array_sum(is_array($rungDist) ? $rungDist : []);
-        $rungNPct = $totalSims > 0 ? round(($rungNCount / $totalSims) * 100, 2) : 0;
-
-        $system = <<<'SYS'
+    private const INSIGHT_SYSTEM_PROMPT = <<<'SYS'
 You are a senior quantitative analyst tuning the Kraite martingale ladder strategy for a professional trader running a live crypto futures portfolio. You MUST reason at the portfolio level, not just the single-token level, and you MUST respect the priority order below.
 
 ## STRATEGY — how Kraite actually trades
@@ -772,28 +283,1167 @@ Exactly 3, numbered. ≥1 changes exactly ONE parameter — tag it `(single-vari
 If the config is already on the Pareto frontier (grade A, Max MAE low, rung-N reach ~0), say so in ONE line and give one small exploratory tweak per slot, tagged `(exploratory)`. Do not invent problems that aren't in the numbers. Quote a payload number for every claim.
 SYS;
 
-        $user = sprintf(
-            "TOKEN: %s on %s\nTIMEFRAME: %s\nWINDOW: start=%s, trailing_days_ignored=%d\n\n".
-            "ACCOUNT-LEVEL PORTFOLIO (live settings):\n".
-            "  total_positions_long=%s  total_positions_short=%s  (all share one margin pool)\n".
-            "  position_leverage_long=%sx  position_leverage_short=%sx\n".
-            "  margin_percentage_long=%s%%  margin_percentage_short=%s%%\n".
-            "  stop_market_wait_minutes=%s  (mitigation: SL cooldown before re-entry)\n".
-            "  profit_percentage=%s%%  (default TP)  stop_market_initial_percentage=%s%%  (default SL)\n\n".
-            "SYMBOL-PERSISTED CONFIG (%s on %s in exchange_symbols):\n".
-            "  percentage_gap_long=%s  percentage_gap_short=%s  total_limit_orders=%s  limit_quantity_multipliers=%s\n\n".
-            "CONFIG JUST TESTED:\n%s\n\n".
-            "DERIVED:\n".
-            "  cumulative_qty_multiple_at_rung_%d = %s (position size vs market leg when ladder fully fills)\n".
-            "  rung_%d_reach_rate = %s%% (%d of %d resolved sims)\n\n".
-            "BACKTEST TOTALS:\n%s\n\n".
-            "REGIME BUCKETS (pass_rate per time chunk):\n%s\n\n".
-            "FAILURE ROWS (only stopped_out sims are actionable — scan for time-clustering + direction patterns to classify structural vs avoidable):\n%s\n",
+    private const INSIGHT_USER_PROMPT = <<<'PROMPT'
+TOKEN: %s on %s
+TIMEFRAME: %s
+WINDOW: start=%s, trailing_days_ignored=%d
+
+ACCOUNT-LEVEL PORTFOLIO (live settings):
+  total_positions_long=%s  total_positions_short=%s  (all share one margin pool)
+  position_leverage_long=%sx  position_leverage_short=%sx
+  margin_percentage_long=%s%%  margin_percentage_short=%s%%
+  stop_market_wait_minutes=%s  (mitigation: SL cooldown before re-entry)
+  profit_percentage=%s%%  (default TP)  stop_market_initial_percentage=%s%%  (default SL)
+
+SYMBOL-PERSISTED CONFIG (%s on %s in exchange_symbols):
+  percentage_gap_long=%s  percentage_gap_short=%s  total_limit_orders=%s  limit_quantity_multipliers=%s
+
+CONFIG JUST TESTED:
+%s
+
+DERIVED:
+  cumulative_qty_multiple_at_rung_%d = %s (position size vs market leg when ladder fully fills)
+  rung_%d_reach_rate = %s%% (%d of %d resolved sims)
+
+BACKTEST TOTALS:
+%s
+
+REGIME BUCKETS (pass_rate per time chunk):
+%s
+
+FAILURE ROWS (only stopped_out sims are actionable — scan for time-clustering + direction patterns to classify structural vs avoidable):
+%s
+PROMPT;
+
+    public function index(): View
+    {
+        $symbols = $this->enabledSymbolGroups();
+        $defaults = $this->pullDefaultsFromMainAccount();
+
+        return view('system.backtesting', [
+            'symbols' => $symbols,
+            'defaults' => $defaults,
+            'timeframes' => $this->availableTimeframes(),
+        ]);
+    }
+
+    public function fetchCandles(Request $request): JsonResponse
+    {
+        $validated = $this->validateFetchCandles($request);
+
+        try {
+            return $this->fetchCandlesResponse($validated);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    public function verifyCoverage(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+        ]);
+
+        try {
+            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+            $report = (new CandleCoverageVerifier)->verify($symbol, (string) $validated['timeframe']);
+
+            return response()->json([
+                'ok' => true,
+                'coverage' => $report,
+                'pair' => $symbol->parsed_trading_pair,
+            ]);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Kick off the dispatcher-orchestrated candle-coverage ensure for a token +
+     * timeframe. Creates the EnsureBacktestCandleCoverageStep orchestrator and
+     * returns its block_uuid so the UI can poll coverageStatus to completion.
+     * Reuses an in-flight block for the same symbol+timeframe (dedupe).
+     */
+    public function ensureCoverage(Request $request): JsonResponse
+    {
+        $validated = $this->validateEnsureCoverage($request);
+        $symbolId = (int) $validated['exchange_symbol_id'];
+        $timeframe = (string) $validated['timeframe'];
+        $existing = $this->findActiveCoverageStep($symbolId, $timeframe);
+
+        if ($existing !== null) {
+            return response()->json(['ok' => true, 'block_uuid' => $existing->block_uuid, 'reused' => true]);
+        }
+
+        $blockUuid = $this->createCoverageStep($symbolId, $timeframe, $validated);
+
+        return response()->json(['ok' => true, 'block_uuid' => $blockUuid, 'reused' => false]);
+    }
+
+    /**
+     * Poll the coverage block created by ensureCoverage. Returns block progress
+     * plus the readiness verdict — from the final VerifyCoverageResultStep, or
+     * the orchestrator's own response when it completed inline (already covered).
+     */
+    public function coverageStatus(Request $request): JsonResponse
+    {
+        $validated = $request->validate(['block_uuid' => ['required', 'string']]);
+        $orchestrator = $this->findCoverageOrchestrator((string) $validated['block_uuid']);
+
+        if ($orchestrator === null) {
+            return response()->json(['ok' => false, 'error' => 'unknown coverage block'], 404);
+        }
+
+        $orchState = class_basename($orchestrator->state);
+        $progress = $this->coverageProgress($orchestrator);
+        $state = $this->coverageState($orchestrator, $orchState);
+
+        return response()->json($this->coverageStatusPayload($state, $progress));
+    }
+
+    public function run(Request $request, BacktestStopLossRecency $stopLossRecency): JsonResponse
+    {
+        $validated = $this->validateRun($request);
+
+        try {
+            return $this->runBacktest($validated, $stopLossRecency);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Smart configuration adjustment for the "adjust" band (5–10 bad endings).
+     *
+     * Tries small single-lever bumps — a wider limit gap, or a wider stop-loss —
+     * in +0.5% / +1.0% / +1.5% steps (no larger; small nudges only), re-runs the
+     * full backtest for each, and reports which (if any) brings the stop-loss-hit
+     * count back under the approve threshold. The smallest successful bump is
+     * surfaced as the recommended fix; a wider gap is preferred over a wider SL
+     * on a tie (it reduces deep fills at the source rather than just tolerating
+     * more bleed). Advisory only — nothing is persisted.
+     */
+    public function suggestAdjustment(Request $request): JsonResponse
+    {
+        $validated = $this->validateSuggestAdjustment($request);
+
+        // Six full re-simulations; give the request room without hanging forever.
+        set_time_limit(120);
+
+        try {
+            return $this->suggestAdjustmentResponse($validated);
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+    }
+
+    /**
+     * Approve or revoke approval for a backtested symbol. On approve, also
+     * persist the gap_long / gap_short used in the form so the live trader
+     * picks them up. ExchangeSymbolObserver fans both `was_backtesting_approved`
+     * and the gap percentages out to every other ExchangeSymbol sharing the
+     * same `symbol_id` (cross-exchange propagation).
+     */
+    public function toggleApproval(Request $request): JsonResponse
+    {
+        $validated = $this->validateToggleApproval($request);
+
+        try {
+            $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+            $approve = (bool) $validated['approve'];
+            $this->applyApprovalDecision($symbol, $validated, $approve);
+            $symbol->save();
+        } catch (Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ], 500);
+        }
+
+        return response()->json($this->approvalPayload($symbol));
+    }
+
+    /**
+     * Interpret a backtest result via LLM. Accepts the result + config
+     * payload the UI just received from POST /run, builds a prompt, calls
+     * the `backtest-insights` AI connection, returns the raw text answer.
+     * No config changes are applied — advisory only.
+     */
+    public function aiInsights(Request $request, ChatManager $chat): JsonResponse
+    {
+        // Prism + streaming response parsing can push past FPM's 128M default
+        // when the prompt includes full regime buckets + failure rows. Lift
+        // for this single action only — the request is operator-triggered and
+        // naturally rate-limited by the throttle middleware.
+        ini_set('memory_limit', '512M');
+        $validated = $this->validateAiInsights($request);
+
+        try {
+            $symbol = ExchangeSymbol::with('apiSystem', 'symbol')->findOrFail((int) $validated['exchange_symbol_id']);
+
+            return $this->sendAiInsights($symbol, $validated, $chat);
+        } catch (Throwable $e) {
+            return $this->aiInsightsFailure($e);
+        }
+    }
+
+    /**
+     * @return ValidatedInput
+     */
+    private function validateFetchCandles(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
+            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'since' => ['nullable', 'date'],
+            'taapi_topup' => ['sometimes', 'boolean'],
+        ]);
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function fetchCandlesResponse(array $validated): JsonResponse
+    {
+        $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+        $timeframe = (string) $validated['timeframe'];
+        $maxMonths = $this->resolveMaxMonths(
+            $timeframe,
+            $this->validatedSince($validated),
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+            $this->validatedExplicitMonths($validated),
+        );
+        $reports = $this->fetchCandleReports($symbol, $timeframe, $maxMonths, $validated);
+        $coverage = $this->verifyFetchCoverage($symbol, $timeframe);
+        $ok = $reports['vision'] !== null || $reports['rest'] !== null || $reports['taapi'] !== null;
+
+        return response()->json($this->fetchCandlePayload($maxMonths, $reports, $coverage), $ok ? 200 : 422);
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     * @return CandleReports
+     */
+    private function fetchCandleReports(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        int $maxMonths,
+        array $validated,
+    ): array {
+        $isBinance = mb_strtolower($symbol->apiSystem->canonical ?? '') === 'binance';
+        [$vision, $visionError] = $this->fetchVisionReport($symbol, $timeframe, $maxMonths, $isBinance);
+        [$rest, $restError] = $this->fetchRestReport($symbol, $timeframe, $validated, $isBinance);
+        [$taapi, $taapiError] = $this->fetchTaapiReport($symbol, $timeframe, (bool) ($validated['taapi_topup'] ?? true));
+
+        return [
+            'vision' => $vision,
+            'rest' => $rest,
+            'taapi' => $taapi,
+            'vision_error' => $visionError,
+            'rest_error' => $restError,
+            'taapi_error' => $taapiError,
+        ];
+    }
+
+    /**
+     * @return array{0: VisionReport|null, 1: string|null}
+     */
+    private function fetchVisionReport(ExchangeSymbol $symbol, string $timeframe, int $maxMonths, bool $isBinance): array
+    {
+        if (! $isBinance) {
+            return [null, null];
+        }
+
+        try {
+            return [(new BinanceVisionCandleFetcher)->fetch($symbol, $timeframe, $maxMonths), null];
+        } catch (Throwable $e) {
+            return [null, $e->getMessage()];
+        }
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     * @return array{0: RestReport|null, 1: string|null}
+     */
+    private function fetchRestReport(ExchangeSymbol $symbol, string $timeframe, array $validated, bool $isBinance): array
+    {
+        if (! $isBinance) {
+            return [null, null];
+        }
+
+        try {
+            $rest = new BinanceRestCandleFetcher;
+            $forward = $rest->fetch($symbol, $timeframe);
+            $gapLookbackTs = $this->resolveWindowSince(
+                $timeframe,
+                $this->validatedSince($validated),
+                isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+            )?->getTimestamp();
+
+            return [array_merge($forward, ['gaps' => $rest->fillGaps($symbol, $timeframe, $gapLookbackTs)]), null];
+        } catch (Throwable $e) {
+            return [null, $e->getMessage()];
+        }
+    }
+
+    /**
+     * @return array{0: TaapiReport|null, 1: string|null}
+     */
+    private function fetchTaapiReport(ExchangeSymbol $symbol, string $timeframe, bool $useTopup): array
+    {
+        if (! $useTopup) {
+            return [null, null];
+        }
+
+        try {
+            return [(new TaapiCandlesFetcher)->fetch($symbol, $timeframe, 200, 0), null];
+        } catch (Throwable $e) {
+            return [null, $e->getMessage()];
+        }
+    }
+
+    /**
+     * @return CoverageReport|null
+     */
+    private function verifyFetchCoverage(ExchangeSymbol $symbol, string $timeframe): ?array
+    {
+        try {
+            return (new CandleCoverageVerifier)->verify($symbol, $timeframe);
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param  CandleReports  $reports
+     * @param  CoverageReport|null  $coverage
+     * @return FetchCandlePayload
+     */
+    private function fetchCandlePayload(int $maxMonths, array $reports, ?array $coverage): array
+    {
+        $ok = $reports['vision'] !== null || $reports['rest'] !== null || $reports['taapi'] !== null;
+        $payload = [
+            'ok' => $ok,
+            'window_months' => $maxMonths,
+            'vision' => $reports['vision'],
+            'rest' => $reports['rest'],
+            'taapi' => $reports['taapi'],
+            'vision_error' => $reports['vision_error'],
+            'rest_error' => $reports['rest_error'],
+            'taapi_error' => $reports['taapi_error'],
+            'coverage' => $coverage,
+            'has_holes' => $coverage !== null && (($coverage['holes_count'] ?? 0) > 0),
+        ];
+        $payload['message'] = $this->fetchCandleMessage($maxMonths, $reports, $coverage);
+
+        return $payload;
+    }
+
+    /**
+     * @param  CandleReports  $reports
+     * @param  CoverageReport|null  $coverage
+     */
+    private function fetchCandleMessage(int $maxMonths, array $reports, ?array $coverage): string
+    {
+        return $this->formatFetchSummary(
+            $maxMonths,
+            $reports['vision'],
+            $reports['rest'],
+            $reports['taapi'],
+            $reports['vision_error'],
+            $reports['rest_error'],
+            $reports['taapi_error'],
+            $coverage,
+        );
+    }
+
+    /**
+     * @return ValidatedInput
+     */
+    private function validateEnsureCoverage(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'since' => ['nullable', 'date'],
+            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_months' => ['sometimes', 'integer', 'min:1', 'max:48'],
+        ]);
+    }
+
+    private function findActiveCoverageStep(int $symbolId, string $timeframe): ?Step
+    {
+        return Step::query()
+            ->where('class', EnsureBacktestCandleCoverageStep::class)
+            ->whereJsonContains('arguments->exchangeSymbolId', $symbolId)
+            ->whereJsonContains('arguments->timeframe', $timeframe)
+            ->whereNotIn('state', Step::terminalStepStates())
+            ->latest('id')
+            ->first();
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function createCoverageStep(int $symbolId, string $timeframe, array $validated): string
+    {
+        $maxMonths = $this->resolveMaxMonths(
+            $timeframe,
+            $this->validatedSince($validated),
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+            $this->validatedExplicitMonths($validated),
+        );
+        $gapLookbackTs = $this->resolveWindowSince(
+            $timeframe,
+            $this->validatedSince($validated),
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+        )?->getTimestamp();
+        $blockUuid = (string) Str::uuid();
+
+        Step::create($this->coverageStepAttributes($symbolId, $timeframe, $maxMonths, $gapLookbackTs, $blockUuid));
+
+        return $blockUuid;
+    }
+
+    /**
+     * @return array<string, StructuredValue>
+     */
+    private function coverageStepAttributes(
+        int $symbolId,
+        string $timeframe,
+        int $maxMonths,
+        ?int $gapLookbackTs,
+        string $blockUuid,
+    ): array {
+        return [
+            'block_uuid' => $blockUuid,
+            'index' => 1,
+            'class' => EnsureBacktestCandleCoverageStep::class,
+            'queue' => 'indicators',
+            'arguments' => [
+                'exchangeSymbolId' => $symbolId,
+                'timeframe' => $timeframe,
+                'maxMonths' => $maxMonths,
+                'gapLookbackTs' => $gapLookbackTs,
+            ],
+        ];
+    }
+
+    private function findCoverageOrchestrator(string $blockUuid): ?Step
+    {
+        return Step::query()
+            ->where('block_uuid', $blockUuid)
+            ->where('class', EnsureBacktestCandleCoverageStep::class)
+            ->first();
+    }
+
+    /**
+     * @return array{verdict: array<string, StructuredValue>|null, steps_done: int, steps_total: int}
+     */
+    private function coverageProgress(Step $orchestrator): array
+    {
+        $verdict = $orchestrator->response;
+        $stepsDone = 0;
+        $stepsTotal = 0;
+
+        if ($orchestrator->child_block_uuid !== null) {
+            $children = Step::where('block_uuid', $orchestrator->child_block_uuid)->get();
+            $stepsTotal = $children->count();
+            $stepsDone = $children->filter(fn ($s) => in_array(get_class($s->state), Step::terminalStepStates(), true))->count();
+            $verdict = $children->firstWhere('class', VerifyCoverageResultStep::class)?->response ?? $verdict;
+        }
+
+        return [
+            'verdict' => $verdict,
+            'steps_done' => $stepsDone,
+            'steps_total' => $stepsTotal,
+        ];
+    }
+
+    /**
+     * @return array{state: string, error: string|null}
+     */
+    private function coverageState(Step $orchestrator, string $orchState): array
+    {
+        if (in_array($orchState, ['Failed', 'Stopped', 'Cancelled'], true)) {
+            return ['state' => 'failed', 'error' => $orchestrator->error_message];
+        }
+
+        if ($orchState === 'Completed') {
+            return ['state' => 'done', 'error' => null];
+        }
+
+        return $this->pendingCoverageState($orchestrator, $orchState);
+    }
+
+    /**
+     * @return array{state: string, error: string|null}
+     */
+    private function pendingCoverageState(Step $orchestrator, string $orchState): array
+    {
+        if ($orchestrator->child_block_uuid !== null) {
+            return ['state' => 'fetching', 'error' => null];
+        }
+
+        if ($orchState === 'Running') {
+            return ['state' => 'checking', 'error' => null];
+        }
+
+        if (in_array($orchState, ['Pending', 'Dispatched'], true)
+            && $orchestrator->created_at?->lt(now()->subMinutes(3))) {
+            return ['state' => 'daemon_slow', 'error' => null];
+        }
+
+        return ['state' => 'queued', 'error' => null];
+    }
+
+    /**
+     * @param  array{state: string, error: string|null}  $state
+     * @param  array{verdict: array<string, mixed>|null, steps_done: int, steps_total: int}  $progress
+     * @return array<string, mixed>
+     */
+    private function coverageStatusPayload(array $state, array $progress): array
+    {
+        $verdict = $progress['verdict'];
+
+        return [
+            'ok' => true,
+            'state' => $state['state'],
+            'steps_done' => $progress['steps_done'],
+            'steps_total' => $progress['steps_total'],
+            'ready' => is_array($verdict) ? ($verdict['ready'] ?? null) : null,
+            'coverage' => is_array($verdict) ? ($verdict['coverage'] ?? null) : null,
+            'reason' => is_array($verdict) ? ($verdict['reason'] ?? null) : null,
+            'error' => $state['error'],
+        ];
+    }
+
+    /**
+     * @return ValidatedInput
+     */
+    private function validateRun(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'tp_percent' => ['required', 'numeric', 'gt:0'],
+            'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
+            'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
+            'sl_percent' => ['required', 'numeric', 'gt:0'],
+            'limit_hit' => ['nullable', 'integer', 'min:1'],
+            'candles_back' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_rows' => ['sometimes', 'integer', 'min:10', 'max:1000'],
+        ]);
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function runBacktest(array $validated, BacktestStopLossRecency $stopLossRecency): JsonResponse
+    {
+        $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+        $timeframe = (string) $validated['timeframe'];
+        $coverage = (new CandleCoverageVerifier)->verify($symbol, $timeframe);
+        $coverageWarning = $this->coverageWarning($coverage, $timeframe);
+        $result = $this->simulateBacktest($symbol, $timeframe, $validated);
+        $this->addStopLossRecency($result, $stopLossRecency);
+        [$result, $truncated] = $this->truncateBacktestRows($result, (int) ($validated['max_rows'] ?? 500));
+
+        return response()->json([
+            'ok' => true,
+            'pair' => $symbol->parsed_trading_pair,
+            'pair_name' => $symbol->symbol?->name,
+            'result' => $result,
+            'rows_truncated' => $truncated,
+            'coverage' => $coverage,
+            'coverage_warning' => $coverageWarning,
+        ]);
+    }
+
+    /**
+     * @param  CoverageReport  $coverage
+     */
+    private function coverageWarning(array $coverage, string $timeframe): ?string
+    {
+        $gate = CoverageGate::evaluate($coverage, $timeframe);
+
+        return $gate['ready'] ? null : 'Graded on imperfect data: '.$gate['reason'];
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     * @return BacktestResult
+     */
+    private function simulateBacktest(ExchangeSymbol $symbol, string $timeframe, array $validated): array
+    {
+        $windowSince = $this->resolveWindowSince(
+            $timeframe,
+            null,
+            isset($validated['candles_back']) ? (int) $validated['candles_back'] : null,
+        );
+
+        return (new BacktestSimulator)->simulate(...$this->backtestSimulationArguments($symbol, $timeframe, $validated, $windowSince));
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     * @return SimulationArguments
+     */
+    private function backtestSimulationArguments(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        array $validated,
+        ?Carbon $windowSince,
+    ): array {
+        return [
+            'symbol' => $symbol,
+            'timeframe' => $timeframe,
+            'margin' => '5000',
+            'leverage' => 20,
+            'totalLimitOrders' => 4,
+            'multipliers' => ['2', '2', '2', '2'],
+            'tpPercent' => (string) $validated['tp_percent'],
+            'gapLongPercent' => isset($validated['gap_long_percent']) ? (string) $validated['gap_long_percent'] : null,
+            'gapShortPercent' => isset($validated['gap_short_percent']) ? (string) $validated['gap_short_percent'] : null,
+            'slPercent' => (string) $validated['sl_percent'],
+            'skipStopLoss' => false,
+            'daysToIgnore' => 0,
+            'limitHit' => isset($validated['limit_hit']) ? (int) $validated['limit_hit'] : null,
+            'specificCandle' => null,
+            'since' => $windowSince,
+        ];
+    }
+
+    /**
+     * @param  BacktestResult  $result
+     */
+    private function addStopLossRecency(array &$result, BacktestStopLossRecency $stopLossRecency): void
+    {
+        $coverage = $result['totals']['sl_coverage'] ?? [];
+        if (! is_array($coverage)) {
+            return;
+        }
+
+        foreach ($stopLossRecency->latestByDirection($result['rows']) as $direction => $stoppedAt) {
+            if (! isset($coverage[$direction]) || ! is_array($coverage[$direction])) {
+                $coverage[$direction] = [];
+            }
+
+            $coverage[$direction]['latest_stop_at'] = $stoppedAt;
+        }
+
+        $result['totals']['sl_coverage'] = $coverage;
+    }
+
+    /**
+     * @param  BacktestResult  $result
+     * @return array{0: BacktestResult, 1: bool}
+     */
+    private function truncateBacktestRows(array $result, int $maxRows): array
+    {
+        if (count($result['rows']) <= $maxRows) {
+            return [$result, false];
+        }
+
+        $result['rows'] = array_slice($result['rows'], 0, $maxRows);
+
+        return [$result, true];
+    }
+
+    /**
+     * @return ValidatedInput
+     */
+    private function validateSuggestAdjustment(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'tp_percent' => ['required', 'numeric', 'gt:0'],
+            'sl_percent' => ['required', 'numeric', 'gt:0'],
+            'gap_long_percent' => ['required', 'numeric', 'gt:0'],
+            'gap_short_percent' => ['required', 'numeric', 'gt:0'],
+        ]);
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function suggestAdjustmentResponse(array $validated): JsonResponse
+    {
+        $symbol = ExchangeSymbol::findOrFail((int) $validated['exchange_symbol_id']);
+        $candidates = $this->adjustmentCandidates(
+            $symbol,
+            (string) $validated['timeframe'],
+            (string) $validated['tp_percent'],
+            (float) $validated['sl_percent'],
+            (float) $validated['gap_long_percent'],
+            (float) $validated['gap_short_percent'],
+        );
+
+        return response()->json([
+            'ok' => true,
+            'acceptable_max' => self::APPROVE_STOPS_MAX,
+            'candidates' => $candidates,
+            'best' => $this->bestAdjustment($candidates),
+        ]);
+    }
+
+    /**
+     * @return array<int, AdjustmentCandidate>
+     */
+    private function adjustmentCandidates(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        string $tp,
+        float $sl,
+        float $gapLong,
+        float $gapShort,
+    ): array {
+        $candidates = [];
+        foreach ([0.5, 1.0, 1.5] as $delta) {
+            $candidates[] = $this->gapCandidate($symbol, $timeframe, $tp, $sl, $gapLong, $gapShort, $delta);
+            $candidates[] = $this->slCandidate($symbol, $timeframe, $tp, $sl, $gapLong, $gapShort, $delta);
+        }
+
+        return $candidates;
+    }
+
+    /**
+     * @return AdjustmentCandidate
+     */
+    private function gapCandidate(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        string $tp,
+        float $sl,
+        float $gapLong,
+        float $gapShort,
+        float $delta,
+    ): array {
+        $stops = $this->simulateAdjustmentStops($symbol, $timeframe, $tp, $gapLong + $delta, $gapShort + $delta, $sl);
+
+        return [
+            'lever' => 'gap',
+            'delta' => $delta,
+            'gap_long' => round($gapLong + $delta, 2),
+            'gap_short' => round($gapShort + $delta, 2),
+            'stops' => $stops,
+            'acceptable' => $stops < self::APPROVE_STOPS_MAX,
+        ];
+    }
+
+    /**
+     * @return AdjustmentCandidate
+     */
+    private function slCandidate(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        string $tp,
+        float $sl,
+        float $gapLong,
+        float $gapShort,
+        float $delta,
+    ): array {
+        $stops = $this->simulateAdjustmentStops($symbol, $timeframe, $tp, $gapLong, $gapShort, $sl + $delta);
+
+        return [
+            'lever' => 'sl',
+            'delta' => $delta,
+            'sl' => round($sl + $delta, 2),
+            'stops' => $stops,
+            'acceptable' => $stops < self::APPROVE_STOPS_MAX,
+        ];
+    }
+
+    private function simulateAdjustmentStops(
+        ExchangeSymbol $symbol,
+        string $timeframe,
+        string $tp,
+        float $gapLong,
+        float $gapShort,
+        float $sl,
+    ): int {
+        $result = (new BacktestSimulator)->simulate(
+            symbol: $symbol,
+            timeframe: $timeframe,
+            margin: '5000',
+            leverage: 20,
+            totalLimitOrders: 4,
+            multipliers: ['2', '2', '2', '2'],
+            tpPercent: $tp,
+            gapLongPercent: (string) $gapLong,
+            gapShortPercent: (string) $gapShort,
+            slPercent: (string) $sl,
+            skipStopLoss: false,
+            daysToIgnore: 0,
+            limitHit: null,
+            specificCandle: null,
+            since: null,
+        );
+
+        return (int) ($result['totals']['stops'] ?? 0);
+    }
+
+    /**
+     * @param  array<int, AdjustmentCandidate>  $candidates
+     * @return AdjustmentCandidate|null
+     */
+    private function bestAdjustment(array $candidates): ?array
+    {
+        $best = null;
+        foreach ($candidates as $candidate) {
+            if ($this->isBetterAdjustment($candidate, $best)) {
+                $best = $candidate;
+            }
+        }
+
+        return $best;
+    }
+
+    /**
+     * @param  AdjustmentCandidate  $candidate
+     * @param  AdjustmentCandidate|null  $best
+     */
+    private function isBetterAdjustment(array $candidate, ?array $best): bool
+    {
+        if (! $candidate['acceptable']) {
+            return false;
+        }
+
+        if ($best === null || $candidate['delta'] < $best['delta']) {
+            return true;
+        }
+
+        return $this->isPreferredAdjustmentTie($candidate, $best);
+    }
+
+    /**
+     * @param  AdjustmentCandidate  $candidate
+     * @param  AdjustmentCandidate  $best
+     */
+    private function isPreferredAdjustmentTie(array $candidate, array $best): bool
+    {
+        return $candidate['delta'] === $best['delta']
+            && $candidate['lever'] === 'gap'
+            && $best['lever'] === 'sl';
+    }
+
+    /**
+     * @return ValidatedInput
+     */
+    private function validateToggleApproval(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'approve' => ['required', 'boolean'],
+            'timeframe' => ['nullable', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'gap_long_percent' => ['nullable', 'numeric', 'gt:0'],
+            'gap_short_percent' => ['nullable', 'numeric', 'gt:0'],
+            'tp_percent' => ['nullable', 'numeric', 'gt:0'],
+            'sl_percent' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function applyApprovalDecision(ExchangeSymbol $symbol, array $validated, bool $approve): void
+    {
+        $symbol->setAttribute('was_backtesting_approved', $approve);
+        $symbol->setAttribute('backtesting_review_status', $approve ? 'approved' : 'rejected');
+        $symbol->setAttribute('backtesting_reviewed_at', now());
+
+        if ($approve) {
+            $this->applyApprovedConfiguration($symbol, $validated);
+        }
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function applyApprovedConfiguration(ExchangeSymbol $symbol, array $validated): void
+    {
+        $symbol->is_manually_enabled = true;
+
+        if (isset($validated['gap_long_percent'])) {
+            $symbol->percentage_gap_long = (float) $validated['gap_long_percent'];
+        }
+        if (isset($validated['gap_short_percent'])) {
+            $symbol->percentage_gap_short = (float) $validated['gap_short_percent'];
+        }
+        if (isset($validated['tp_percent'])) {
+            $symbol->profit_percentage = (float) $validated['tp_percent'];
+        }
+        if (isset($validated['sl_percent'])) {
+            $symbol->stop_market_percentage = (float) $validated['sl_percent'];
+        }
+    }
+
+    /**
+     * @return array<string, scalar|null>
+     */
+    private function approvalPayload(ExchangeSymbol $symbol): array
+    {
+        return [
+            'ok' => true,
+            'was_backtesting_approved' => $symbol->was_backtesting_approved,
+            'backtesting_review_status' => $symbol->backtesting_review_status,
+            'backtesting_reviewed_at' => optional($symbol->backtesting_reviewed_at)->toIso8601String(),
+            'percentage_gap_long' => $symbol->percentage_gap_long,
+            'percentage_gap_short' => $symbol->percentage_gap_short,
+            'profit_percentage' => $symbol->profit_percentage,
+            'stop_market_percentage' => $symbol->stop_market_percentage,
+        ];
+    }
+
+    /**
+     * @return InsightInput
+     */
+    private function validateAiInsights(Request $request): array
+    {
+        return $request->validate([
+            'exchange_symbol_id' => ['required', 'integer', 'exists:exchange_symbols,id'],
+            'timeframe' => ['required', 'string', 'in:'.implode(',', BacktestTimeframe::values())],
+            'totals' => ['required', 'array'],
+            'regimes' => ['nullable', 'array'],
+            'meta' => ['required', 'array'],
+            'config' => ['required', 'array'],
+            'rows' => ['nullable', 'array'],
+        ]);
+    }
+
+    /**
+     * @param  InsightInput  $validated
+     */
+    private function sendAiInsights(ExchangeSymbol $symbol, array $validated, ChatManager $chat): JsonResponse
+    {
+        $response = $chat->send(
+            messages: $this->buildInsightMessages($symbol, $validated),
+            connection: 'backtest-insights',
+        );
+
+        return response()->json([
+            'ok' => true,
+            'insights' => $response,
+            'model' => config('ai-bridge.resolver.connections.backtest-insights'),
+        ]);
+    }
+
+    private function aiInsightsFailure(Throwable $e): JsonResponse
+    {
+        Log::error('[AI Insights] '.$e->getMessage(), [
+            'exception' => $e::class,
+            'trace' => mb_substr($e->getTraceAsString(), 0, 2000),
+        ]);
+
+        return response()->json([
+            'ok' => false,
+            'error' => $e->getMessage().' ('.$e::class.')',
+        ], 500);
+    }
+
+    /**
+     * Build the prompt messages for the AI Insights call.
+     *
+     * System message explains: Kraite's martingale ladder strategy, the
+     * portfolio shape (12 concurrent positions sharing margin), the
+     * liquidation risk model at deep rungs, and the priority order the
+     * operator actually cares about (NOT "maximise pass rate"). Anti-
+     * patterns are called out explicitly so the model doesn't propose
+     * risk-inflating "improvements".
+     *
+     * User message packs: token + timeframe, portfolio context from the
+     * live Account, current persisted symbol config, the config that was
+     * just tested, all backtest totals including the rung distribution +
+     * cumulative-qty-at-rung-N, and the regime buckets.
+     *
+     * @param  InsightInput  $validated
+     * @return array<int, array{role: string, content: string}>
+     */
+    private function buildInsightMessages(ExchangeSymbol $symbol, array $validated): array
+    {
+        $context = $this->insightContext($symbol, $validated);
+
+        return [
+            ['role' => 'system', 'content' => self::INSIGHT_SYSTEM_PROMPT],
+            ['role' => 'user', 'content' => $this->formatInsightUserPrompt($context)],
+        ];
+    }
+
+    /**
+     * @param  InsightInput  $validated
+     * @return InsightContext
+     */
+    private function insightContext(ExchangeSymbol $symbol, array $validated): array
+    {
+        $totals = $validated['totals'];
+        $meta = $validated['meta'];
+        $config = $validated['config'];
+        $regimes = $validated['regimes'] ?? [];
+        $rows = $validated['rows'] ?? [];
+        $account = Account::find(1);
+        [$n, $metrics] = $this->insightLimitMetrics($symbol, $config, $totals);
+
+        return [
+            'symbol' => $symbol,
+            'account' => $account,
+            'meta' => $meta,
+            'config' => $config,
+            'regimes' => $regimes,
+            'totals' => $totals,
+            'n' => $n,
+            ...$metrics,
+            'failure_rows' => $this->insightFailureRows($rows, $meta),
+        ];
+    }
+
+    /**
+     * @param  array<string, StructuredValue>  $config
+     * @param  array<string, StructuredValue>  $totals
+     * @return array{0: int, 1: InsightMetrics}
+     */
+    private function insightLimitMetrics(ExchangeSymbol $symbol, array $config, array $totals): array
+    {
+        $n = (int) ($config['total_limit_orders'] ?? $symbol->total_limit_orders ?? 4);
+        $multipliers = $this->resolveEffectiveMultipliers(
+            is_string($config['multipliers'] ?? null) ? $config['multipliers'] : null,
+            $symbol->limit_quantity_multipliers ?? null,
+            $n,
+        );
+
+        return [$n, $this->insightMetrics($totals, $multipliers, $n)];
+    }
+
+    /**
+     * @param  array<string, StructuredValue>  $totals
+     * @param  array<int, string|float|int>  $multipliers
+     * @return InsightMetrics
+     */
+    private function insightMetrics(array $totals, array $multipliers, int $n): array
+    {
+        $rungDist = $this->insightRungDistribution($totals);
+        $rungNCount = $this->insightRungCount($rungDist, $n);
+        $totalSims = array_sum($rungDist);
+
+        return [
+            'cumulative' => $this->cumulativeQtyMultipleAtRung($multipliers, $n),
+            'rung_count' => $rungNCount,
+            'total_sims' => $totalSims,
+            'rung_pct' => $totalSims > 0 ? round(($rungNCount / $totalSims) * 100, 2) : 0,
+        ];
+    }
+
+    /**
+     * @param  array<string, StructuredValue>  $totals
+     * @return array<int|string, int|float|numeric-string>
+     */
+    private function insightRungDistribution(array $totals): array
+    {
+        $distribution = $totals['rung_distribution'] ?? [];
+        if (! is_array($distribution)) {
+            return [];
+        }
+
+        return array_filter(
+            $distribution,
+            static fn (mixed $value): bool => is_numeric($value),
+        );
+    }
+
+    /**
+     * @param  array<int|string, int|float|numeric-string>  $distribution
+     */
+    private function insightRungCount(array $distribution, int $n): int|float
+    {
+        $count = $distribution[(string) $n] ?? $distribution[$n] ?? 0;
+
+        return is_string($count) ? (float) $count : $count;
+    }
+
+    /**
+     * @param  array<int, array<string, StructuredValue>>  $rows
+     * @param  array<string, scalar|null>  $meta
+     */
+    private function insightFailureRows(array $rows, array $meta): string|false
+    {
+        if ($rows === []) {
+            return '(no failure rows — every sim resolved as TP or rebound)';
+        }
+
+        return json_encode(
+            $this->compactFailureRows((array) $rows, (string) ($meta['timeframe'] ?? '1d')),
+            JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES,
+        );
+    }
+
+    /**
+     * @param  InsightContext  $context
+     */
+    private function formatInsightUserPrompt(array $context): string
+    {
+        return sprintf(self::INSIGHT_USER_PROMPT, ...$this->insightPromptValues($context));
+    }
+
+    /**
+     * @param  InsightContext  $context
+     * @return array<int, string|float|int|bool|null>
+     */
+    private function insightPromptValues(array $context): array
+    {
+        return array_merge(
+            $this->insightIdentityValues($context),
+            $this->insightAccountValues($context),
+            $this->insightSymbolValues($context),
+            $this->insightResultValues($context),
+        );
+    }
+
+    /**
+     * @param  InsightContext  $context
+     * @return array<int, string|float|int|bool|null>
+     */
+    private function insightIdentityValues(array $context): array
+    {
+        $symbol = $context['symbol'];
+        $meta = $context['meta'];
+
+        return [
             $symbol->parsed_trading_pair,
             $symbol->apiSystem->canonical ?? 'unknown',
             $meta['timeframe'] ?? 'unknown',
             $meta['window_since'] ?? 'full history',
             (int) ($meta['days_to_ignore'] ?? 0),
+        ];
+    }
+
+    /**
+     * @param  InsightContext  $context
+     * @return array<int, string|float|int|bool|null>
+     */
+    private function insightAccountValues(array $context): array
+    {
+        $account = $context['account'];
+        if (! $account instanceof Account) {
+            $account = null;
+        }
+
+        return [
             $account?->total_positions_long ?? 'n/a',
             $account?->total_positions_short ?? 'n/a',
             $account?->position_leverage_long ?? 'n/a',
@@ -803,6 +1453,18 @@ SYS;
             $account?->stop_market_wait_minutes ?? 'n/a',
             $account?->profit_percentage ?? 'n/a',
             $account?->stop_market_initial_percentage ?? 'n/a',
+        ];
+    }
+
+    /**
+     * @param  InsightContext  $context
+     * @return array<int, string|float|int|bool|null>
+     */
+    private function insightSymbolValues(array $context): array
+    {
+        $symbol = $context['symbol'];
+
+        return [
             $symbol->parsed_trading_pair,
             $symbol->apiSystem->canonical ?? 'unknown',
             $symbol->percentage_gap_long ?? 'n/a',
@@ -811,23 +1473,26 @@ SYS;
             is_array($symbol->limit_quantity_multipliers)
                 ? implode(',', $symbol->limit_quantity_multipliers)
                 : ($symbol->limit_quantity_multipliers ?? 'n/a'),
-            json_encode($config, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            $n,
-            $cumulativeQtyAtRungN,
-            $n,
-            $rungNPct,
-            $rungNCount,
-            max(1, $totalSims),
-            json_encode($totals, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            json_encode($regimes, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-            empty($rows)
-                ? '(no failure rows — every sim resolved as TP or rebound)'
-                : json_encode($this->compactFailureRows($rows, (string) ($meta['timeframe'] ?? '1d')), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
-        );
+        ];
+    }
 
+    /**
+     * @param  InsightContext  $context
+     * @return array<int, string|float|int|bool|null>
+     */
+    private function insightResultValues(array $context): array
+    {
         return [
-            ['role' => 'system', 'content' => $system],
-            ['role' => 'user', 'content' => $user],
+            json_encode($context['config'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            $context['n'],
+            $context['cumulative'],
+            $context['n'],
+            $context['rung_pct'],
+            $context['rung_count'],
+            max(1, $context['total_sims']),
+            json_encode($context['totals'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            json_encode($context['regimes'], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES),
+            $context['failure_rows'],
         ];
     }
 
@@ -850,16 +1515,57 @@ SYS;
             return $fromForm;
         }
 
-        $fromSymbol = $symbolStored;
-        if (is_string($fromSymbol) && $fromSymbol !== '') {
-            $decoded = json_decode($fromSymbol, true);
-            $fromSymbol = is_array($decoded) ? $decoded : null;
-        }
+        $fromSymbol = $this->decodeStoredMultipliers(match (true) {
+            is_array($symbolStored) => $symbolStored,
+            is_string($symbolStored) => $symbolStored,
+            default => null,
+        });
         if (is_array($fromSymbol) && $fromSymbol !== []) {
             return array_values($fromSymbol);
         }
 
         return array_fill(0, max(1, $n), '2');
+    }
+
+    /**
+     * @param  array<int|string, scalar|null>|string|null  $symbolStored
+     * @return array<int|string, string|float|int>|null
+     */
+    private function decodeStoredMultipliers(array|string|null $symbolStored): ?array
+    {
+        if (is_array($symbolStored)) {
+            return array_filter(
+                $symbolStored,
+                static fn (mixed $value): bool => is_scalar($value) && ! is_bool($value),
+            );
+        }
+
+        if (! is_string($symbolStored)) {
+            return null;
+        }
+
+        if ($symbolStored === '') {
+            return null;
+        }
+
+        return $this->decodeStoredMultiplierJson($symbolStored);
+    }
+
+    /**
+     * @return array<int|string, string|float|int>|null
+     */
+    private function decodeStoredMultiplierJson(string $symbolStored): ?array
+    {
+        $decoded = json_decode($symbolStored, true);
+
+        if (! is_array($decoded)) {
+            return null;
+        }
+
+        return array_filter(
+            $decoded,
+            static fn (mixed $value): bool => is_scalar($value) && ! is_bool($value),
+        );
     }
 
     /**
@@ -934,70 +1640,117 @@ SYS;
      * backtestable regardless of enable/approval state so the operator can
      * vet a token before promoting it.
      *
-     * @return array<string, array<int, array<string, mixed>>>
+     * @return array<string, array<int, SymbolRow>>
      */
     private function enabledSymbolGroups(): array
     {
-        $immediatelyTradeableIds = ExchangeSymbol::query()
+        $immediatelyTradeableIds = $this->immediatelyTradeableIds();
+        $rows = $this->backtestableSymbolRows();
+        $buckets = $this->groupSymbolRows($rows, $immediatelyTradeableIds);
+
+        return $this->orderSymbolGroups($buckets);
+    }
+
+    /**
+     * @return Collection<int, int>
+     */
+    private function immediatelyTradeableIds(): Collection
+    {
+        return ExchangeSymbol::query()
             ->awaitingBacktestingApproval()
             ->pluck('exchange_symbols.id')
             ->flip();
+    }
 
-        $rows = DB::table('exchange_symbols as es')
+    /**
+     * @return Collection<int, \stdClass>
+     */
+    private function backtestableSymbolRows(): Collection
+    {
+        return DB::table('exchange_symbols as es')
             ->join('symbols as s', 's.id', '=', 'es.symbol_id')
             ->join('api_systems as ap', 'ap.id', '=', 'es.api_system_id')
             ->where('ap.canonical', 'binance')
             ->orderByRaw('UPPER(s.token) ASC')
-            ->get([
-                'es.id',
-                's.token',
-                's.cmc_ranking',
-                's.cmc_category',
-                's.image_url',
-                'es.quote',
-                'ap.canonical as exchange',
-                'es.percentage_gap_long',
-                'es.percentage_gap_short',
-                'es.total_limit_orders',
-                'es.limit_quantity_multipliers',
-                'es.was_backtesting_approved',
-                'es.backtesting_review_status',
-                'es.backtesting_reviewed_at',
-                'es.profit_percentage',
-                'es.stop_market_percentage',
-                'es.direction',
-            ]);
+            ->get($this->backtestableSymbolColumns());
+    }
 
-        // Bucket by quote currency. USDT and USDC come first (operator's primary
-        // pairs), then any remaining quotes alphabetically. Binance-only — other
-        // exchanges' historical candle coverage isn't supported by the
-        // BinanceVision/Rest fetchers.
+    /**
+     * @return array<int, string>
+     */
+    private function backtestableSymbolColumns(): array
+    {
+        return [
+            'es.id',
+            's.token',
+            's.cmc_ranking',
+            's.cmc_category',
+            's.image_url',
+            'es.quote',
+            'ap.canonical as exchange',
+            'es.percentage_gap_long',
+            'es.percentage_gap_short',
+            'es.total_limit_orders',
+            'es.limit_quantity_multipliers',
+            'es.was_backtesting_approved',
+            'es.backtesting_review_status',
+            'es.backtesting_reviewed_at',
+            'es.profit_percentage',
+            'es.stop_market_percentage',
+            'es.direction',
+        ];
+    }
+
+    /**
+     * @param  Collection<int, \stdClass>  $rows
+     * @param  Collection<int, int>  $immediatelyTradeableIds
+     * @return array<string, array<int, array<string, mixed>>>
+     */
+    private function groupSymbolRows(Collection $rows, Collection $immediatelyTradeableIds): array
+    {
         $buckets = [];
         foreach ($rows as $row) {
             $q = mb_strtoupper((string) $row->quote);
-            $buckets[$q][] = [
-                'id' => (int) $row->id,
-                'label' => $row->token,
-                'token' => $row->token,
-                'cmc_ranking' => $row->cmc_ranking !== null ? (int) $row->cmc_ranking : null,
-                'cmc_category' => $row->cmc_category,
-                'image_url' => $row->image_url,
-                'quote' => $row->quote,
-                'exchange' => $row->exchange,
-                'percentage_gap_long' => $row->percentage_gap_long,
-                'percentage_gap_short' => $row->percentage_gap_short,
-                'total_limit_orders' => $row->total_limit_orders,
-                'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
-                'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
-                'backtesting_review_status' => $row->backtesting_review_status,
-                'backtesting_reviewed_at' => $row->backtesting_reviewed_at,
-                'profit_percentage' => $row->profit_percentage,
-                'stop_market_percentage' => $row->stop_market_percentage,
-                'direction' => $row->direction !== null ? mb_strtoupper((string) $row->direction) : null,
-                'is_immediately_tradeable' => $immediatelyTradeableIds->has((int) $row->id),
-            ];
+            $buckets[$q][] = $this->formatSymbolRow($row, $immediatelyTradeableIds);
         }
 
+        return $buckets;
+    }
+
+    /**
+     * @param  Collection<int, int>  $immediatelyTradeableIds
+     * @return SymbolRow
+     */
+    private function formatSymbolRow(\stdClass $row, Collection $immediatelyTradeableIds): array
+    {
+        return [
+            'id' => (int) $row->id,
+            'label' => $row->token, 'token' => $row->token,
+            'cmc_ranking' => $row->cmc_ranking !== null ? (int) $row->cmc_ranking : null,
+            'cmc_category' => $row->cmc_category,
+            'image_url' => $row->image_url,
+            'quote' => $row->quote,
+            'exchange' => $row->exchange,
+            'percentage_gap_long' => $row->percentage_gap_long,
+            'percentage_gap_short' => $row->percentage_gap_short,
+            'total_limit_orders' => $row->total_limit_orders,
+            'limit_quantity_multipliers' => $row->limit_quantity_multipliers,
+            'was_backtesting_approved' => (bool) $row->was_backtesting_approved,
+            'backtesting_review_status' => $row->backtesting_review_status,
+            'backtesting_reviewed_at' => $row->backtesting_reviewed_at,
+            'profit_percentage' => $row->profit_percentage,
+            'stop_market_percentage' => $row->stop_market_percentage,
+            'direction' => $row->direction !== null ? mb_strtoupper((string) $row->direction) : null,
+            'is_immediately_tradeable' => $immediatelyTradeableIds->has((int) $row->id),
+        ];
+    }
+
+    /**
+     * @param  array<string, array<int, SymbolRow>>  $buckets
+     * @return array<string, array<int, SymbolRow>>
+     */
+    private function orderSymbolGroups(array $buckets): array
+    {
         $ordered = [];
         foreach (['USDT', 'USDC'] as $primary) {
             if (! empty($buckets[$primary])) {
@@ -1008,6 +1761,24 @@ SYS;
         ksort($buckets);
 
         return $ordered + $buckets;
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function validatedSince(array $validated): ?string
+    {
+        return is_string($validated['since'] ?? null) ? $validated['since'] : null;
+    }
+
+    /**
+     * @param  ValidatedInput  $validated
+     */
+    private function validatedExplicitMonths(array $validated): int|string|null
+    {
+        $value = $validated['max_months'] ?? null;
+
+        return is_int($value) || is_string($value) ? $value : null;
     }
 
     /**
@@ -1096,6 +1867,9 @@ SYS;
         return empty($raw) ? BacktestTimeframe::values() : $raw;
     }
 
+    /**
+     * @return array<int, string>|null
+     */
     private function parseMultipliers(?string $input): ?array
     {
         if ($input === null || mb_trim($input) === '') {
@@ -1103,21 +1877,28 @@ SYS;
         }
 
         $parts = array_filter(array_map('trim', explode(',', $input)), fn ($v) => $v !== '');
-
-        foreach ($parts as $value) {
-            if (! is_numeric($value) || (float) $value <= 0) {
-                throw new \InvalidArgumentException("Invalid multipliers entry '{$value}'. Must be positive numerics comma-separated.");
-            }
-        }
+        $this->assertValidMultipliers($parts);
 
         return array_values(array_map('strval', $parts));
     }
 
     /**
-     * @param  array<string, mixed>|null  $vision
-     * @param  array<string, mixed>|null  $rest
-     * @param  array<string, mixed>|null  $taapi
-     * @param  array<string, mixed>|null  $coverage
+     * @param  array<int, string>  $parts
+     */
+    private function assertValidMultipliers(array $parts): void
+    {
+        foreach ($parts as $value) {
+            if (! is_numeric($value) || (float) $value <= 0) {
+                throw new \InvalidArgumentException("Invalid multipliers entry '{$value}'. Must be positive numerics comma-separated.");
+            }
+        }
+    }
+
+    /**
+     * @param  VisionReport|null  $vision
+     * @param  RestReport|null  $rest
+     * @param  TaapiReport|null  $taapi
+     * @param  CoverageReport|null  $coverage
      */
     private function formatFetchSummary(
         int $windowMonths,
@@ -1129,80 +1910,154 @@ SYS;
         ?string $taapiError,
         ?array $coverage,
     ): string {
-        $parts = [sprintf('Window: %d months', $windowMonths)];
-
-        if ($vision !== null) {
-            $parts[] = sprintf(
-                'Vision: %d new + %d already-covered months → %d candles%s',
-                $vision['months_downloaded'] ?? 0,
-                $vision['months_already_covered'] ?? 0,
-                $vision['candles_upserted'] ?? 0,
-                ! empty($vision['errors']) ? ' ('.count($vision['errors']).' errors)' : ''
-            );
-        } elseif ($visionError !== null) {
-            $parts[] = 'Vision skipped: '.$visionError;
-        }
-
-        if ($rest !== null) {
-            $forwardInserted = $rest['inserted'] ?? 0;
-            $gaps = $rest['gaps'] ?? null;
-            $gapsFilled = $gaps['gaps_filled'] ?? 0;
-            $gapsInserted = $gaps['inserted'] ?? 0;
-            $totalInserted = $forwardInserted + $gapsInserted;
-
-            if (($rest['skipped'] ?? false) === true && $gapsFilled === 0 && ($gaps['gaps_found'] ?? 0) === 0) {
-                $parts[] = 'Binance REST: already current';
-            } else {
-                $parts[] = sprintf(
-                    'Binance REST: %d candles (%d forward, %d gap-fill across %d gap(s))',
-                    $totalInserted,
-                    $forwardInserted,
-                    $gapsInserted,
-                    $gaps['gaps_found'] ?? 0,
-                );
-            }
-
-            if (! empty($gaps['skipped'] ?? [])) {
-                $parts[] = sprintf('⚠ %d gap(s) still unfilled after Binance REST', count($gaps['skipped']));
-            }
-        } elseif ($restError !== null) {
-            $parts[] = 'Binance REST skipped: '.$restError;
-        }
-
-        if ($taapi !== null) {
-            if (($taapi['skipped'] ?? false) === true) {
-                $parts[] = sprintf('TAAPI: already current (latest %s)', $taapi['latest'] ?? 'n/a');
-            } else {
-                $parts[] = sprintf(
-                    'TAAPI: %d candles (latest %s)',
-                    $taapi['inserted'] ?? 0,
-                    $taapi['latest'] ?? 'n/a'
-                );
-            }
-        } elseif ($taapiError !== null) {
-            $parts[] = 'TAAPI skipped: '.$taapiError;
-        }
-
-        if ($coverage !== null) {
-            $holes = (int) ($coverage['holes_count'] ?? 0);
-            if ($holes > 0) {
-                $parts[] = sprintf(
-                    '⚠ %d hole(s) remain — %s%% contiguity, earliest %s, latest %s',
-                    $holes,
-                    $coverage['contiguity_percent'] ?? 'n/a',
-                    $coverage['earliest'] ?? 'n/a',
-                    $coverage['latest'] ?? 'n/a'
-                );
-            } else {
-                $parts[] = sprintf(
-                    'Coverage: contiguous (%d candles, earliest %s, latest %s)',
-                    $coverage['total_present'] ?? 0,
-                    $coverage['earliest'] ?? 'n/a',
-                    $coverage['latest'] ?? 'n/a'
-                );
-            }
-        }
+        $parts = array_filter([
+            sprintf('Window: %d months', $windowMonths),
+            $this->formatVisionSummary($vision, $visionError),
+            $this->formatRestSummary($rest, $restError),
+            $this->formatTaapiSummary($taapi, $taapiError),
+            $this->formatCoverageSummary($coverage),
+        ], static fn (?string $part): bool => $part !== null);
 
         return empty($parts) ? 'No fetch performed.' : implode(' · ', $parts);
+    }
+
+    /**
+     * @param  VisionReport|null  $vision
+     */
+    private function formatVisionSummary(?array $vision, ?string $error): ?string
+    {
+        if ($vision !== null) {
+            $errors = $vision['errors'] ?? [];
+
+            return sprintf(
+                'Vision: %d new + %d already-covered months → %d candles%s',
+                $this->defaultCount($vision['months_downloaded'] ?? null),
+                $this->defaultCount($vision['months_already_covered'] ?? null),
+                $this->defaultCount($vision['candles_upserted'] ?? null),
+                $errors === [] ? '' : ' ('.count($errors).' errors)',
+            );
+        }
+
+        return $error === null ? null : 'Vision skipped: '.$error;
+    }
+
+    /**
+     * @param  RestReport|null  $rest
+     */
+    private function formatRestSummary(?array $rest, ?string $error): ?string
+    {
+        if ($rest === null) {
+            return $error === null ? null : 'Binance REST skipped: '.$error;
+        }
+
+        $gaps = $rest['gaps'] ?? null;
+        $summary = $this->formatRestCounts($rest, $gaps);
+        $skipped = $this->formatSkippedGaps($gaps);
+
+        return implode(' · ', array_filter([$summary, $skipped], static fn (?string $part): bool => $part !== null));
+    }
+
+    /**
+     * @param  RestReport  $rest
+     * @param  RestGaps|null  $gaps
+     */
+    private function formatRestCounts(array $rest, ?array $gaps): string
+    {
+        $forwardInserted = $this->defaultCount($rest['inserted'] ?? null);
+        $gapsInserted = $this->defaultCount($gaps['inserted'] ?? null);
+        $totalInserted = $forwardInserted + $gapsInserted;
+
+        if ($this->restIsCurrent($rest, $gaps)) {
+            return 'Binance REST: already current';
+        }
+
+        return sprintf(
+            'Binance REST: %d candles (%d forward, %d gap-fill across %d gap(s))',
+            $totalInserted,
+            $forwardInserted,
+            $gapsInserted,
+            $this->defaultCount($gaps['gaps_found'] ?? null),
+        );
+    }
+
+    private function defaultCount(?int $value): int
+    {
+        return $value ?? 0;
+    }
+
+    /**
+     * @param  RestReport  $rest
+     * @param  RestGaps|null  $gaps
+     */
+    private function restIsCurrent(array $rest, ?array $gaps): bool
+    {
+        return ($rest['skipped'] ?? false) === true
+            && $this->defaultCount($gaps['gaps_filled'] ?? null) === 0
+            && $this->defaultCount($gaps['gaps_found'] ?? null) === 0;
+    }
+
+    /**
+     * @param  RestGaps|null  $gaps
+     */
+    private function formatSkippedGaps(?array $gaps): ?string
+    {
+        if (($gaps['skipped'] ?? []) === []) {
+            return null;
+        }
+
+        return sprintf('⚠ %d gap(s) still unfilled after Binance REST', count($gaps['skipped']));
+    }
+
+    /**
+     * @param  TaapiReport|null  $taapi
+     */
+    private function formatTaapiSummary(?array $taapi, ?string $error): ?string
+    {
+        if ($taapi === null) {
+            return $error === null ? null : 'TAAPI skipped: '.$error;
+        }
+
+        if (($taapi['skipped'] ?? false) === true) {
+            return sprintf('TAAPI: already current (latest %s)', $taapi['latest'] ?? 'n/a');
+        }
+
+        return sprintf(
+            'TAAPI: %d candles (latest %s)',
+            $taapi['inserted'] ?? 0,
+            $taapi['latest'] ?? 'n/a',
+        );
+    }
+
+    /**
+     * @param  CoverageReport|null  $coverage
+     */
+    private function formatCoverageSummary(?array $coverage): ?string
+    {
+        if ($coverage === null) {
+            return null;
+        }
+
+        $holes = $this->defaultCount($coverage['holes_count'] ?? null);
+        if ($holes > 0) {
+            return sprintf(
+                '⚠ %d hole(s) remain — %s%% contiguity, earliest %s, latest %s',
+                $holes,
+                $this->coverageText($coverage['contiguity_percent'] ?? null),
+                $this->coverageText($coverage['earliest'] ?? null),
+                $this->coverageText($coverage['latest'] ?? null),
+            );
+        }
+
+        return sprintf(
+            'Coverage: contiguous (%d candles, earliest %s, latest %s)',
+            $this->defaultCount($coverage['total_present'] ?? null),
+            $this->coverageText($coverage['earliest'] ?? null),
+            $this->coverageText($coverage['latest'] ?? null),
+        );
+    }
+
+    private function coverageText(string|float|int|null $value): string
+    {
+        return $value === null ? 'n/a' : (string) $value;
     }
 }

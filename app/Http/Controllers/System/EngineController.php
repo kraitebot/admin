@@ -6,8 +6,10 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use BrunoCFalcao\AiBridge\Chat\ChatManager;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -26,12 +28,44 @@ use Throwable;
  * Failures triage: last two weeks across live + archive tables of both
  * fleets, one row per step class, resolve-all-at-once per class, and a
  * persisted AI verdict per newest occurrence.
+ *
+ * @phpstan-type FailedStepRow object{
+ *     id: int,
+ *     class: string,
+ *     error_message: string|null,
+ *     error_stack_trace: string|null,
+ *     arguments: string|null,
+ *     canonical: string|null,
+ *     queue: string,
+ *     hostname: string|null,
+ *     retries: int,
+ *     created_at: string|null,
+ *     exception_verdict: string|null
+ * }
  */
-class EngineController extends Controller
+final class EngineController extends Controller
 {
     private const FAILED = 'StepDispatcher\\States\\Failed';
 
     private const RESOLVER_COMPLETED = 'StepDispatcher\\States\\Completed';
+
+    private const TRIAGE_SYSTEM_PROMPT = <<<'PROMPT'
+You are the on-call engineer for Kraite, an automated crypto trading
+platform built on a step-dispatcher engine: workflows are trees of steps,
+each step is a queued job with a state machine (Pending → Dispatched →
+Running → Completed/Failed). Failed is terminal for the step; some
+workflows carry a resolve-exception fallback step that can rescue the
+workflow. You are reading ONE failed step.
+
+Return a SHORT verdict (under 150 words, plain text, no markdown headers):
+1. Root cause — what actually broke, in one or two sentences.
+2. Blast radius — what this failure means for the platform (trading
+   impact? data gap? cosmetic?).
+3. Action — the single most useful next step for the operator.
+
+Be concrete and honest. If the evidence is insufficient, say what is
+missing instead of guessing.
+PROMPT;
 
     /** Live steps table per fleet. Archives extend each with `_archive`. */
     private const FLEETS = [
@@ -80,6 +114,12 @@ class EngineController extends Controller
             return response()->json(['ok' => false, 'error' => 'No unresolved failure found for that step class.'], 404);
         }
 
+        return $this->triageOccurrence($occurrence, $chat);
+    }
+
+    /** @param object{table: string, row: FailedStepRow} $occurrence */
+    private function triageOccurrence(object $occurrence, ChatManager $chat): JsonResponse
+    {
         try {
             $verdict = $chat->send(
                 messages: $this->buildTriageMessages($occurrence->row),
@@ -167,60 +207,7 @@ class EngineController extends Controller
             $minuteBuckets = [];
 
             foreach (self::FLEETS as $fleet => $table) {
-                if (! Schema::hasTable($table)) {
-                    // No table = unknown, never "0 pending" — see the guard
-                    // after the loop.
-                    continue;
-                }
-
-                // All timestamp windows compare at the DB level — ingestion
-                // writes these rows in its own timezone, admin runs UTC.
-                $pending = (int) DB::table($table)->where('state', 'StepDispatcher\\States\\Pending')->count();
-
-                // Really-processing = LEAF steps (own child_block_uuid is null,
-                // so this row does work rather than orchestrating a child block)
-                // in the Running state. Parent/orchestrator steps and anything
-                // still waiting are deliberately excluded.
-                $processing = (int) DB::table($table)
-                    ->where('state', 'StepDispatcher\\States\\Running')
-                    ->whereNull('child_block_uuid')
-                    ->count();
-                $created10 = (int) DB::table($table)->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)')->count();
-                $resolved10 = (int) DB::table($table)->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)')->count();
-                $resolved5 = (int) DB::table($table)->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)')->count();
-                $failures = $this->nonRecoveredFailedCount($table);
-
-                // Per-minute completion counts over the trailing hour — the
-                // fleet's demonstrated capacity even when the CURRENT minute
-                // is idle ("low chew because no work" vs "low chew because
-                // sick"). Merged per minute across fleets for the combined
-                // peak so simultaneous bursts add up.
-                $buckets = DB::table($table)
-                    ->selectRaw("DATE_FORMAT(completed_at, '%Y%m%d%H%i') as minute, COUNT(*) as total")
-                    ->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)')
-                    ->groupBy('minute')
-                    ->pluck('total', 'minute');
-
-                $fleets[$fleet] = [
-                    'pending' => $pending,
-                    'processing' => $processing,
-                    'created_10m' => $created10,
-                    'resolved_10m' => $resolved10,
-                    'chew_per_min' => round($resolved5 / 5, 1),
-                    'peak_per_min_1h' => (int) ($buckets->max() ?? 0),
-                    'failures' => $failures,
-                ];
-
-                foreach ($buckets as $minute => $total) {
-                    $minuteBuckets[$minute] = ($minuteBuckets[$minute] ?? 0) + (int) $total;
-                }
-
-                $combined['pending'] += $pending;
-                $combined['processing'] += $processing;
-                $combined['created_10m'] += $created10;
-                $combined['resolved_10m'] += $resolved10;
-                $combined['chew_per_min'] += $fleets[$fleet]['chew_per_min'];
-                $combined['failures'] += $failures;
+                $this->accumulateFleetGauge($fleet, $table, $fleets, $combined, $minuteBuckets);
             }
 
             // Not a single fleet table exists (dev database without the
@@ -238,6 +225,64 @@ class EngineController extends Controller
 
             return ['combined' => $combined, 'fleets' => $fleets];
         });
+    }
+
+    /**
+     * @param  array<string, array<string, int|float>>  $fleets
+     * @param  array<string, int|float>  $combined
+     * @param  array<int|string, int>  $minuteBuckets
+     */
+    private function accumulateFleetGauge(string $fleet, string $table, array &$fleets, array &$combined, array &$minuteBuckets): void
+    {
+        if (! Schema::hasTable($table)) {
+            return;
+        }
+
+        [$fleets[$fleet], $buckets] = $this->fleetGauge($table);
+        foreach ($buckets as $minute => $total) {
+            $minuteBuckets[$minute] = ($minuteBuckets[$minute] ?? 0) + (int) $total;
+        }
+
+        foreach (['pending', 'processing', 'created_10m', 'resolved_10m', 'chew_per_min', 'failures'] as $metric) {
+            $combined[$metric] += $fleets[$fleet][$metric];
+        }
+    }
+
+    /** @return array{array<string, int|float>, Collection<int|string, int|string>} */
+    private function fleetGauge(string $table): array
+    {
+        $pending = (int) DB::table($table)->where('state', 'StepDispatcher\\States\\Pending')->count();
+        $processing = (int) DB::table($table)
+            ->where('state', 'StepDispatcher\\States\\Running')
+            ->whereNull('child_block_uuid')
+            ->count();
+        $created10 = (int) DB::table($table)->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)')->count();
+        $resolved10 = (int) DB::table($table)->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 10 MINUTE)')->count();
+        $resolved5 = (int) DB::table($table)->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)')->count();
+        $failures = $this->nonRecoveredFailedCount($table);
+        $buckets = $this->completionBuckets($table);
+
+        $metrics = [
+            'pending' => $pending,
+            'processing' => $processing,
+            'created_10m' => $created10,
+            'resolved_10m' => $resolved10,
+            'chew_per_min' => round($resolved5 / 5, 1),
+            'peak_per_min_1h' => (int) ($buckets->max() ?? 0),
+            'failures' => $failures,
+        ];
+
+        return [$metrics, $buckets];
+    }
+
+    /** @return Collection<int|string, int|string> */
+    private function completionBuckets(string $table): Collection
+    {
+        return DB::table($table)
+            ->selectRaw("DATE_FORMAT(completed_at, '%Y%m%d%H%i') as minute, COUNT(*) as total")
+            ->whereRaw('completed_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)')
+            ->groupBy('minute')
+            ->pluck('total', 'minute');
     }
 
     /**
@@ -275,25 +320,7 @@ class EngineController extends Controller
     private function failureGroups(): array
     {
         return Cache::remember('system.engine.failures', 15, function (): array {
-            $union = null;
-
-            foreach ($this->stepTables() as $table) {
-                $query = DB::table("{$table} as s")
-                    ->selectRaw('s.class, s.created_at, s.id, ? as source_table', [$table])
-                    ->where('s.state', self::FAILED)
-                    ->where('s.exception_analysed', 0)
-                    ->whereNotNull('s.class')
-                    ->whereRaw('s.created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)')
-                    ->whereNotExists(function ($q) use ($table): void {
-                        $q->select(DB::raw(1))
-                            ->from("{$table} as r")
-                            ->whereColumn('r.workflow_id', 's.workflow_id')
-                            ->where('r.type', 'resolve-exception')
-                            ->where('r.state', self::RESOLVER_COMPLETED);
-                    });
-
-                $union = $union === null ? $query : $union->unionAll($query);
-            }
+            $union = $this->failedStepUnion();
 
             if ($union === null) {
                 return [];
@@ -308,33 +335,62 @@ class EngineController extends Controller
                 ->limit(100)
                 ->get();
 
-            return $groups->map(function ($group): array {
-                $newest = $this->newestOccurrence((string) $group->class);
-
-                return [
-                    'class' => $group->class,
-                    'short_name' => class_basename((string) $group->class),
-                    'occurrences' => (int) $group->occurrences,
-                    'latest_at' => $group->latest_at,
-                    'age' => $this->shortAge((int) $group->age_seconds),
-                    'error_snippet' => $newest ? mb_substr((string) ($newest->row->error_message ?? ''), 0, 220) : null,
-                    'verdict' => $newest?->row->exception_verdict,
-                ];
-            })->values()->all();
+            return $groups->map(fn ($group): array => $this->failureGroupRow($group))->values()->all();
         });
+    }
+
+    private function failedStepUnion(): ?Builder
+    {
+        $union = null;
+        foreach ($this->stepTables() as $table) {
+            $query = DB::table("{$table} as s")
+                ->selectRaw('s.class, s.created_at, s.id, ? as source_table', [$table])
+                ->where('s.state', self::FAILED)
+                ->where('s.exception_analysed', 0)
+                ->whereNotNull('s.class')
+                ->whereRaw('s.created_at >= DATE_SUB(NOW(), INTERVAL 14 DAY)')
+                ->whereNotExists(function ($query) use ($table): void {
+                    $query->select(DB::raw(1))
+                        ->from("{$table} as r")
+                        ->whereColumn('r.workflow_id', 's.workflow_id')
+                        ->where('r.type', 'resolve-exception')
+                        ->where('r.state', self::RESOLVER_COMPLETED);
+                });
+
+            $union = $union === null ? $query : $union->unionAll($query);
+        }
+
+        return $union;
+    }
+
+    /** @return array<string, mixed> */
+    private function failureGroupRow(\stdClass $group): array
+    {
+        $newest = $this->newestOccurrence((string) $group->class);
+
+        return [
+            'class' => $group->class,
+            'short_name' => class_basename((string) $group->class),
+            'occurrences' => (int) $group->occurrences,
+            'latest_at' => $group->latest_at,
+            'age' => $this->shortAge((int) $group->age_seconds),
+            'error_snippet' => $newest ? mb_substr((string) ($newest->row->error_message ?? ''), 0, 220) : null,
+            'verdict' => $newest?->row->exception_verdict,
+        ];
     }
 
     /**
      * The newest unresolved failed occurrence of a class across every step
      * table — the row triage analyses, and the row verdicts stick to.
      *
-     * @return object{table: string, row: object}|null
+     * @return object{table: string, row: FailedStepRow}|null
      */
     private function newestOccurrence(string $class): ?object
     {
         $newest = null;
 
         foreach ($this->stepTables() as $table) {
+            /** @var FailedStepRow|null $row */
             $row = DB::table($table)
                 ->where('class', $class)
                 ->where('state', self::FAILED)
@@ -352,28 +408,11 @@ class EngineController extends Controller
     }
 
     /**
+     * @param  FailedStepRow  $step
      * @return array<int, array{role: string, content: string}>
      */
     private function buildTriageMessages(object $step): array
     {
-        $system = <<<'PROMPT'
-You are the on-call engineer for Kraite, an automated crypto trading
-platform built on a step-dispatcher engine: workflows are trees of steps,
-each step is a queued job with a state machine (Pending → Dispatched →
-Running → Completed/Failed). Failed is terminal for the step; some
-workflows carry a resolve-exception fallback step that can rescue the
-workflow. You are reading ONE failed step.
-
-Return a SHORT verdict (under 150 words, plain text, no markdown headers):
-1. Root cause — what actually broke, in one or two sentences.
-2. Blast radius — what this failure means for the platform (trading
-   impact? data gap? cosmetic?).
-3. Action — the single most useful next step for the operator.
-
-Be concrete and honest. If the evidence is insufficient, say what is
-missing instead of guessing.
-PROMPT;
-
         $context = [
             'step_class' => $step->class,
             'error_message' => mb_substr((string) ($step->error_message ?? ''), 0, 1500),
@@ -387,7 +426,7 @@ PROMPT;
         ];
 
         return [
-            ['role' => 'system', 'content' => $system],
+            ['role' => 'system', 'content' => self::TRIAGE_SYSTEM_PROMPT],
             ['role' => 'user', 'content' => "Diagnose this failed step:\n\n".json_encode($context, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES)],
         ];
     }

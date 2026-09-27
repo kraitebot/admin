@@ -6,6 +6,7 @@ namespace App\Http\Controllers\System;
 
 use App\Http\Controllers\Controller;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -16,7 +17,7 @@ use Kraite\Core\Models\MarketRegimeSnapshot;
 use Kraite\Core\Support\Fleet\FleetMetricsRepository;
 use Kraite\Core\Support\MarketRegime\Bscs;
 
-class DashboardController extends Controller
+final class DashboardController extends Controller
 {
     public function index(): View
     {
@@ -46,15 +47,7 @@ class DashboardController extends Controller
 
         return [
             'kpis' => $this->kpis(),
-            'regime' => $this->section(fn () => $this->regime(), [
-                'score' => null,
-                'band' => null,
-                'is_stale' => true,
-                'posture' => 'No signal yet',
-                'override_reason' => null,
-                'override_until' => null,
-                'sparkline' => [],
-            ]),
+            'regime' => $this->section(fn () => $this->regime(), $this->emptyRegime()),
             'deploy' => $this->deploy($fleet),
             'revenue' => $this->section(fn () => $this->revenue(), [
                 'mrr' => null,
@@ -65,6 +58,20 @@ class DashboardController extends Controller
             'venues' => $this->section(fn () => $this->venues(), []),
             'incidents' => $this->section(fn () => $this->incidents(), []),
             'fleet' => $fleet,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function emptyRegime(): array
+    {
+        return [
+            'score' => null,
+            'band' => null,
+            'is_stale' => true,
+            'posture' => 'No signal yet',
+            'override_reason' => null,
+            'override_until' => null,
+            'sparkline' => [],
         ];
     }
 
@@ -160,6 +167,25 @@ class DashboardController extends Controller
             ->groupBy('api_systems.name', 'exchange_symbols.direction')
             ->get();
 
+        $exchanges = $this->groupTradeableExchanges($rows);
+
+        $longs = array_sum(array_column($exchanges, 'longs'));
+        $shorts = array_sum(array_column($exchanges, 'shorts'));
+
+        return [
+            'total' => $longs + $shorts,
+            'longs' => $longs,
+            'shorts' => $shorts,
+            'exchanges' => array_values($exchanges),
+        ];
+    }
+
+    /**
+     * @param  Collection<int, ExchangeSymbol>  $rows
+     * @return array<string, array{name: string, mono: string, longs: int, shorts: int}>
+     */
+    private function groupTradeableExchanges(Collection $rows): array
+    {
         $monograms = ['Binance' => 'B', 'Bybit' => 'BY', 'KuCoin' => 'KU', 'BitGet' => 'BG'];
         $exchanges = [];
         foreach ($rows as $row) {
@@ -172,15 +198,7 @@ class DashboardController extends Controller
             }
         }
 
-        $longs = array_sum(array_column($exchanges, 'longs'));
-        $shorts = array_sum(array_column($exchanges, 'shorts'));
-
-        return [
-            'total' => $longs + $shorts,
-            'longs' => $longs,
-            'shorts' => $shorts,
-            'exchanges' => array_values($exchanges),
-        ];
+        return $exchanges;
     }
 
     /**
@@ -223,10 +241,10 @@ class DashboardController extends Controller
      */
     private function capitalKpi(): array
     {
-        $aum = $this->balanceSumAt(null);
-        $dayAgo = $this->balanceSumAt('DATE_SUB(NOW(), INTERVAL 24 HOUR)');
+        $aum = $this->balanceSumAt(false);
+        $dayAgo = $this->balanceSumAt(true);
 
-        $deltaPct = ($dayAgo !== null && $dayAgo > 0 && $aum !== null)
+        $deltaPct = $dayAgo > 0
             ? round((($aum - $dayAgo) / $dayAgo) * 100, 1)
             : null;
 
@@ -242,11 +260,11 @@ class DashboardController extends Controller
         ];
     }
 
-    private function balanceSumAt(?string $atSqlExpression): ?float
+    private function balanceSumAt(bool $previousDay): float
     {
         $latestIds = DB::table('account_balance_history')
             ->select(DB::raw('MAX(id)'))
-            ->when($atSqlExpression !== null, fn ($q) => $q->whereRaw("created_at <= {$atSqlExpression}"))
+            ->when($previousDay, fn ($q) => $q->whereRaw('created_at <= DATE_SUB(NOW(), INTERVAL 24 HOUR)'))
             ->groupBy('account_id');
 
         $sum = DB::table('account_balance_history as abh')
@@ -256,7 +274,7 @@ class DashboardController extends Controller
             ->whereIn('abh.id', $latestIds)
             ->sum('abh.total_wallet_balance');
 
-        return $sum === null ? null : (float) $sum;
+        return (float) $sum;
     }
 
     /**
@@ -279,28 +297,39 @@ class DashboardController extends Controller
             'score' => $index->score(),
             'band' => $band,
             'is_stale' => $index->isStale(),
-            'posture' => match ($band) {
-                'calm' => 'No posture change',
-                'elevated' => 'Monitoring — no auto action',
-                'fragile' => 'Margin slice reduced on new opens',
-                'critical' => 'New opens blocked',
-                default => 'No signal yet',
-            },
+            'posture' => $this->regimePosture($band),
             'override_reason' => $override['reason'],
             'override_until' => $override['until'],
-            'sparkline' => MarketRegimeSnapshot::query()
-                ->orderByDesc('computed_at')
-                ->limit(30)
-                ->get(['computed_at', 'bscs_score', 'bscs_band'])
-                ->map(fn ($s) => [
-                    't' => $s->computed_at?->toIso8601String(),
-                    'score' => (int) $s->bscs_score,
-                    'band' => $s->bscs_band,
-                ])
-                ->reverse()
-                ->values()
-                ->all(),
+            'sparkline' => $this->regimeSparkline(),
         ];
+    }
+
+    private function regimePosture(?string $band): string
+    {
+        return match ($band) {
+            'calm' => 'No posture change',
+            'elevated' => 'Monitoring — no auto action',
+            'fragile' => 'Margin slice reduced on new opens',
+            'critical' => 'New opens blocked',
+            default => 'No signal yet',
+        };
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function regimeSparkline(): array
+    {
+        return MarketRegimeSnapshot::query()
+            ->orderByDesc('computed_at')
+            ->limit(30)
+            ->get(['computed_at', 'bscs_score', 'bscs_band'])
+            ->map(fn ($snapshot) => [
+                't' => $snapshot->computed_at?->toIso8601String(),
+                'score' => (int) $snapshot->bscs_score,
+                'band' => $snapshot->bscs_band,
+            ])
+            ->reverse()
+            ->values()
+            ->all();
     }
 
     /**
@@ -350,34 +379,47 @@ class DashboardController extends Controller
         ));
 
         if ($reporting === []) {
-            return [
-                'version' => null,
-                'reporting' => 0,
-                'on_latest' => 0,
-                'lagging' => [],
-                'in_sync' => null,
-            ];
+            return $this->emptyDeploy();
         }
 
         $versions = array_unique(array_map(static fn (array $r): string => (string) $r['version'], $reporting));
         usort($versions, static fn (string $a, string $b): int => version_compare(ltrim($b, 'v'), ltrim($a, 'v')));
-        $latest = $versions[0];
-
         $lagging = array_values(array_filter(
             $reporting,
-            static fn (array $r): bool => $r['version'] !== $latest,
+            static fn (array $r): bool => $r['version'] !== $versions[0],
         ));
 
         return [
-            'version' => $latest,
+            'version' => $versions[0],
             'reporting' => count($reporting),
             'on_latest' => count($reporting) - count($lagging),
-            'lagging' => array_map(static fn (array $r): array => [
-                'hostname' => $r['hostname'],
-                'version' => $r['version'],
-            ], $lagging),
+            'lagging' => $this->laggingFleetRows($lagging),
             'in_sync' => count($versions) === 1,
         ];
+    }
+
+    /** @return array<string, mixed> */
+    private function emptyDeploy(): array
+    {
+        return [
+            'version' => null,
+            'reporting' => 0,
+            'on_latest' => 0,
+            'lagging' => [],
+            'in_sync' => null,
+        ];
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $lagging
+     * @return array<int, array{hostname: mixed, version: mixed}>
+     */
+    private function laggingFleetRows(array $lagging): array
+    {
+        return array_map(static fn (array $row): array => [
+            'hostname' => $row['hostname'],
+            'version' => $row['version'],
+        ], $lagging);
     }
 
     /**
@@ -401,7 +443,7 @@ class DashboardController extends Controller
                 ->where('type', 'credit_topup')
                 ->where('created_at', '>=', now()->startOfDay())
                 ->selectRaw('COALESCE(SUM(amount_usdt), 0) as total, COUNT(*) as payments')
-                ->first();
+                ->firstOrFail();
 
             return [
                 'mrr' => round($mrr, 2),
@@ -423,73 +465,111 @@ class DashboardController extends Controller
      */
     private function venues(): array
     {
-        return Cache::remember('system.dashboard.venues', 30, function (): array {
-            $exchanges = DB::table('api_systems')
-                ->where('is_exchange', true)
-                ->orderBy('id')
-                ->get(['id', 'name', 'canonical']);
+        return Cache::remember('system.dashboard.venues', 30, fn (): array => $this->buildVenues());
+    }
 
-            $stats = DB::table('api_request_logs')
-                ->selectRaw('api_system_id, COUNT(*) as total, SUM(http_response_code >= 400) as errors, ROUND(AVG(duration)) as avg_ms')
-                ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)')
-                ->whereNotNull('completed_at')
-                ->groupBy('api_system_id')
-                ->get()
-                ->keyBy('api_system_id');
+    /**
+     * @return array<int, array{name: string, mono: string, status: string, latency_ms: int|null, error_pct: float|null, accounts: int, spark: array<int, int>}>
+     */
+    private function buildVenues(): array
+    {
+        $exchanges = DB::table('api_systems')
+            ->where('is_exchange', true)
+            ->orderBy('id')
+            ->get(['id', 'name', 'canonical']);
 
-            // Latency trend = the last 12 completed calls per venue, in call
-            // order. Time-bucketed averages read as crashes-to-zero on venues
-            // whose cron cadence leaves most buckets empty.
-            $sparkRows = DB::table('api_request_logs')
-                ->select('api_system_id', 'duration', DB::raw('ROW_NUMBER() OVER (PARTITION BY api_system_id ORDER BY id DESC) as rn'))
-                ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)')
-                ->whereNotNull('completed_at');
+        $stats = $this->venueStats();
+        $sparks = $this->venueSparks();
+        $accounts = $this->venueAccountCounts();
+        $monograms = ['binance' => 'B', 'bybit' => 'BY', 'kucoin' => 'KU', 'bitget' => 'BG'];
 
-            $sparks = DB::query()
-                ->fromSub($sparkRows, 'recent')
-                ->where('rn', '<=', 12)
-                ->orderBy('api_system_id')
-                ->orderByDesc('rn')
-                ->get()
-                ->groupBy('api_system_id');
+        return $exchanges->map(
+            fn (\stdClass $exchange): array => $this->formatVenue($exchange, $stats, $sparks, $accounts, $monograms),
+        )->values()->all();
+    }
 
-            $accounts = DB::table('accounts')
-                ->where('is_active', true)
-                ->whereNull('deleted_at')
-                ->select('api_system_id', DB::raw('COUNT(*) as total'))
-                ->groupBy('api_system_id')
-                ->get()
-                ->keyBy('api_system_id');
+    /** @return Collection<int|string, \stdClass> */
+    private function venueStats(): Collection
+    {
+        return DB::table('api_request_logs')
+            ->selectRaw('api_system_id, COUNT(*) as total, SUM(http_response_code >= 400) as errors, ROUND(AVG(duration)) as avg_ms')
+            ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 60 MINUTE)')
+            ->whereNotNull('completed_at')
+            ->groupBy('api_system_id')
+            ->get()
+            ->keyBy('api_system_id');
+    }
 
-            $monograms = ['binance' => 'B', 'bybit' => 'BY', 'kucoin' => 'KU', 'bitget' => 'BG'];
+    /** @return Collection<int|string, Collection<int, \stdClass>> */
+    private function venueSparks(): Collection
+    {
+        // Latency trend = the last 12 completed calls per venue, in call
+        // order. Time-bucketed averages read as crashes-to-zero on venues
+        // whose cron cadence leaves most buckets empty.
+        $sparkRows = DB::table('api_request_logs')
+            ->select('api_system_id', 'duration', DB::raw('ROW_NUMBER() OVER (PARTITION BY api_system_id ORDER BY id DESC) as rn'))
+            ->whereRaw('created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)')
+            ->whereNotNull('completed_at');
 
-            return $exchanges->map(function ($exchange) use ($stats, $sparks, $accounts, $monograms): array {
-                $stat = $stats->get($exchange->id);
-                $total = (int) ($stat->total ?? 0);
-                $errors = (int) ($stat->errors ?? 0);
-                $errorPct = $total > 0 ? round(($errors / $total) * 100, 2) : null;
+        return DB::query()
+            ->fromSub($sparkRows, 'recent')
+            ->where('rn', '<=', 12)
+            ->orderBy('api_system_id')
+            ->orderByDesc('rn')
+            ->get()
+            ->groupBy('api_system_id');
+    }
 
-                $spark = ($sparks->get($exchange->id) ?? collect())
-                    ->map(fn ($row): int => (int) $row->duration)
-                    ->values()
-                    ->all();
+    /** @return Collection<int|string, \stdClass> */
+    private function venueAccountCounts(): Collection
+    {
+        return DB::table('accounts')
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->select('api_system_id', DB::raw('COUNT(*) as total'))
+            ->groupBy('api_system_id')
+            ->get()
+            ->keyBy('api_system_id');
+    }
 
-                return [
-                    'name' => $exchange->name,
-                    'mono' => $monograms[$exchange->canonical] ?? strtoupper(substr($exchange->name, 0, 2)),
-                    'status' => match (true) {
-                        $total === 0 => 'idle',
-                        $errorPct >= 50 => 'down',
-                        $errorPct >= 5 => 'degraded',
-                        default => 'operational',
-                    },
-                    'latency_ms' => $total > 0 ? (int) $stat->avg_ms : null,
-                    'error_pct' => $errorPct,
-                    'accounts' => (int) ($accounts->get($exchange->id)->total ?? 0),
-                    'spark' => $spark,
-                ];
-            })->values()->all();
-        });
+    /**
+     * @param  Collection<int|string, \stdClass>  $stats
+     * @param  Collection<int|string, Collection<int, \stdClass>>  $sparks
+     * @param  Collection<int|string, \stdClass>  $accounts
+     * @param  array<string, string>  $monograms
+     * @return array{name: string, mono: string, status: string, latency_ms: int|null, error_pct: float|null, accounts: int, spark: array<int, int>}
+     */
+    private function formatVenue(\stdClass $exchange, Collection $stats, Collection $sparks, Collection $accounts, array $monograms): array
+    {
+        $stat = $stats->get($exchange->id);
+        $total = (int) ($stat->total ?? 0);
+        $errors = (int) ($stat->errors ?? 0);
+        $errorPct = $total > 0 ? round(($errors / $total) * 100, 2) : null;
+
+        $spark = ($sparks->get($exchange->id) ?? collect())
+            ->map(fn (\stdClass $row): int => (int) $row->duration)
+            ->values()
+            ->all();
+
+        return [
+            'name' => $exchange->name,
+            'mono' => $monograms[$exchange->canonical] ?? strtoupper(substr($exchange->name, 0, 2)),
+            'status' => $this->venueStatus($total, $errorPct),
+            'latency_ms' => $stat !== null ? (int) $stat->avg_ms : null,
+            'error_pct' => $errorPct,
+            'accounts' => (int) ($accounts->get($exchange->id)->total ?? 0),
+            'spark' => $spark,
+        ];
+    }
+
+    private function venueStatus(int $total, ?float $errorPct): string
+    {
+        return match (true) {
+            $total === 0 => 'idle',
+            $errorPct >= 50 => 'down',
+            $errorPct >= 5 => 'degraded',
+            default => 'operational',
+        };
     }
 
     /**
@@ -591,13 +671,36 @@ class DashboardController extends Controller
      */
     private function serverMetrics(): array
     {
+        $cpuPercent = $this->cpuPercent();
+        $memory = $this->memoryMetrics();
+        $disk = $this->diskMetrics();
+
+        return [
+            'hostname' => gethostname() ?: null,
+            'cpu_percent' => $cpuPercent,
+            'ram_used_mb' => $memory['ram_used_mb'],
+            'ram_total_mb' => $memory['ram_total_mb'],
+            'hdd_used_gb' => $disk['hdd_used_gb'],
+            'hdd_total_gb' => $disk['hdd_total_gb'],
+        ];
+    }
+
+    private function cpuPercent(): ?float
+    {
         // CPU: 1-minute load average over the real logical-core count.
         $load = function_exists('sys_getloadavg') ? (sys_getloadavg()[0] ?? null) : null;
         $cores = $this->cpuCores();
-        $cpuPercent = ($load !== null && $cores !== null && $cores > 0)
-            ? min(round(((float) $load / $cores) * 100, 1), 100)
-            : null;
 
+        if ($load === null || $cores === null || $cores <= 0) {
+            return null;
+        }
+
+        return min(round(((float) $load / $cores) * 100, 1), 100);
+    }
+
+    /** @return array{ram_used_mb: int|null, ram_total_mb: int|null} */
+    private function memoryMetrics(): array
+    {
         // RAM: parse /proc/meminfo (Linux only — used = Total − Available).
         $ramTotalMb = null;
         $ramUsedMb = null;
@@ -612,6 +715,15 @@ class DashboardController extends Controller
             $ramUsedMb = (int) round(max($totalKb - $availKb, 0) / 1024);
         }
 
+        return [
+            'ram_used_mb' => $ramUsedMb,
+            'ram_total_mb' => $ramTotalMb,
+        ];
+    }
+
+    /** @return array{hdd_used_gb: float|null, hdd_total_gb: float|null} */
+    private function diskMetrics(): array
+    {
         // HDD: disk space (works cross-platform).
         $total = @disk_total_space('/');
         $free = @disk_free_space('/');
@@ -621,10 +733,6 @@ class DashboardController extends Controller
             : null;
 
         return [
-            'hostname' => gethostname() ?: null,
-            'cpu_percent' => $cpuPercent,
-            'ram_used_mb' => $ramUsedMb,
-            'ram_total_mb' => $ramTotalMb,
             'hdd_used_gb' => $hddUsedGb,
             'hdd_total_gb' => $hddTotalGb,
         ];

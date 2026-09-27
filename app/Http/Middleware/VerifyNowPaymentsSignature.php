@@ -36,8 +36,14 @@ final class VerifyNowPaymentsSignature
             abort(401, 'Missing NOWPayments signature.');
         }
 
-        $body = $request->getContent();
-        $data = json_decode($body, associative: true);
+        $this->assertSignature($request, $signature, $secret);
+
+        return $next($request);
+    }
+
+    private function assertSignature(Request $request, string $signature, string $secret): void
+    {
+        $data = json_decode($request->getContent(), associative: true);
 
         if (! is_array($data)) {
             abort(400, 'Invalid NOWPayments payload.');
@@ -62,8 +68,6 @@ final class VerifyNowPaymentsSignature
 
             abort(401, 'Invalid NOWPayments signature.');
         }
-
-        return $next($request);
     }
 
     /**

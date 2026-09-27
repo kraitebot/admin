@@ -7,7 +7,7 @@ namespace App\Http\Requests\Api\V1;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 
-class ProjectionsRequest extends FormRequest
+final class ProjectionsRequest extends FormRequest
 {
     public function authorize(): bool
     {

@@ -8,7 +8,7 @@ use App\Http\Controllers\Controller;
 use Illuminate\View\View;
 use Kraite\Core\Models\Server;
 
-class InfraController extends Controller
+final class InfraController extends Controller
 {
     /**
      * Infrastructure surface — the server layer beneath the fleet: the

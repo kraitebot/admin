@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
-class SqlQueryController extends Controller
+final class SqlQueryController extends Controller
 {
     public function index(): View
     {

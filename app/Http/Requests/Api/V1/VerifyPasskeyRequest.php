@@ -4,14 +4,10 @@ declare(strict_types=1);
 
 namespace App\Http\Requests\Api\V1;
 
-use App\Http\Requests\Api\V1\Concerns\ParsesPasskeyCredential;
 use Illuminate\Contracts\Validation\ValidationRule;
-use Illuminate\Foundation\Http\FormRequest;
 
-class VerifyPasskeyRequest extends FormRequest
+final class VerifyPasskeyRequest extends PasskeyCredentialRequest
 {
-    use ParsesPasskeyCredential;
-
     /**
      * Determine if the user is authorized to make this request.
      */

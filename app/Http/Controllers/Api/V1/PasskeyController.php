@@ -24,7 +24,7 @@ use Laravel\Passkeys\Support\WebAuthn;
 use Webauthn\PublicKeyCredentialCreationOptions;
 use Webauthn\PublicKeyCredentialRequestOptions;
 
-class PasskeyController extends Controller
+final class PasskeyController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
@@ -85,15 +85,7 @@ class PasskeyController extends Controller
             $options,
         );
 
-        return response()->json([
-            'data' => [
-                'id' => (int) $passkey->id,
-                'name' => $passkey->name,
-                'authenticator' => $passkey->authenticator,
-                'last_used_at' => null,
-                'created_at' => $passkey->created_at?->toIso8601String(),
-            ],
-        ], 201);
+        return $this->storedPasskeyResponse($passkey);
     }
 
     public function destroy(Request $request, Passkey $passkey, DeletePasskey $delete): JsonResponse
@@ -143,5 +135,18 @@ class PasskeyController extends Controller
             $passkey->user,
             $request->string('device_name')->trim()->toString() ?: 'Kraite iPhone',
         ));
+    }
+
+    private function storedPasskeyResponse(Passkey $passkey): JsonResponse
+    {
+        return response()->json([
+            'data' => [
+                'id' => (int) $passkey->id,
+                'name' => $passkey->name,
+                'authenticator' => $passkey->authenticator,
+                'last_used_at' => null,
+                'created_at' => $passkey->created_at?->toIso8601String(),
+            ],
+        ], 201);
     }
 }

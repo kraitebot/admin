@@ -2,16 +2,22 @@
 
 declare(strict_types=1);
 
-namespace App\Http\Requests\Api\V1\Concerns;
+namespace App\Http\Requests\Api\V1;
 
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\ValidationException;
 use Laravel\Passkeys\Support\WebAuthn;
 use Throwable;
 use Webauthn\PublicKeyCredential;
 
-trait ParsesPasskeyCredential
+abstract class PasskeyCredentialRequest extends FormRequest
 {
     private PublicKeyCredential $passkeyCredential;
+
+    public function credential(): PublicKeyCredential
+    {
+        return $this->passkeyCredential;
+    }
 
     protected function passedValidation(): void
     {
@@ -25,10 +31,5 @@ trait ParsesPasskeyCredential
                 'credential' => ['Invalid passkey response.'],
             ]);
         }
-    }
-
-    public function credential(): PublicKeyCredential
-    {
-        return $this->passkeyCredential;
     }
 }

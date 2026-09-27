@@ -1,0 +1,20 @@
+includes:
+    - vendor/larastan/larastan/extension.neon
+    - vendor/pestphp/pest-plugin-phpstan/extension.neon
+    - phpstan-baseline.neon
+
+parameters:
+    level: 8
+    scanFiles:
+        - vendor/squizlabs/php_codesniffer/src/Standards/Generic/Sniffs/Files/LineLengthSniff.php
+    paths:
+        - app
+        - bootstrap/app.php
+        - bootstrap/providers.php
+        - config
+        - database
+        - phpinsights.php
+        - public/index.php
+        - routes
+        - scripts
+        - tests

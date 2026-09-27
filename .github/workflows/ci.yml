@@ -101,5 +101,8 @@ jobs:
           DB_USERNAME: root
           DB_PASSWORD: password
 
+      - name: Run PHP quality gate
+        run: composer quality:php
+
       - name: Run tests
         run: php artisan test

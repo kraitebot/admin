@@ -15,7 +15,7 @@ use Kraite\Core\Support\Financial\AccountFinancials;
 use Kraite\Core\Support\Financial\FleetFinancials;
 use Kraite\Core\Support\Financial\Window;
 
-class ProjectionsController extends Controller
+final class ProjectionsController extends Controller
 {
     public function __invoke(
         ProjectionsRequest $request,
@@ -25,22 +25,14 @@ class ProjectionsController extends Controller
         $now = CarbonImmutable::now();
         $accounts = $this->accountsFor($request->user()->id);
         $accountId = isset($validated['account_id']) ? (int) $validated['account_id'] : null;
-        $selected = $accountId !== null
-            ? $accounts->firstWhere('id', $accountId)
-            : $accounts->first();
-
-        if ($accountId !== null && ! $selected) {
-            abort(404);
-        }
+        $selected = $this->selectedAccount($accounts, $accountId);
 
         $year = (int) ($validated['year'] ?? $now->year);
         $month = (int) ($validated['month'] ?? $now->month);
 
         return response()->json([
             'data' => [
-                'accounts' => $accounts
-                    ->map(fn (Account $account): array => $this->serializeAccount($account))
-                    ->values(),
+                'accounts' => $accounts->map($this->serializeAccount(...))->values(),
                 'selected_account_id' => $selected?->id,
                 'calendar' => $selected
                     ? $this->calendarFor($selected, $year, $month, $now)
@@ -60,6 +52,22 @@ class ProjectionsController extends Controller
             ->where('user_id', $userId)
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @param  Collection<int, Account>  $accounts
+     */
+    private function selectedAccount(Collection $accounts, ?int $accountId): ?Account
+    {
+        $selected = $accountId !== null
+            ? $accounts->firstWhere('id', $accountId)
+            : $accounts->first();
+
+        if ($accountId !== null && ! $selected) {
+            abort(404);
+        }
+
+        return $selected;
     }
 
     /**
@@ -93,8 +101,7 @@ class ProjectionsController extends Controller
         // Midday, not midnight: a trader west of UTC would see 00:00 on the
         // 1st shifted back into the previous month, and the whole calendar
         // would silently render the wrong month.
-        $monthAnchor = CarbonImmutable::create($year, $month, 1, 12);
-        $monthWindow = Window::thisMonth($monthAnchor, $dayBasis);
+        $monthWindow = Window::thisMonth(CarbonImmutable::create($year, $month, 1, 12), $dayBasis);
 
         $investmentBasis = $financials->investmentBasis();
 
@@ -102,27 +109,42 @@ class ProjectionsController extends Controller
             'account_id' => $account->id,
             'year' => $year,
             'month' => $month,
-            'actuals' => collect($financials->dailyRevenues($monthWindow))
-                ->map(fn (string $value): string => number_format((float) $value, 4, '.', ''))
-                ->all(),
+            'actuals' => $this->actualsFor($financials, $monthWindow),
             'current_wallet' => $investmentBasis['current_wallet'],
             'month_start_wallet' => $financials->startWallet($monthWindow),
             'realized_roi_pct' => $financials->realizedRoiPct($monthWindow),
             'scenarios' => $this->normalizeScenarios(
                 $financials->scenarios(Window::thisMonth($now, $dayBasis)),
             ),
-            'investment_basis' => [
-                'amount' => $this->normalizeMoney($investmentBasis['amount']),
-                'known_realized_pnl' => $this->normalizeMoney($investmentBasis['known_realized_pnl']),
-                'tracking_started_at' => $investmentBasis['tracking_started_at'],
-                'tracking_ended_at' => $investmentBasis['tracking_ended_at'],
-                'closed_positions' => $investmentBasis['closed_positions'],
-                'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
-                'is_complete' => $investmentBasis['is_complete'],
-            ],
+            'investment_basis' => $this->normalizeInvestmentBasis($investmentBasis),
             'today' => $dayBasis->dateOf($now),
             'utc_offset_minutes' => $dayBasis->offsetMinutes,
             'day_basis_label' => $dayBasis->label(),
+        ];
+    }
+
+    /** @return array<string, numeric-string> */
+    private function actualsFor(AccountFinancials $financials, Window $monthWindow): array
+    {
+        return collect($financials->dailyRevenues($monthWindow))
+            ->map(fn (string $value): string => number_format((float) $value, 4, '.', ''))
+            ->all();
+    }
+
+    /**
+     * @param  array{amount: ?string, current_wallet: ?string, known_realized_pnl: string, tracking_started_at: ?string, tracking_ended_at: ?string, closed_positions: int, missing_pnl_positions: int, is_complete: bool}  $investmentBasis
+     * @return array{amount: ?string, known_realized_pnl: ?string, tracking_started_at: ?string, tracking_ended_at: ?string, closed_positions: int, missing_pnl_positions: int, is_complete: bool}
+     */
+    private function normalizeInvestmentBasis(array $investmentBasis): array
+    {
+        return [
+            'amount' => $this->normalizeMoney($investmentBasis['amount']),
+            'known_realized_pnl' => $this->normalizeMoney($investmentBasis['known_realized_pnl']),
+            'tracking_started_at' => $investmentBasis['tracking_started_at'],
+            'tracking_ended_at' => $investmentBasis['tracking_ended_at'],
+            'closed_positions' => $investmentBasis['closed_positions'],
+            'missing_pnl_positions' => $investmentBasis['missing_pnl_positions'],
+            'is_complete' => $investmentBasis['is_complete'],
         ];
     }
 

@@ -39,15 +39,7 @@ final class SettingsController extends Controller
 
         return view('system.settings', [
             'engine' => $engine,
-            'effective' => [
-                'can_trade' => $canTrade,
-                'notifications_enabled' => Kraite::notificationsEnabled(),
-                'td_correlation_type' => Kraite::correlationType(),
-                'corr_enabled' => Kraite::correlationComputationEnabled(),
-                'elast_enabled' => Kraite::elasticityComputationEnabled(),
-                'trail_retention_hours' => Kraite::trailRetentionHours(),
-                'bscs_cooldown_hours' => (int) ($bscs->cooldownHours() ?? 12),
-            ],
+            'effective' => $this->effectiveSettings($canTrade, (int) ($bscs->cooldownHours() ?? 12)),
             'bscsBlocksOpens' => $bscsBlocksOpens,
             'newOpensAllowed' => $canTrade
                 && (bool) $engine->allow_opening_positions
@@ -64,37 +56,52 @@ final class SettingsController extends Controller
 
     public function update(UpdateSettingsRequest $request): RedirectResponse
     {
-        $validated = $request->validated();
-
-        DB::transaction(function () use ($request, $validated): void {
-            $engine = Kraite::query()->lockForUpdate()->findOrFail(1);
-            $before = $this->settingsSnapshot($engine);
-
-            $engine->forceFill($validated);
-            $after = $this->settingsSnapshot($engine);
-
-            if ($before === $after) {
-                return;
-            }
-
-            $engine->save();
-
-            $engine->modelLog(
-                eventType: 'runtime_settings_updated',
-                metadata: [
-                    'actor_id' => $request->user()?->getAuthIdentifier(),
-                    'actor_name' => $request->user()?->name,
-                    'before' => $before,
-                    'after' => $after,
-                ],
-                relatable: $request->user(),
-                message: 'Runtime settings updated from the sysadmin console.',
-            );
+        DB::transaction(function () use ($request): void {
+            $this->persistSettings($request);
         });
 
         return redirect()
             ->route('system.settings')
             ->with('status', 'Runtime settings saved.');
+    }
+
+    /** @return array<string, bool|int|string|null> */
+    private function effectiveSettings(bool $canTrade, int $cooldownHours): array
+    {
+        return [
+            'can_trade' => $canTrade,
+            'notifications_enabled' => Kraite::notificationsEnabled(),
+            'td_correlation_type' => Kraite::correlationType(),
+            'corr_enabled' => Kraite::correlationComputationEnabled(),
+            'elast_enabled' => Kraite::elasticityComputationEnabled(),
+            'trail_retention_hours' => Kraite::trailRetentionHours(),
+            'bscs_cooldown_hours' => $cooldownHours,
+        ];
+    }
+
+    private function persistSettings(UpdateSettingsRequest $request): void
+    {
+        $engine = Kraite::query()->lockForUpdate()->findOrFail(1);
+        $before = $this->settingsSnapshot($engine);
+        $engine->forceFill($request->validated());
+        $after = $this->settingsSnapshot($engine);
+
+        if ($before === $after) {
+            return;
+        }
+
+        $engine->save();
+        $engine->modelLog(
+            eventType: 'runtime_settings_updated',
+            metadata: [
+                'actor_id' => $request->user()?->getAuthIdentifier(),
+                'actor_name' => $request->user()?->name,
+                'before' => $before,
+                'after' => $after,
+            ],
+            relatable: $request->user(),
+            message: 'Runtime settings updated from the sysadmin console.',
+        );
     }
 
     /**

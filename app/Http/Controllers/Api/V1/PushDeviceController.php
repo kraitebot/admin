@@ -15,36 +15,7 @@ final class PushDeviceController extends Controller
 {
     public function store(StorePushDeviceRequest $request): JsonResponse
     {
-        $validated = $request->validated();
-        $token = (string) $validated['expo_push_token'];
-        $tokenHash = hash('sha256', $token);
-
-        $device = DB::transaction(function () use ($request, $validated, $token, $tokenHash): AppPushDevice {
-            $device = AppPushDevice::query()
-                ->where('token_hash', $tokenHash)
-                ->lockForUpdate()
-                ->first() ?? new AppPushDevice(['token_hash' => $tokenHash]);
-            $userId = (int) $request->user()->id;
-            $unreadCount = NotificationLog::query()
-                ->where('user_id', $userId)
-                ->where('channel', 'app')
-                ->whereNull('opened_at')
-                ->count();
-
-            $device->fill([
-                'user_id' => $userId,
-                'expo_push_token' => $token,
-                'platform' => 'ios',
-                'device_name' => trim((string) $validated['device_name']),
-                'app_version' => isset($validated['app_version']) ? trim((string) $validated['app_version']) : null,
-                'unread_count' => $unreadCount,
-                'last_registered_at' => now(),
-                'disabled_at' => null,
-            ]);
-            $device->save();
-
-            return $device;
-        });
+        $device = DB::transaction(fn (): AppPushDevice => $this->registerDevice($request));
 
         return response()->json([
             'data' => [
@@ -52,5 +23,46 @@ final class PushDeviceController extends Controller
                 'device_id' => $device->id,
             ],
         ]);
+    }
+
+    private function registerDevice(StorePushDeviceRequest $request): AppPushDevice
+    {
+        $validated = $request->validated();
+        $token = (string) $validated['expo_push_token'];
+        $device = $this->deviceFor($token);
+        $userId = (int) $request->user()->id;
+
+        $device->fill([
+            'user_id' => $userId,
+            'expo_push_token' => $token,
+            'platform' => 'ios',
+            'device_name' => trim((string) $validated['device_name']),
+            'app_version' => isset($validated['app_version']) ? trim((string) $validated['app_version']) : null,
+            'unread_count' => $this->unreadCountFor($userId),
+            'last_registered_at' => now(),
+            'disabled_at' => null,
+        ]);
+        $device->save();
+
+        return $device;
+    }
+
+    private function deviceFor(string $token): AppPushDevice
+    {
+        $tokenHash = hash('sha256', $token);
+
+        return AppPushDevice::query()
+            ->where('token_hash', $tokenHash)
+            ->lockForUpdate()
+            ->first() ?? new AppPushDevice(['token_hash' => $tokenHash]);
+    }
+
+    private function unreadCountFor(int $userId): int
+    {
+        return NotificationLog::query()
+            ->where('user_id', $userId)
+            ->where('channel', 'app')
+            ->whereNull('opened_at')
+            ->count();
     }
 }

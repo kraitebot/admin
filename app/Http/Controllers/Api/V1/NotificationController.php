@@ -30,18 +30,9 @@ final class NotificationController extends Controller
 
     public function __invoke(NotificationHistoryRequest $request): JsonResponse
     {
-        $history = NotificationLog::query()
-            ->where('user_id', (int) $request->user()->id)
-            ->where('channel', 'app');
+        $history = $this->historyFor((int) $request->user()->id);
         $unreadCount = (clone $history)->whereNull('opened_at')->count();
-        $pendingNotification = $unreadCount === 1
-            ? (clone $history)
-                ->whereNull('opened_at')
-                ->select(self::NOTIFICATION_COLUMNS)
-                ->orderByDesc('sent_at')
-                ->orderByDesc('id')
-                ->first()
-            : null;
+        $pendingNotification = $this->pendingNotificationFor($history, $unreadCount);
         $notifications = $history
             ->select(self::NOTIFICATION_COLUMNS)
             ->orderByDesc('sent_at')
@@ -65,37 +56,61 @@ final class NotificationController extends Controller
         $eventIds = array_values($request->validated('event_ids'));
         $userId = (int) $request->user()->id;
 
-        $unreadCount = DB::transaction(function () use ($eventIds, $userId): int {
-            NotificationLog::query()
-                ->where('user_id', $userId)
-                ->where('channel', 'app')
-                ->whereNull('opened_at')
-                ->where(function (Builder $query) use ($eventIds): void {
-                    foreach ($eventIds as $eventId) {
-                        $query->orWhere('content_dump->id', $eventId);
-                    }
-                })
-                ->update(['opened_at' => now()]);
-
-            $count = NotificationLog::query()
-                ->where('user_id', $userId)
-                ->where('channel', 'app')
-                ->whereNull('opened_at')
-                ->count();
-
-            AppPushDevice::query()
-                ->active()
-                ->where('user_id', $userId)
-                ->update(['unread_count' => $count]);
-
-            return $count;
-        });
+        $unreadCount = DB::transaction(fn (): int => $this->markReadAndSync($eventIds, $userId));
 
         return response()->json([
             'data' => [
                 'unread_count' => $unreadCount,
             ],
         ]);
+    }
+
+    /** @return Builder<NotificationLog> */
+    private function historyFor(int $userId): Builder
+    {
+        return NotificationLog::query()
+            ->where('user_id', $userId)
+            ->where('channel', 'app');
+    }
+
+    /** @param Builder<NotificationLog> $history */
+    private function pendingNotificationFor(Builder $history, int $unreadCount): ?NotificationLog
+    {
+        return $unreadCount === 1
+            ? (clone $history)
+                ->whereNull('opened_at')
+                ->select(self::NOTIFICATION_COLUMNS)
+                ->orderByDesc('sent_at')
+                ->orderByDesc('id')
+                ->first()
+            : null;
+    }
+
+    /** @param list<string> $eventIds */
+    private function markReadAndSync(array $eventIds, int $userId): int
+    {
+        $this->markMatchingNotificationsRead($eventIds, $userId);
+        $count = $this->historyFor($userId)->whereNull('opened_at')->count();
+
+        AppPushDevice::query()
+            ->active()
+            ->where('user_id', $userId)
+            ->update(['unread_count' => $count]);
+
+        return $count;
+    }
+
+    /** @param list<string> $eventIds */
+    private function markMatchingNotificationsRead(array $eventIds, int $userId): void
+    {
+        $this->historyFor($userId)
+            ->whereNull('opened_at')
+            ->where(function (Builder $query) use ($eventIds): void {
+                foreach ($eventIds as $eventId) {
+                    $query->orWhere('content_dump->id', $eventId);
+                }
+            })
+            ->update(['opened_at' => now()]);
     }
 
     /**

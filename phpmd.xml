@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ruleset name="Project complexity" xmlns="http://pmd.sf.net/ruleset/1.0.0">
+    <description>Fail when a maintained PHP method exceeds cyclomatic complexity 10.</description>
+    <rule ref="rulesets/codesize.xml/CyclomaticComplexity">
+        <properties>
+            <property name="reportLevel" value="10" />
+        </properties>
+    </rule>
+</ruleset>

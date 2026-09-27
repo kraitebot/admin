@@ -7,7 +7,7 @@ namespace App\Services;
 use App\Models\User;
 use Illuminate\Auth\Access\AuthorizationException;
 
-class MobileTokenIssuer
+final class MobileTokenIssuer
 {
     /** @return array{token: string, token_type: string, expires_at: string, passkeys_enabled: bool, user: array{id: int, name: string, email: string}} */
     public function issue(User $user, string $deviceName): array

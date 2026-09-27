@@ -12,7 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 use Kraite\Core\Models\AppPushDevice;
 
-class AuthController extends Controller
+final class AuthController extends Controller
 {
     public function store(LoginRequest $request, MobileTokenIssuer $tokens): JsonResponse
     {

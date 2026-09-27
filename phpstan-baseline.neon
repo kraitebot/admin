@@ -1,0 +1,2029 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$allow_other_orders\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$allow_other_positions\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$disabled_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$disabled_reason\.$#'
+			identifier: property.notFound
+			count: 5
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$open_positions_count\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$override_sl\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$override_tp\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$profit_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$stop_market_initial_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_long\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_short\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Database\\Eloquent\\Builder\:\:opened\(\)\.$#'
+			identifier: method.notFound
+			count: 3
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ApiSystem\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 6
+			path: app/Http/Controllers/Accounts/AccountController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrderPair\(\) has parameter \$db with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrderPair\(\) has parameter \$exch with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrderPair\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrphanOrders\(\) has parameter \$exchangeOrders with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrphanOrders\(\) has parameter \$matched with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildOrphanOrders\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:buildPair\(\) has parameter \$exchPos with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:closeReason\(\) has parameter \$p with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:computePnl\(\) has parameter \$p with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:computePnl\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:computePnlProjections\(\) has parameter \$dbPos with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:computePnlProjections\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:computeWeightedAvgEntry\(\) has parameter \$dbPos with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:countStatuses\(\) has parameter \$orders with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:countStatuses\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:dbOrderData\(\) has parameter \$order with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:dbOrderData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:dbPositionData\(\) has parameter \$pos with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:dbPositionData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:entryPrice\(\) has parameter \$position with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:exchangeOrderData\(\) has parameter \$order with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:exchangeOrderData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:exchangePositionData\(\) has parameter \$pos with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:exchangePositionData\(\) has parameter \$symbolConfig with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:exchangePositionData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:inferOrderDirection\(\) has parameter \$order with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:mapClosedRow\(\) has parameter \$p with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:mapDetail\(\) has parameter \$p with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:mapOpenRow\(\) has parameter \$p with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:normalizeDirection\(\) has parameter \$pos with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:valuesEqual\(\) has parameter \$a with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\Accounts\\PositionsController\:\:valuesEqual\(\) has parameter \$b with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bcadd expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bcsub expects numeric\-string, non\-empty\-string given\.$#'
+			identifier: argument.type
+			count: 4
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Parameter \#2 \$num2 of function bcmul expects numeric\-string, non\-empty\-string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Parameter \#2 \$num2 of function bcsub expects numeric\-string, non\-empty\-string given\.$#'
+			identifier: argument.type
+			count: 4
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 5
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>price" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>symbol" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>token" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ApiSystem\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ExchangeSymbol\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Accounts/PositionsController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/V1/AuthController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/V1/DashboardController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/Api/V1/DashboardController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: app/Http/Controllers/Api/V1/NotificationController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Support\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/NotificationController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$closed_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$closing_price\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$leverage\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$long_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$losses\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$margin\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$opened_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$opening_price\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$pnl\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$position_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$quantity\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$realized_pnl\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$short_count\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$was_fast_traded\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$wins\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$expression of method Illuminate\\Database\\Eloquent\\Builder\<Kraite\\Core\\Models\\Position\>\:\:selectRaw\(\) expects literal\-string, non\-falsy\-string given\.$#'
+			identifier: argument.type
+			count: 3
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bccomp expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bcmul expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bcsub expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#2 \$num2 of function bcmul expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Parameter \#2 \$num2 of function bcsub expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>long_count" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>losses" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>position_count" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>short_count" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>wins" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ExchangeSymbol\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/Api/V1/PositionsController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/V1/ProjectionsController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/Api/V1/ProjectionsController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Api/V1/PushDeviceController.php
+
+		-
+			message: '#^Parameter \#1 \$value of function collect expects Illuminate\\Contracts\\Support\\Arrayable\<\(int\|string\), mixed\>\|iterable\<\(int\|string\), mixed\>\|null, Illuminate\\Routing\\RouteCollectionInterface given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Auth/AuthenticatedSessionController.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Auth/AuthenticatedSessionController.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: app/Http/Controllers/Auth/AuthenticatedSessionController.php
+
+		-
+			message: '#^Cannot access property \$email on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/ConfirmablePasswordController.php
+
+		-
+			message: '#^Cannot access property \$is_admin on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/ConfirmablePasswordController.php
+
+		-
+			message: '#^Cannot access property \$is_admin on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/EmailVerificationNotificationController.php
+
+		-
+			message: '#^Cannot call method hasVerifiedEmail\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/EmailVerificationNotificationController.php
+
+		-
+			message: '#^Cannot call method sendEmailVerificationNotification\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/EmailVerificationNotificationController.php
+
+		-
+			message: '#^Cannot access property \$is_admin on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/EmailVerificationPromptController.php
+
+		-
+			message: '#^Cannot call method hasVerifiedEmail\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/EmailVerificationPromptController.php
+
+		-
+			message: '#^Cannot call method update\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/PasswordController.php
+
+		-
+			message: '#^Cannot access property \$is_admin on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/VerifyEmailController.php
+
+		-
+			message: '#^Cannot call method hasVerifiedEmail\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/VerifyEmailController.php
+
+		-
+			message: '#^Cannot call method markEmailAsVerified\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/Auth/VerifyEmailController.php
+
+		-
+			message: '#^Parameter \#1 \$user of class Illuminate\\Auth\\Events\\Verified constructor expects Illuminate\\Contracts\\Auth\\MustVerifyEmail, App\\Models\\User\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/Auth/VerifyEmailController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/BillingController.php
+
+		-
+			message: '#^Cannot access property \$name on Kraite\\Core\\Models\\Subscription\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/BillingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>display_name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/BillingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>monthly_rate_usdt" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 5
+			path: app/Http/Controllers/BillingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>top_up_minimum_when_covered_usdt" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/BillingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_override_reason\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/BscsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_override_until\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/BscsController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Support\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/BscsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$disabled_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$closed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$exchange_symbol_id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$first_profit_price\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$leverage\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$opening_price\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 3
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$num of function bcround expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bccomp expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$value of static method Illuminate\\Database\\Connection\:\:raw\(\) expects float\|int\|literal\-string, non\-falsy\-string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>allow_opening_positions" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>image_url" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>parsed_trading_pair" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>token" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ExchangeSymbol\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/DashboardController.php
+
+		-
+			message: '#^Parameter \#1 \$user of method App\\Http\\Controllers\\NowPaymentsWebhookController\:\:notifyTopupConfirmed\(\) expects Kraite\\Core\\Models\\User, Kraite\\Core\\Models\\User\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/NowPaymentsWebhookController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>monthly_rate_usdt" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/NowPaymentsWebhookController.php
+
+		-
+			message: '#^Cannot access property \$basis_hint_country on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot access property \$email_verified_at on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot access property \$utc_offset_minutes on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot call method delete\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot call method fill\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot call method isDirty\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Cannot call method save\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 2
+			path: app/Http/Controllers/ProfileController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/ProjectionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>name" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/ProjectionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$profit_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$stop_market_initial_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$stop_market_wait_minutes\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_long\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_short\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$backtesting_review_status\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$backtesting_reviewed_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$profit_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$stop_market_percentage\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$was_backtesting_approved\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Support\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>margin_percentage_long" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>margin_percentage_short" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>position_leverage_long" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>position_leverage_short" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>profit_percentage" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>response" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>stop_market_initial_percentage" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 2
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>stop_market_wait_minutes" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>total_positions_long" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>total_positions_short" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Variable \$parts in empty\(\) always exists and is not falsy\.$#'
+			identifier: empty.variable
+			count: 1
+			path: app/Http/Controllers/System/BacktrackingController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\CommandsController\:\:getCommandList\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/CommandsController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\CommandsController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/System/CommandsController.php
+
+		-
+			message: '#^Offset 3 on array\{non\-falsy\-string, non\-empty\-string, non\-empty\-string, string, non\-empty\-string\} in isset\(\) always exists and is not nullable\.$#'
+			identifier: isset.offset
+			count: 1
+			path: app/Http/Controllers/System/CommandsController.php
+
+		-
+			message: '#^Parameter \#1 \$value of function count expects array\|Countable, list\<string\>\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/System/CommandsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$exchange\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\ExchangeSymbol\:\:\$total\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_override_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_override_until\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\DashboardController\:\:slowQueries\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Illuminate\\Support\\Carbon\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/DashboardController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lifecycle\\ScenarioFrameEvent\:\:\$event_data\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Access to an undefined property App\\Models\\Lifecycle\\ScenarioToken\:\:\$frozen_config\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), Kraite\\Core\\Models\\ExchangeSymbol\>\|Kraite\\Core\\Models\\ExchangeSymbol\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Access to an undefined property Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), Kraite\\Core\\Models\\ExchangeSymbol\>\|Kraite\\Core\\Models\\ExchangeSymbol\:\:\$token\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\LifecycleController\:\:availableAccounts\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\LifecycleController\:\:availableTokens\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\LifecycleController\:\:freezeConfig\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\LifecycleController\:\:serialiseScenario\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Parameter \#1 \$callback of method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Lifecycle\\ScenarioToken\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: argument.unresolvableType
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Parameter \#1 \$symbol of method App\\Http\\Controllers\\System\\LifecycleController\:\:freezeConfig\(\) expects Kraite\\Core\\Models\\ExchangeSymbol, Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), Kraite\\Core\\Models\\ExchangeSymbol\>\|Kraite\\Core\\Models\\ExchangeSymbol given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Database\\Eloquent\\Collection\<int,App\\Models\\Lifecycle\\ScenarioToken\>\:\:map\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:all\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Return type of call to method Illuminate\\Support\\Collection\<int,array\<string, mixed\>\>\:\:values\(\) contains unresolvable type\.$#'
+			identifier: method.unresolvableReturnType
+			count: 1
+			path: app/Http/Controllers/System/LifecycleController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$created_at\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$first_profit_price\.$#'
+			identifier: property.notFound
+			count: 2
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$parsed_trading_pair\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Position\:\:\$quantity\.$#'
+			identifier: property.notFound
+			count: 1
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>leverage_brackets" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Using nullsafe property access on non\-nullable type Kraite\\Core\\Models\\ExchangeSymbol\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 5
+			path: app/Http/Controllers/System/PositionsController.php
+
+		-
+			message: '#^Parameter \#1 \$array \(list\) of array_values is already a list, call has no effect\.$#'
+			identifier: arrayValues.list
+			count: 1
+			path: app/Http/Controllers/System/SqlQueryController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\StepDispatcherController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/System/StepDispatcherController.php
+
+		-
+			message: '#^Method App\\Http\\Controllers\\System\\UiComponentsController\:\:index\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: app/Http/Controllers/System/UiComponentsController.php
+
+		-
+			message: '#^Cannot access property \$id on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: app/Http/Requests/ProfileUpdateRequest.php
+
+		-
+			message: '#^Using nullsafe property access "\?\-\>aggregate" on left side of \?\? is unnecessary\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 1
+			path: app/Services/ReadOnlySqlBrowser.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bccomp expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 2
+			path: app/Services/YearlyProjectionPlanner.php
+
+		-
+			message: '#^Parameter \#1 \$num1 of function bcsub expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/YearlyProjectionPlanner.php
+
+		-
+			message: '#^Parameter \#2 \$num2 of function bcsub expects numeric\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: app/Services/YearlyProjectionPlanner.php
+
+		-
+			message: '#^Parameter \#1 \$string of function rtrim expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/filesystems.php
+
+		-
+			message: '#^Parameter \#1 \$title of static method Illuminate\\Support\\Str\:\:slug\(\) expects string, bool\|string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: config/horizon.php
+
+		-
+			message: '#^Parameter \#2 \$view of static method Illuminate\\Routing\\Router\:\:view\(\) expects view\-string, string given\.$#'
+			identifier: argument.type
+			count: 1
+			path: routes/web.php
+
+		-
+			message: '#^Function phpmdViolations\(\) has parameter \$report with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: scripts/php-quality-gate.php
+
+		-
+			message: '#^Function phpmdViolations\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: scripts/php-quality-gate.php
+
+		-
+			message: '#^Function readQualityJson\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: scripts/php-quality-gate.php
+
+		-
+			message: '#^Parameter \#2 \$string of function explode expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/AccountPositionsAlignmentTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$disabled_reason\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Cannot access property \$can_trade on Kraite\\Core\\Models\\Account\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Cannot access property \$name on Kraite\\Core\\Models\\Account\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on DOMNameSpaceNode\|DOMNode\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Cannot call method item\(\) on DOMNodeList\<DOMNameSpaceNode\|DOMNode\>\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Function validAccountConfigurationPayload\(\) has parameter \$overrides with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<DOMNameSpaceNode\|DOMNode\|null\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<true\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/AccountsConnectivityTest.php
+
+		-
+			message: '#^Function seedSyncedAccount\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/AccountsPositionsSyncTest.php
+
+		-
+			message: '#^Parameter \#1 \$user of method Illuminate\\Foundation\\Testing\\TestCase\:\:actingAs\(\) expects Illuminate\\Contracts\\Auth\\Authenticatable, App\\Models\\User\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\User\> given\.$#'
+			identifier: argument.type
+			count: 7
+			path: tests/Feature/AccountsPositionsSyncTest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/AccountsPositionsSyncTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/AccountsPositionsSyncTest.php
+
+		-
+			message: '#^Offset ''BTC'' might not exist on non\-empty\-array\{BTC\?\: int, ETH\?\: int\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Api/MobileApiTest.php
+
+		-
+			message: '#^Offset ''ETH'' might not exist on non\-empty\-array\{BTC\?\: int, ETH\?\: int\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Api/MobileApiTest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/Api/MobileApiTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/Api/MobileApiTest.php
+
+		-
+			message: '#^Cannot access property \$disabled_at on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/Api/MobileNotificationsApiTest.php
+
+		-
+			message: '#^Cannot access property \$user_id on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/Api/MobileNotificationsApiTest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/Api/MobilePositionsApiTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/Api/MobilePositionsApiTest.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function substr_count expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/Auth/DevelopmentLoginQuickPickTest.php
+
+		-
+			message: '#^Cannot call method hasVerifiedEmail\(\) on App\\Models\\User\|null\.$#'
+			identifier: method.nonObject
+			count: 3
+			path: tests/Feature/Auth/EmailVerificationTest.php
+
+		-
+			message: '#^Call to an undefined method Illuminate\\Testing\\TestResponse\:\:getSession\(\)\.$#'
+			identifier: method.notFound
+			count: 2
+			path: tests/Feature/Auth/PasswordResetTest.php
+
+		-
+			message: '#^Cannot access property \$name on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Feature/Auth/PasswordResetTest.php
+
+		-
+			message: '#^Cannot access property \$password on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 6
+			path: tests/Feature/Auth/PasswordResetTest.php
+
+		-
+			message: '#^Function makeUserWithToken\(\) has parameter \$overrides with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/Auth/PasswordResetTest.php
+
+		-
+			message: '#^Calling toBeNull\(\) on Expectation\<string\>; assertion is impossible\.$#'
+			identifier: pest.expectation.impossible
+			count: 1
+			path: tests/Feature/Auth/RegistrationHandoffTest.php
+
+		-
+			message: '#^Cannot access property \$remember_token on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Feature/Auth/RegistrationHandoffTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$nowpayments_api_key\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/BillingSubscriptionTest.php
+
+		-
+			message: '#^Cannot access property \$active_account_id on Kraite\\Core\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/BillingSubscriptionTest.php
+
+		-
+			message: '#^Cannot access property \$subscription_id on Kraite\\Core\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/BillingSubscriptionTest.php
+
+		-
+			message: '#^Function makeBillingUser\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/BillingSubscriptionTest.php
+
+		-
+			message: '#^Parameter \#1 \$directory of class RecursiveDirectoryIterator constructor expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/BscsBoundaryArchitectureTest.php
+
+		-
+			message: '#^Cannot access property \$length on DOMNodeList\<DOMNameSpaceNode\|DOMNode\>\|false\.$#'
+			identifier: property.nonObject
+			count: 6
+			path: tests/Feature/ConsoleDomainTest.php
+
+		-
+			message: '#^Cannot call method getAttribute\(\) on DOMNameSpaceNode\|DOMNode\|null\.$#'
+			identifier: method.nonObject
+			count: 5
+			path: tests/Feature/ConsoleDomainTest.php
+
+		-
+			message: '#^Cannot call method item\(\) on DOMNodeList\<DOMNameSpaceNode\|DOMNode\>\|false\.$#'
+			identifier: method.nonObject
+			count: 4
+			path: tests/Feature/ConsoleDomainTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<DOMNameSpaceNode\|DOMNode\|null\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 4
+			path: tests/Feature/ConsoleDomainTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<mixed\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/ConsoleDomainTest.php
+
+		-
+			message: '#^Offset ''active'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/DashboardActivityFeedTest.php
+
+		-
+			message: '#^Offset ''pnl'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 2
+			path: tests/Feature/DashboardActivityFeedTest.php
+
+		-
+			message: '#^Offset ''symbol'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/DashboardActivityFeedTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_long\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/DashboardBscsHelpTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$total_positions_short\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/DashboardBscsHelpTest.php
+
+		-
+			message: '#^Function buildConnectivityServers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/DashboardConnectivityTest.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function strpos expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/DashboardLastClosedPositionTest.php
+
+		-
+			message: '#^Parameter \#1 \$string of function substr expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/DashboardLastClosedPositionTest.php
+
+		-
+			message: '#^Cannot access property \$basis_hint_country on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Cannot access property \$utc_offset_minutes on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function strpos expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Parameter \#1 \$string of function substr expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<mixed\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function expect$#'
+			identifier: argument.templateType
+			count: 3
+			path: tests/Feature/DayBasisLocationHintFlowTest.php
+
+		-
+			message: '#^Cannot access property \$countryCode on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$countryName on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$currentLabel on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$last_seen_country on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$suggestedLabel on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$suggestedOffsetMinutes on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot call method remember\(\) on Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\|null\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Parameter \#1 \$user of static method Kraite\\Core\\Support\\Financial\\DayBasisLocationHint\:\:for\(\) expects object, App\\Models\\User\|null given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function expect$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/DayBasisLocationHintTest.php
+
+		-
+			message: '#^Cannot access property \$arguments on StepDispatcher\\Models\\Step\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/EnsureBacktestCandleCoverageStepTest.php
+
+		-
+			message: '#^Cannot access property \$child_block_uuid on StepDispatcher\\Models\\Step\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/EnsureBacktestCandleCoverageStepTest.php
+
+		-
+			message: '#^Offset ''ready'' might not exist on array\{spawned\: false, ready\: true, reason\: null, coverage\: array\<string, mixed\>, verified_at\: string\}\|array\{spawned\: true, child_block_uuid\: string\|null, pre_fetch_coverage\: array\<string, mixed\>\}\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/EnsureBacktestCandleCoverageStepTest.php
+
+		-
+			message: '#^Offset ''cpu'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 2
+			path: tests/Feature/Fleet/FleetMetricsRepositoryTest.php
+
+		-
+			message: '#^Offset ''recently_rebooted'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Fleet/FleetMetricsRepositoryTest.php
+
+		-
+			message: '#^Offset ''status'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 3
+			path: tests/Feature/Fleet/FleetMetricsRepositoryTest.php
+
+		-
+			message: '#^Offset ''type'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Fleet/FleetMetricsRepositoryTest.php
+
+		-
+			message: '#^Offset ''units'' might not exist on array\<string, mixed\>\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/Fleet/FleetMetricsRepositoryTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$incomes_synced_from\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/IncomeLedgerDailyPnlTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$nowpayments_ipn_secret\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Call to an undefined method Pest\\PendingCalls\\TestCall\|Pest\\Support\\HigherOrderTapProxy\:\:withHeader\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Cannot access property \$credited_amount on Kraite\\Core\\Models\\Payment\|null\.$#'
+			identifier: property.nonObject
+			count: 7
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Cannot access property \$nowpayments_payment_id on Kraite\\Core\\Models\\Payment\|null\.$#'
+			identifier: property.nonObject
+			count: 3
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Cannot access property \$outcome_amount on Kraite\\Core\\Models\\Payment\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Cannot access property \$status on Kraite\\Core\\Models\\Payment\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Cannot access property \$wallet_balance_usdt on Kraite\\Core\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 10
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Function postNowPaymentsWebhook\(\) return type with generic class Illuminate\\Testing\\TestResponse does not specify its types\: TResponse$#'
+			identifier: missingType.generics
+			count: 1
+			path: tests/Feature/NowPaymentsWebhookTest.php
+
+		-
+			message: '#^Function seedProjectionAccount\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/ProjectionsTest.php
+
+		-
+			message: '#^Parameter \#1 \$account of class Kraite\\Core\\Support\\Financial\\AccountFinancials constructor expects Kraite\\Core\\Models\\Account, Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), Kraite\\Core\\Models\\Account\>\|Kraite\\Core\\Models\\Account given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/ProjectionsTest.php
+
+		-
+			message: '#^Parameter \#1 \$user of method Illuminate\\Foundation\\Testing\\TestCase\:\:actingAs\(\) expects Illuminate\\Contracts\\Auth\\Authenticatable, App\\Models\\User\|Illuminate\\Database\\Eloquent\\Collection\<\(int\|string\), App\\Models\\User\> given\.$#'
+			identifier: argument.type
+			count: 17
+			path: tests/Feature/ProjectionsTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Commands\\Cronjobs\\SyncAccountIncomesCommand\:\:\$calls\.$#'
+			identifier: property.notFound
+			count: 5
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Account\:\:\$incomes_synced_from\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Cannot access property \$income on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Cannot access property \$income_type on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Cannot access property \$occurred_at on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Function fakeIncomeSync\(\) has parameter \$pages with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Function incomeRecord\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Function syncIncomes\(\) should return Kraite\\Core\\Models\\Account but returns Kraite\\Core\\Models\\Account\|null\.$#'
+			identifier: return.type
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Method Kraite\\Core\\Commands\\Cronjobs\\SyncAccountIncomesCommand@anonymous/tests/Feature/SyncAccountIncomesTest\.php\:54\:\:__construct\(\) has parameter \$pages with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function expect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/SyncAccountIncomesTest.php
+
+		-
+			message: '#^Cannot access property \$backtesting_review_status on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SystemBacktestingTest.php
+
+		-
+			message: '#^Cannot access property \$backtesting_reviewed_at on stdClass\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SystemBacktestingTest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/SystemBacktestingTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/SystemBacktestingTest.php
+
+		-
+			message: '#^Function seedRedAccount\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/SystemPositionsTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_block_threshold\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_cooldown_hours\.$#'
+			identifier: property.notFound
+			count: 2
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Access to an undefined property Kraite\\Core\\Models\\Kraite\:\:\$bscs_freshness_max_seconds\.$#'
+			identifier: property.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Function settingsAdmin\(\) has parameter \$attributes with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Offset ''actor_id'' might not exist on array\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Offset ''actor_name'' might not exist on array\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Offset ''after'' might not exist on array\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Offset ''before'' might not exist on array\|null\.$#'
+			identifier: offsetAccess.notFound
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<int\|null\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<mixed\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 1
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Unable to resolve the template type TAndValue in call to method Pest\\Expectation\<null\>\:\:and\(\)$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/SystemSettingsTest.php
+
+		-
+			message: '#^Cannot access property \$nodeName on DOMNameSpaceNode\|DOMNode\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/SystemSqlQueryTest.php
+
+		-
+			message: '#^Cannot call method item\(\) on DOMNodeList\<DOMNameSpaceNode\|DOMNode\>\|false\.$#'
+			identifier: method.nonObject
+			count: 1
+			path: tests/Feature/SystemSqlQueryTest.php
+
+		-
+			message: '#^Parameter \#1 \$haystack of function substr_count expects string, string\|false given\.$#'
+			identifier: argument.type
+			count: 1
+			path: tests/Feature/SystemStepDispatcherCacheTest.php
+
+		-
+			message: '#^Cannot access property \$utc_offset_minutes on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 2
+			path: tests/Feature/TraderDayBasisProductTest.php
+
+		-
+			message: '#^Function kpisForAccount\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Feature/TraderDayBasisProductTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function expect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/TraderDayBasisProductTest.php
+
+		-
+			message: '#^Cannot access property \$name on App\\Models\\User\|null\.$#'
+			identifier: property.nonObject
+			count: 1
+			path: tests/Feature/TraderRoleBoundaryTest.php
+
+		-
+			message: '#^Parameter \#1 \$value of function collect expects Illuminate\\Contracts\\Support\\Arrayable\<\(int\|string\), mixed\>\|iterable\<\(int\|string\), mixed\>\|null, Illuminate\\Routing\\RouteCollectionInterface given\.$#'
+			identifier: argument.type
+			count: 2
+			path: tests/Feature/TraderRoleBoundaryTest.php
+
+		-
+			message: '#^Unable to resolve the template type TKey in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/TraderRoleBoundaryTest.php
+
+		-
+			message: '#^Unable to resolve the template type TValue in call to function collect$#'
+			identifier: argument.templateType
+			count: 2
+			path: tests/Feature/TraderRoleBoundaryTest.php
+
+		-
+			message: '#^Function something\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/Pest.php
+
+		-
+			message: '#^Method Tests\\TestCase\:\:migrateFreshUsing\(\) has no return type specified\.$#'
+			identifier: missingType.return
+			count: 1
+			path: tests/TestCase.php
+
+		-
+			message: '#^Function amplitudeCandles\(\) has parameter \$rows with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/Unit/BacktestDailyAmplitudeTest.php
+
+		-
+			message: '#^Function amplitudeCandles\(\) return type with generic class Illuminate\\Support\\Collection does not specify its types\: TKey, TValue$#'
+			identifier: missingType.generics
+			count: 1
+			path: tests/Unit/BacktestDailyAmplitudeTest.php
+
+		-
+			message: '#^Calling toBeTrue\(\) on Expectation\<true\>; assertion is redundant\.$#'
+			identifier: pest.expectation.redundant
+			count: 1
+			path: tests/Unit/ExampleTest.php
+
+		-
+			message: '#^Class Kraite\\Core\\Jobs\\Lifecycles\\Account\\TestServerConnectivityStep not found\.$#'
+			identifier: class.notFound
+			count: 1
+			path: tests/e2e/fixtures/registration-user.php

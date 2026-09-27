@@ -9,25 +9,26 @@ use App\Http\Requests\Api\V1\PositionsRequest;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Pagination\CursorPaginator;
 use Kraite\Core\Models\Account;
 use Kraite\Core\Models\Position;
 
-class PositionsController extends Controller
+final class PositionsController extends Controller
 {
     private const PAGE_SIZE = 20;
+
+    private const POSITION_COLUMNS = [
+        'id', 'account_id', 'exchange_symbol_id', 'parsed_trading_pair',
+        'direction', 'leverage', 'opened_at', 'closed_at', 'opening_price',
+        'closing_price', 'margin', 'quantity', 'pnl', 'was_waped', 'was_fast_traded',
+    ];
 
     public function __invoke(PositionsRequest $request): JsonResponse
     {
         $validated = $request->validated();
         $accounts = $this->accountsFor($request->user()->id);
         $accountId = isset($validated['account_id']) ? (int) $validated['account_id'] : null;
-        $selected = $accountId !== null
-            ? $accounts->firstWhere('id', $accountId)
-            : $accounts->first();
-
-        if ($accountId !== null && ! $selected) {
-            abort(404);
-        }
+        $selected = $this->selectedAccount($accounts, $accountId);
 
         return response()->json([
             'data' => [
@@ -50,6 +51,20 @@ class PositionsController extends Controller
             ->get();
     }
 
+    /** @param Collection<int, Account> $accounts */
+    private function selectedAccount(Collection $accounts, ?int $accountId): ?Account
+    {
+        $selected = $accountId !== null
+            ? $accounts->firstWhere('id', $accountId)
+            : $accounts->first();
+
+        if ($accountId !== null && ! $selected) {
+            abort(404);
+        }
+
+        return $selected;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -69,6 +84,25 @@ class PositionsController extends Controller
     private function historyFor(Account $account): array
     {
         $query = $this->closedPositions($account);
+        $summary = $this->positionSummaryFor($query);
+        $positions = $this->positionPageFor($query);
+
+        return [
+            'summary' => $summary,
+            'positions' => collect($positions->items())
+                ->map(fn (Position $position): array => $this->serializePosition($position))
+                ->values(),
+            'next_cursor' => $positions->nextCursor()?->encode(),
+            'generated_at' => now()->toIso8601String(),
+        ];
+    }
+
+    /**
+     * @param  Builder<Position>  $query
+     * @return array{count: int, long: int, short: int, wins: int, losses: int, realized_pnl: ?string}
+     */
+    private function positionSummaryFor(Builder $query): array
+    {
         $summary = (clone $query)
             ->selectRaw('COUNT(*) as position_count')
             ->selectRaw("SUM(CASE WHEN direction = 'LONG' THEN 1 ELSE 0 END) as long_count")
@@ -78,24 +112,26 @@ class PositionsController extends Controller
             ->selectRaw('SUM('.$this->realizedPnlExpression().') as realized_pnl')
             ->first();
 
-        $positions = $query
-            ->select([
-                'id',
-                'account_id',
-                'exchange_symbol_id',
-                'parsed_trading_pair',
-                'direction',
-                'leverage',
-                'opened_at',
-                'closed_at',
-                'opening_price',
-                'closing_price',
-                'margin',
-                'quantity',
-                'pnl',
-                'was_waped',
-                'was_fast_traded',
-            ])
+        return [
+            'count' => (int) ($summary?->position_count ?? 0),
+            'long' => (int) ($summary?->long_count ?? 0),
+            'short' => (int) ($summary?->short_count ?? 0),
+            'wins' => (int) ($summary?->wins ?? 0),
+            'losses' => (int) ($summary?->losses ?? 0),
+            'realized_pnl' => $summary?->realized_pnl !== null
+                ? $this->trimNumber((string) $summary->realized_pnl)
+                : null,
+        ];
+    }
+
+    /**
+     * @param  Builder<Position>  $query
+     * @return CursorPaginator<int, Position>
+     */
+    private function positionPageFor(Builder $query): CursorPaginator
+    {
+        return $query
+            ->select(self::POSITION_COLUMNS)
             ->with([
                 'exchangeSymbol:id,symbol_id,quote,price_precision,quantity_precision,tick_size',
                 'exchangeSymbol.symbol:id,token,name,image_url',
@@ -103,24 +139,6 @@ class PositionsController extends Controller
             ->orderByDesc('closed_at')
             ->orderByDesc('id')
             ->cursorPaginate(self::PAGE_SIZE);
-
-        return [
-            'summary' => [
-                'count' => (int) ($summary?->position_count ?? 0),
-                'long' => (int) ($summary?->long_count ?? 0),
-                'short' => (int) ($summary?->short_count ?? 0),
-                'wins' => (int) ($summary?->wins ?? 0),
-                'losses' => (int) ($summary?->losses ?? 0),
-                'realized_pnl' => $summary?->realized_pnl !== null
-                    ? $this->trimNumber((string) $summary->realized_pnl)
-                    : null,
-            ],
-            'positions' => collect($positions->items())
-                ->map(fn (Position $position): array => $this->serializePosition($position))
-                ->values(),
-            'next_cursor' => $positions->nextCursor()?->encode(),
-            'generated_at' => now()->toIso8601String(),
-        ];
     }
 
     /**
@@ -149,46 +167,86 @@ class PositionsController extends Controller
      */
     private function serializePosition(Position $position): array
     {
-        $exchangeSymbol = $position->exchangeSymbol;
-        $symbol = $exchangeSymbol?->symbol;
-        $pnl = $this->realizedPnl($position);
-        $margin = $position->margin !== null ? (string) $position->margin : null;
-        $durationSeconds = $position->opened_at && $position->closed_at
-            ? (int) $position->opened_at->diffInSeconds($position->closed_at, true)
-            : null;
-
         return [
-            'id' => $position->id,
-            'symbol' => $position->parsed_trading_pair
-                ?? ($symbol?->token && $exchangeSymbol?->quote ? "{$symbol->token}{$exchangeSymbol->quote}" : $symbol?->token)
-                ?? 'Unknown',
-            'token' => $symbol?->token,
-            'token_name' => $symbol?->name,
-            'token_image' => $symbol?->image_url,
-            'direction' => mb_strtoupper((string) $position->direction),
-            'leverage' => (int) $position->leverage,
-            'opened_at' => $position->opened_at?->toIso8601String(),
-            'closed_at' => $position->closed_at?->toIso8601String(),
-            'duration_seconds' => $durationSeconds,
-            'entry_price' => $this->formatPrice($position->opening_price, $exchangeSymbol),
-            'exit_price' => $this->formatPrice($position->closing_price, $exchangeSymbol),
-            'quantity' => $this->formatQuantity($position->quantity, $exchangeSymbol),
-            'margin' => $margin !== null ? $this->trimNumber($margin) : null,
-            'pnl' => $pnl,
-            'return_pct' => $pnl !== null && $margin !== null && bccomp($margin, '0', 8) > 0
-                ? round((float) bcdiv(bcmul($pnl, '100', 8), $margin, 8), 2)
-                : null,
+            ...$this->positionIdentity($position),
+            ...$this->positionTrade($position),
+            ...$this->positionFinancials($position),
             'was_waped' => (bool) $position->was_waped,
             'was_fast_traded' => (bool) $position->was_fast_traded,
         ];
     }
 
+    /** @return array<string, int|string|null> */
+    private function positionIdentity(Position $position): array
+    {
+        $exchangeSymbol = $position->exchangeSymbol;
+        $symbol = $exchangeSymbol?->symbol;
+
+        return [
+            'id' => $position->id,
+            'symbol' => $this->positionSymbol($position, $symbol?->token, $exchangeSymbol?->quote),
+            'token' => $symbol?->token,
+            'token_name' => $symbol?->name,
+            'token_image' => $symbol?->image_url,
+        ];
+    }
+
+    private function positionSymbol(Position $position, ?string $token, ?string $quote): string
+    {
+        return $position->parsed_trading_pair
+            ?? ($token && $quote ? "{$token}{$quote}" : $token)
+            ?? 'Unknown';
+    }
+
+    /** @return array<string, int|string|null> */
+    private function positionTrade(Position $position): array
+    {
+        $durationSeconds = $position->opened_at && $position->closed_at
+            ? (int) $position->opened_at->diffInSeconds($position->closed_at, true)
+            : null;
+
+        return [
+            'direction' => mb_strtoupper((string) $position->direction),
+            'leverage' => (int) $position->leverage,
+            'opened_at' => $position->opened_at?->toIso8601String(),
+            'closed_at' => $position->closed_at?->toIso8601String(),
+            'duration_seconds' => $durationSeconds,
+        ];
+    }
+
+    /** @return array<string, string|float|null> */
+    private function positionFinancials(Position $position): array
+    {
+        $exchangeSymbol = $position->exchangeSymbol;
+        $pnl = $this->realizedPnl($position);
+        $margin = $position->margin !== null ? (string) $position->margin : null;
+
+        return [
+            'entry_price' => $this->formatPrice($position->opening_price, $exchangeSymbol),
+            'exit_price' => $this->formatPrice($position->closing_price, $exchangeSymbol),
+            'quantity' => $this->formatQuantity($position->quantity, $exchangeSymbol),
+            'margin' => $this->formattedMargin($margin),
+            'pnl' => $pnl,
+            'return_pct' => $pnl !== null && $margin !== null && bccomp($margin, '0', 8) > 0
+                ? round((float) bcdiv(bcmul($pnl, '100', 8), $margin, 8), 2)
+                : null,
+        ];
+    }
+
+    private function formattedMargin(?string $margin): ?string
+    {
+        return $margin !== null ? $this->trimNumber($margin) : null;
+    }
+
     private function realizedPnl(Position $position): ?string
     {
-        if ($position->pnl !== null) {
-            return $this->trimNumber((string) $position->pnl);
-        }
+        return $position->pnl !== null
+            ? $this->trimNumber((string) $position->pnl)
+            : $this->calculatedPnl($position);
+    }
 
+    private function calculatedPnl(Position $position): ?string
+    {
         if ($position->opening_price === null || $position->closing_price === null || $position->quantity === null) {
             return null;
         }

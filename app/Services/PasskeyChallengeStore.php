@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
-class PasskeyChallengeStore
+final class PasskeyChallengeStore
 {
     private const PREFIX = 'passkeys:mobile:';
 
@@ -39,6 +39,11 @@ class PasskeyChallengeStore
             $lock->release();
         }
 
+        return $this->validatedOptions($challenge, $ceremony, $userId);
+    }
+
+    private function validatedOptions(mixed $challenge, string $ceremony, ?int $userId): string
+    {
         if (! is_array($challenge)
             || ($challenge['ceremony'] ?? null) !== $ceremony
             || ($challenge['user_id'] ?? null) !== $userId
